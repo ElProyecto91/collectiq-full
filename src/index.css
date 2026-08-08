@@ -1,0 +1,214 @@
+@import 'tailwindcss';
+
+/*
+ * CollectIQ design system
+ * Dark premium identity — deep black, dark graphite, electric blue, gold accents.
+ * Theme tokens are declared here so Tailwind utilities (bg-base, text-primary,
+ * border-line, etc.) stay consistent and refactor-safe across the app.
+ */
+@theme {
+  /* Fonts */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-display: 'Sora', 'Inter', system-ui, sans-serif;
+
+  /* Surfaces — deep black to dark graphite ramp */
+  --color-base: #07080c;
+  --color-surface: #0a0b0f;
+  --color-surface-2: #101319;
+  --color-surface-3: #161a22;
+  --color-elevated: #1c212c;
+  --color-line: #232834;
+  --color-line-soft: #1a1e27;
+
+  /* Text */
+  --color-ink: #f5f7fa;
+  --color-ink-soft: #aeb4c0;
+  --color-ink-muted: #6b7280;
+  --color-ink-faint: #4b515c;
+
+  /* Primary — electric blue */
+  --color-primary: #2f6bff;
+  --color-primary-strong: #1e54f0;
+  --color-primary-soft: #4d82ff;
+  --color-primary-glow: rgba(47, 107, 255, 0.35);
+  --color-on-primary: #ffffff;
+
+  /* Accent — gold */
+  --color-accent: #e8b54a;
+  --color-accent-strong: #d99e2b;
+  --color-accent-soft: #f0c878;
+  --color-accent-glow: rgba(232, 181, 74, 0.28);
+
+  /* Semantic */
+  --color-success: #34d399;
+  --color-warning: #fbbf24;
+  --color-error: #f87171;
+  --color-info: #60a5fa;
+
+  /* Radii */
+  --radius-sm: 0.625rem;
+  --radius-md: 0.875rem;
+  --radius-lg: 1.25rem;
+  --radius-xl: 1.75rem;
+  --radius-2xl: 2.25rem;
+
+  /* Motion */
+  --ease-premium: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out-fast: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 150ms;
+  --duration-base: 220ms;
+  --duration-slow: 360ms;
+
+  /* Shadows */
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+  --shadow-elevated: 0 4px 12px rgba(0, 0, 0, 0.4), 0 24px 48px -24px rgba(0, 0, 0, 0.7);
+  --shadow-glow: 0 0 0 1px rgba(47, 107, 255, 0.2), 0 8px 32px -8px rgba(47, 107, 255, 0.35);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-line);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-base);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    line-height: 1.5;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overscroll-behavior-y: none;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+    font-weight: 700;
+  }
+
+  /* Native-feeling tap feedback */
+  button, a, [role='button'] {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  /* Smooth, premium scrolling */
+  ::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-primary-soft);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Respect Telegram safe areas */
+  :root {
+    --tg-safe-top: env(safe-area-inset-top, 0px);
+    --tg-safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+@layer utilities {
+  /* Glass surface — used sparingly on elevated panels */
+  .glass {
+    background: rgba(16, 19, 25, 0.72);
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+  }
+
+  .glass-strong {
+    background: rgba(22, 26, 34, 0.88);
+    backdrop-filter: blur(28px) saturate(160%);
+    -webkit-backdrop-filter: blur(28px) saturate(160%);
+  }
+
+  /* Subtle premium gradient accents */
+  .bg-gradient-surface {
+    background-image: linear-gradient(160deg, var(--color-surface-2), var(--color-surface));
+  }
+
+  .bg-gradient-hero {
+    background-image:
+      radial-gradient(120% 90% at 50% 0%, rgba(47, 107, 255, 0.16), transparent 60%),
+      radial-gradient(80% 60% at 90% 10%, rgba(232, 181, 74, 0.1), transparent 55%),
+      linear-gradient(180deg, var(--color-surface-2), var(--color-base));
+  }
+
+  .text-gradient-gold {
+    background: linear-gradient(120deg, var(--color-accent-soft), var(--color-accent));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .text-gradient-primary {
+    background: linear-gradient(120deg, var(--color-primary-soft), var(--color-primary));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Animations — subtle and fast */
+  .animate-fade-in {
+    animation: fade-in var(--duration-base) var(--ease-premium) both;
+  }
+
+  .animate-fade-up {
+    animation: fade-up var(--duration-slow) var(--ease-premium) both;
+  }
+
+  .animate-scale-in {
+    animation: scale-in var(--duration-base) var(--ease-out-fast) both;
+  }
+
+  .animate-shimmer {
+    background: linear-gradient(
+      100deg,
+      var(--color-surface-2) 30%,
+      var(--color-surface-3) 50%,
+      var(--color-surface-2) 70%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.6s infinite linear;
+  }
+
+  .animate-pulse-glow {
+    animation: pulse-glow 2.4s var(--ease-premium) infinite;
+  }
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes scale-in {
+    from { opacity: 0; transform: scale(0.96); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  @keyframes shimmer {
+    to { background-position: -200% 0; }
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 0 0 var(--color-primary-glow); }
+    50% { box-shadow: 0 0 0 8px transparent; }
+  }
+}
