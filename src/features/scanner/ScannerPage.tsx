@@ -219,6 +219,7 @@ export function ScannerPage() {
         ref={fileInputRef}
         type="file"
         accept="image/*"
+capture="environment"
         onChange={handleFileChange}
         className="hidden"
       />
