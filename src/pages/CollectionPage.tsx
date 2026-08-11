@@ -1,158 +1,189 @@
-import {
-  Heart,
-  Layers,
-  Minus,
-  Plus,
-  Trash2,
-  TrendingUp,
-  Star,
-} from 'lucide-react';
-import { useState } from 'react';
+import { Heart, Layers, Minus, Plus, Trash2, Star, TrendingUp } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
 
-import { Badge, Button, Card, CardGridSkeleton, EmptyState, ErrorState, SearchInput, StatTile } from '@/components/ui';
-import { PageHeader } from '@/layouts';
-import { useUserStore } from '@/store';
-import { useCollectionStore } from '@/store';
-import {
-  useCollectionList,
-  useCollectionStats,
-  useDeleteCollectionItem,
-  useUpdateCollectionItem,
-} from '@/hooks';
-import type { CollectionItem } from '@/types';
+const STORAGE_KEY = 'pokemon-collection';
 
-/**
- * Collection — the collector's owned cards.
- *
- * Shows stats (total cards, unique cards, favorites), a search bar, a sort
- * selector, and a responsive grid of real card tiles. Each tile shows the card
- * image, name, set, quantity, and favorite toggle, with controls to increase
- * quantity, decrease quantity, remove the card, or mark it as a favorite.
- */
+interface PokemonCard {
+  id: string;
+  name: string;
+  number: string;
+  rarity?: string;
+  images: { small: string; large: string };
+  set: { name: string; series: string };
+  cardmarket?: { prices?: { averageSellPrice?: number } };
+}
+
+interface CollectionEntry {
+  card: PokemonCard;
+  quantity: number;
+  favorite: boolean;
+  addedAt: number;
+}
+
+function loadCollection(): CollectionEntry[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const data = JSON.parse(raw);
+    // Support both old format (array of cards) and new format (array of entries)
+    if (Array.isArray(data)) {
+      if (data.length === 0) return [];
+      if ('card' in data[0]) return data as CollectionEntry[];
+      // Old format — migrate
+      return data.map((card: PokemonCard) => ({
+        card,
+        quantity: 1,
+        favorite: false,
+        addedAt: Date.now(),
+      }));
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCollection(entries: CollectionEntry[]) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+}
+
+type SortOption = 'recent' | 'name' | 'rarity' | 'value';
+
 export function CollectionPage() {
-  const search = useCollectionStore((s) => s.search);
-  const setSearch = useCollectionStore((s) => s.setSearch);
-  const sort = useCollectionStore((s) => s.sort);
-  const setSort = useCollectionStore((s) => s.setSort);
-  const telegramUser = useUserStore((s) => s.telegramUser);
+  const [entries, setEntries] = useState<CollectionEntry[]>([]);
+  const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<SortOption>('recent');
 
-  const { data: items, isLoading, error, refetch } = useCollectionList();
-  const { data: stats } = useCollectionStats();
+  useEffect(() => {
+    setEntries(loadCollection());
+  }, []);
 
-  const hasTelegram = Boolean(telegramUser?.id);
+  const updateEntry = useCallback((id: string, update: Partial<CollectionEntry>) => {
+    setEntries(prev => {
+      const next = prev.map(e => e.card.id === id ? { ...e, ...update } : e);
+      saveCollection(next);
+      return next;
+    });
+  }, []);
+
+  const removeEntry = useCallback((id: string) => {
+    setEntries(prev => {
+      const next = prev.filter(e => e.card.id !== id);
+      saveCollection(next);
+      return next;
+    });
+  }, []);
+
+  const filtered = entries
+    .filter(e => e.card.name.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => {
+      if (sort === 'recent') return b.addedAt - a.addedAt;
+      if (sort === 'name') return a.card.name.localeCompare(b.card.name);
+      if (sort === 'value') {
+        const va = a.card.cardmarket?.prices?.averageSellPrice ?? 0;
+        const vb = b.card.cardmarket?.prices?.averageSellPrice ?? 0;
+        return vb - va;
+      }
+      return 0;
+    });
+
+  const totalCards = entries.reduce((s, e) => s + e.quantity, 0);
+  const uniqueCards = entries.length;
+  const favorites = entries.filter(e => e.favorite).length;
 
   return (
-    <div className="space-y-4 pt-3 animate-fade-in">
-      <PageHeader title="Collection" subtitle="Every card you own, in one place." />
+    <div className="space-y-4 pt-3 pb-24 px-4">
 
-      {!hasTelegram ? (
-        <EmptyState
-          icon={<Layers size={28} strokeWidth={1.8} />}
-          title="Connect your Telegram account"
-          description="Your collection is tied to your Telegram identity. Open this app inside Telegram to view and manage your cards."
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-bold text-white">Colección</h1>
+        <p className="text-sm text-gray-500">Todas tus cartas, en un solo lugar.</p>
+      </div>
+
+      {/* Stats */}
+      {totalCards > 0 && (
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { label: 'Cartas', value: totalCards, color: 'text-blue-400' },
+            { label: 'Únicas', value: uniqueCards, color: 'text-purple-400' },
+            { label: 'Favoritas', value: favorites, color: 'text-yellow-400' },
+          ].map(({ label, value, color }) => (
+            <div key={label} className="bg-[#111118] border border-white/8 rounded-2xl p-3 text-center">
+              <p className={`text-xl font-bold ${color}`}>{value}</p>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider">{label}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Search */}
+      <div className="relative">
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Busca en tu colección"
+          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50"
         />
+      </div>
+
+      {/* Sort */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        <span className="shrink-0 text-xs text-gray-500">Ordenar</span>
+        {(['recent', 'name', 'value'] as SortOption[]).map(opt => (
+          <button
+            key={opt}
+            onClick={() => setSort(opt)}
+            className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+              sort === opt ? 'bg-blue-600 text-white' : 'bg-white/5 text-gray-400'
+            }`}
+          >
+            {opt === 'recent' ? 'Recientes' : opt === 'name' ? 'Nombre' : 'Valor'}
+          </button>
+        ))}
+      </div>
+
+      {/* Empty state */}
+      {entries.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
+          <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center">
+            <Layers size={28} className="text-gray-600" />
+          </div>
+          <div>
+            <p className="text-white font-semibold">Aún no tienes cartas</p>
+            <p className="text-sm text-gray-500 mt-1">Escanea cartas para empezar tu colección.</p>
+          </div>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-12 text-gray-500 text-sm">
+          No hay cartas que coincidan con "{search}"
+        </div>
       ) : (
-        <>
-          {/* Stats */}
-          {stats && (stats.uniqueCards > 0 || isLoading) && (
-            <div className="grid grid-cols-3 gap-2">
-              <StatTile
-                label="Total"
-                value={stats.totalItems}
-                accent="primary"
-                icon={<Layers size={14} />}
-              />
-              <StatTile
-                label="Unique"
-                value={stats.uniqueCards}
-                icon={<TrendingUp size={14} />}
-              />
-              <StatTile
-                label="Favorites"
-                value={stats.favoriteCount}
-                accent="gold"
-                icon={<Heart size={14} />}
-              />
-            </div>
-          )}
-
-          <SearchInput value={search} onChange={setSearch} placeholder="Search your collection" />
-
-          {/* Sort selector */}
-          <SortSelector value={sort} onChange={setSort} />
-
-          {isLoading ? (
-            <CardGridSkeleton count={6} />
-          ) : error ? (
-            <ErrorState error={error} onRetry={() => void refetch()} />
-          ) : !items || items.length === 0 ? (
-            <EmptyState
-              icon={<Layers size={28} strokeWidth={1.8} />}
-              title={search ? 'No matches' : 'No cards yet'}
-              description={
-                search
-                  ? `No cards match "${search}". Try a different search term.`
-                  : 'Add cards from the Explorer to start building your collection.'
-              }
+        <div className="grid grid-cols-2 gap-3">
+          {filtered.map(entry => (
+            <CollectionCard
+              key={entry.card.id}
+              entry={entry}
+              onUpdate={updateEntry}
+              onRemove={removeEntry}
             />
-          ) : (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {items.map((item) => (
-                <CollectionGridItem key={item.id} item={item} />
-              ))}
-            </div>
-          )}
-        </>
+          ))}
+        </div>
       )}
     </div>
   );
 }
 
-const SORT_OPTIONS = [
-  { value: 'recent', label: 'Recently added' },
-  { value: 'name', label: 'Name A–Z' },
-  { value: 'set', label: 'Set' },
-  { value: 'rarity', label: 'Rarity' },
-] as const;
-
-function SortSelector({
-  value,
-  onChange,
+function CollectionCard({
+  entry,
+  onUpdate,
+  onRemove,
 }: {
-  value: string;
-  onChange: (value: 'recent' | 'name' | 'set' | 'rarity') => void;
+  entry: CollectionEntry;
+  onUpdate: (id: string, update: Partial<CollectionEntry>) => void;
+  onRemove: (id: string) => void;
 }) {
-  return (
-    <div className="flex items-center gap-2 overflow-x-auto pb-1">
-      <span className="shrink-0 text-xs text-ink-muted">Sort</span>
-      {SORT_OPTIONS.map((opt) => (
-        <Badge
-          key={opt.value}
-          variant={value === opt.value ? 'primary' : 'default'}
-          className="shrink-0 cursor-pointer py-1"
-          onClick={() => onChange(opt.value)}
-        >
-          {opt.label}
-        </Badge>
-      ))}
-    </div>
-  );
-}
-
-function CollectionGridItem({ item }: { item: CollectionItem }) {
-  const updateMutation = useUpdateCollectionItem();
-  const deleteMutation = useDeleteCollectionItem();
   const [confirmDelete, setConfirmDelete] = useState(false);
-
-  const updateQuantity = (delta: number) => {
-    const newQty = item.quantity + delta;
-    if (newQty < 1) return;
-    updateMutation.mutate({ id: item.id, update: { quantity: newQty } });
-  };
-
-  const toggleFavorite = () => {
-    updateMutation.mutate({ id: item.id, update: { favorite: !item.favorite } });
-  };
+  const { card } = entry;
 
   const handleRemove = () => {
     if (!confirmDelete) {
@@ -160,87 +191,78 @@ function CollectionGridItem({ item }: { item: CollectionItem }) {
       setTimeout(() => setConfirmDelete(false), 3000);
       return;
     }
-    deleteMutation.mutate(item.id);
+    onRemove(card.id);
   };
 
   return (
-    <Card padding="sm" className="flex flex-col gap-2 animate-scale-in">
-      {/* Image + favorite */}
+    <div className="bg-[#111118] border border-white/8 rounded-2xl overflow-hidden flex flex-col">
+      {/* Image */}
       <div className="relative">
-        <div className="flex aspect-[3/4] items-center justify-center overflow-hidden rounded-xl bg-surface-3">
-          {item.imageUrl ? (
-            <img
-              src={item.imageUrl}
-              alt={item.cardName}
-              loading="lazy"
-              className="h-full w-full object-contain"
-            />
-          ) : (
-            <Layers size={28} strokeWidth={1.5} className="text-ink-faint" />
-          )}
-        </div>
+        <img
+          src={card.images.small}
+          alt={card.name}
+          className="w-full aspect-[2/3] object-cover"
+          loading="lazy"
+        />
         <button
-          onClick={toggleFavorite}
-          className="absolute right-1.5 top-1.5 flex h-8 w-8 items-center justify-center rounded-full bg-surface-2/80 backdrop-blur-sm transition-transform active:scale-90"
-          aria-label={item.favorite ? 'Remove favorite' : 'Mark as favorite'}
+          onClick={() => onUpdate(card.id, { favorite: !entry.favorite })}
+          className="absolute right-1.5 top-1.5 w-8 h-8 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center"
         >
           <Heart
-            size={16}
-            className={item.favorite ? 'fill-accent text-accent' : 'text-ink-soft'}
+            size={15}
+            className={entry.favorite ? 'fill-yellow-400 text-yellow-400' : 'text-gray-400'}
           />
         </button>
-        {item.favorite && (
-          <div className="absolute left-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-accent/90">
-            <Star size={12} className="fill-base text-base" />
+        {entry.favorite && (
+          <div className="absolute left-1.5 top-1.5 w-6 h-6 rounded-full bg-yellow-400/90 flex items-center justify-center">
+            <Star size={12} className="fill-black text-black" />
           </div>
         )}
       </div>
 
       {/* Info */}
-      <div className="px-1 pb-1">
-        <p className="truncate text-sm font-semibold text-ink">{item.cardName}</p>
-        <p className="mt-0.5 truncate text-xs text-ink-soft">{item.setName}</p>
-        {item.rarity && (
-          <p className="mt-0.5 truncate text-[11px] font-medium text-accent">{item.rarity}</p>
+      <div className="p-2.5 flex-1 space-y-1">
+        <p className="text-xs font-bold truncate text-white">{card.name}</p>
+        <p className="text-[10px] text-gray-500 truncate">{card.set.name}</p>
+        {card.rarity && <p className="text-[10px] text-blue-400 truncate">{card.rarity}</p>}
+        {card.cardmarket?.prices?.averageSellPrice && (
+          <p className="text-[10px] text-green-400 font-medium">
+            €{card.cardmarket.prices.averageSellPrice.toFixed(2)}
+          </p>
         )}
       </div>
 
-      {/* Quantity controls */}
-      <div className="flex items-center justify-between gap-1 px-1">
+      {/* Controls */}
+      <div className="flex items-center justify-between gap-1 px-2.5 pb-2.5">
         <div className="flex items-center gap-1">
           <button
-            onClick={() => updateQuantity(-1)}
-            disabled={updateMutation.isPending || item.quantity <= 1}
-            className="flex h-7 w-7 items-center justify-center rounded-lg border border-line-soft bg-surface-3 text-ink-soft transition-colors hover:text-ink disabled:opacity-40"
-            aria-label="Decrease quantity"
+            onClick={() => entry.quantity > 1 && onUpdate(card.id, { quantity: entry.quantity - 1 })}
+            disabled={entry.quantity <= 1}
+            className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 disabled:opacity-40"
           >
-            <Minus size={14} />
+            <Minus size={13} />
           </button>
-          <span className="min-w-[2ch] text-center text-sm font-semibold tabular-nums text-ink">
-            {item.quantity}
+          <span className="text-sm font-bold text-white min-w-[1.5rem] text-center">
+            {entry.quantity}
           </span>
           <button
-            onClick={() => updateQuantity(1)}
-            disabled={updateMutation.isPending}
-            className="flex h-7 w-7 items-center justify-center rounded-lg border border-line-soft bg-surface-3 text-ink-soft transition-colors hover:text-ink disabled:opacity-40"
-            aria-label="Increase quantity"
+            onClick={() => onUpdate(card.id, { quantity: entry.quantity + 1 })}
+            className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-gray-400"
           >
-            <Plus size={14} />
+            <Plus size={13} />
           </button>
         </div>
         <button
           onClick={handleRemove}
-          disabled={deleteMutation.isPending}
-          className={`flex h-7 w-7 items-center justify-center rounded-lg border transition-colors ${
+          className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-colors ${
             confirmDelete
-              ? 'border-error bg-error/10 text-error'
-              : 'border-line-soft bg-surface-3 text-ink-faint hover:text-error'
+              ? 'border-red-500 bg-red-500/10 text-red-400'
+              : 'border-white/10 bg-white/5 text-gray-500'
           }`}
-          aria-label={confirmDelete ? 'Tap again to confirm' : 'Remove card'}
         >
-          <Trash2 size={14} />
+          <Trash2 size={13} />
         </button>
       </div>
-    </Card>
+    </div>
   );
 }
