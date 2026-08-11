@@ -16,9 +16,6 @@ import {
 import { RoutePaths } from '@/config';
 import { cx } from '@/utils';
 
-/* ------------------------------------------------------------------ */
-/* Types                                                                */
-/* ------------------------------------------------------------------ */
 interface PokemonCard {
   id: string;
   name: string;
@@ -31,35 +28,64 @@ interface PokemonCard {
 
 type ScanPhase = 'idle' | 'preview' | 'analyzing' | 'results' | 'error';
 
-/* ------------------------------------------------------------------ */
-/* Helpers                                                              */
-/* ------------------------------------------------------------------ */
-async function extractTextFromImage(imageElement: HTMLImageElement): Promise<string> {
-  const Tesseract = (window as any).Tesseract;
-  if (!Tesseract) throw new Error('Tesseract not loaded');
-
-  const result = await Tesseract.recognize(imageElement, 'eng', {
-    logger: () => {},
+async function toBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve((reader.result as string).split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
   });
+}
 
-  const text: string = result.data.text;
-  const lines = text.split('\n').map((l: string) => l.trim()).filter(Boolean);
+async function extractCardNameWithVision(base64: string): Promise<string> {
+  const apiKey = import.meta.env.VITE_GOOGLE_VISION_API_KEY;
+  if (!apiKey) throw new Error('Missing Google Vision API key');
 
-  // Pokemon card name is usually in the first few lines, capitalized
-  for (const line of lines.slice(0, 5)) {
-    const cleaned = line.replace(/[^a-zA-Z\s\-]/g, '').trim();
-    if (cleaned.length >= 3 && cleaned.length <= 30 && /^[A-Z]/.test(cleaned)) {
-      // Skip common non-name words
-      const skip = ['FASE', 'FASE2', 'BASIC', 'STAGE', 'LEVEL', 'ITEM', 'TRAINER', 'ENERGY', 'HP'];
-      if (!skip.some(s => cleaned.toUpperCase().includes(s))) {
-        return cleaned;
-      }
+  const res = await fetch(
+    `https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        requests: [{
+          image: { content: base64 },
+          features: [{ type: 'TEXT_DETECTION', maxResults: 1 }],
+        }],
+      }),
+    }
+  );
+
+  if (!res.ok) throw new Error(`Google Vision error: ${res.status}`);
+  const data = await res.json();
+
+  const fullText: string = data.responses?.[0]?.fullTextAnnotation?.text ?? '';
+  if (!fullText) throw new Error('No se detectó texto en la imagen');
+
+  // Extract Pokemon name from card text
+  // The name is usually the first meaningful line
+  const lines = fullText.split('\n').map(l => l.trim()).filter(Boolean);
+  
+  // Skip common non-name prefixes
+  const skipWords = [
+    'FASE', 'FASE 2', 'BASIC', 'STAGE', 'LEVEL', 'ITEM', 'TRAINER',
+    'ENERGY', 'HP', 'PS', 'GX', 'EX', 'V', 'VMAX', 'VSTAR',
+    'BASICO', 'BÁSICO', 'FASE2', 'HOLOGRAPHIC', 'POKEMON', 'POKÉMON'
+  ];
+
+  for (const line of lines.slice(0, 8)) {
+    const cleaned = line.replace(/[^a-zA-ZÀ-ÿ\s\-]/g, '').trim();
+    if (
+      cleaned.length >= 3 &&
+      cleaned.length <= 25 &&
+      !skipWords.some(s => cleaned.toUpperCase() === s) &&
+      !cleaned.match(/^\d+$/)
+    ) {
+      return cleaned;
     }
   }
 
-  // Fallback: return longest capitalized word
-  const words = text.match(/[A-Z][a-z]{2,}/g) ?? [];
-  return words.sort((a, b) => b.length - a.length)[0] ?? '';
+  // Fallback: return first line
+  return lines[0]?.replace(/[^a-zA-ZÀ-ÿ\s\-]/g, '').trim() ?? '';
 }
 
 async function searchPokemonTCG(name: string): Promise<PokemonCard[]> {
@@ -88,16 +114,13 @@ function getRarityColor(rarity?: string): string {
   return 'text-gray-400';
 }
 
-/* ------------------------------------------------------------------ */
-/* Component                                                            */
-/* ------------------------------------------------------------------ */
 export default function ScannerPage() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const imgRef = useRef<HTMLImageElement>(null);
 
   const [phase, setPhase] = useState<ScanPhase>('idle');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [currentFile, setCurrentFile] = useState<File | null>(null);
   const [detectedName, setDetectedName] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState<PokemonCard[]>([]);
@@ -111,6 +134,7 @@ export default function ScannerPage() {
     if (!file) return;
     const url = URL.createObjectURL(file);
     setPreviewUrl(url);
+    setCurrentFile(file);
     setPhase('preview');
     setResults([]);
     setDetectedName('');
@@ -123,38 +147,29 @@ export default function ScannerPage() {
   const openCamera = () => fileInputRef.current?.click();
 
   const analyzeCard = useCallback(async () => {
-    if (!imgRef.current) return;
+    if (!currentFile) return;
     setPhase('analyzing');
-    setProgress(0);
-    setStatusMsg('Cargando motor de texto…');
+    setProgress(20);
+    setStatusMsg('Enviando imagen a Google Vision…');
 
     try {
-      // Load Tesseract dynamically if not loaded
-      if (!(window as any).Tesseract) {
-        await new Promise<void>((resolve, reject) => {
-          const script = document.createElement('script');
-          script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
-          script.onload = () => resolve();
-          script.onerror = () => reject(new Error('Failed to load Tesseract'));
-          document.head.appendChild(script);
-        });
-      }
-
+      const base64 = await toBase64(currentFile);
+      setProgress(40);
       setStatusMsg('Leyendo texto de la carta…');
-      setProgress(30);
 
-      const name = await extractTextFromImage(imgRef.current);
+      const name = await extractCardNameWithVision(base64);
+      setProgress(65);
 
       if (!name) {
-        setStatusMsg('No se detectó texto. Escribe el nombre manualmente.');
+        setStatusMsg('No se detectó nombre. Escríbelo manualmente.');
         setPhase('preview');
         return;
       }
 
       setDetectedName(name);
       setSearchQuery(name);
-      setProgress(60);
       setStatusMsg(`Buscando "${name}" en PokéTCG…`);
+      setProgress(80);
 
       const cards = await searchPokemonTCG(name);
       setProgress(100);
@@ -164,7 +179,7 @@ export default function ScannerPage() {
       setErrorMsg(err?.message ?? 'Error al analizar la carta');
       setPhase('error');
     }
-  }, []);
+  }, [currentFile]);
 
   const manualSearch = useCallback(async () => {
     if (!searchQuery.trim()) return;
@@ -192,6 +207,7 @@ export default function ScannerPage() {
   const reset = () => {
     setPhase('idle');
     setPreviewUrl(null);
+    setCurrentFile(null);
     setDetectedName('');
     setSearchQuery('');
     setResults([]);
@@ -203,7 +219,7 @@ export default function ScannerPage() {
   return (
     <div className="flex flex-col min-h-screen bg-[#0a0a0f] text-white pb-24">
 
-      {/* Header estilo Pokécardex */}
+      {/* Header */}
       <div className="relative px-4 pt-6 pb-4">
         <div className="absolute inset-0 bg-gradient-to-b from-blue-950/40 to-transparent pointer-events-none" />
         <div className="flex items-center gap-3 relative z-10">
@@ -222,26 +238,23 @@ export default function ScannerPage() {
 
       <div className="flex-1 px-4 space-y-4">
 
-        {/* Scanner frame estilo Pokécardex */}
-        <div className="relative rounded-2xl overflow-hidden bg-[#111118] border border-white/10"
-          style={{ aspectRatio: '3/4' }}>
-
+        {/* Scanner frame */}
+        <div
+          className="relative rounded-2xl overflow-hidden bg-[#111118] border border-white/10"
+          style={{ aspectRatio: '3/4' }}
+        >
           {previewUrl ? (
             <img
-              ref={imgRef}
               src={previewUrl}
               alt="Card preview"
               className="w-full h-full object-contain"
-              crossOrigin="anonymous"
             />
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
-              {/* Animated scan line */}
               <div className="relative w-32 h-32">
                 <div className="absolute inset-0 rounded-2xl border-2 border-blue-500/30" />
                 <div className="absolute inset-2 rounded-xl border border-blue-400/20" />
                 <ScanLine className="absolute inset-0 m-auto w-10 h-10 text-blue-400/60" />
-                <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-blue-400 to-transparent animate-pulse" />
               </div>
               <p className="text-sm text-gray-500 text-center px-8">
                 Apunta la cámara a una carta Pokémon
@@ -263,13 +276,8 @@ export default function ScannerPage() {
           {/* Analyzing overlay */}
           {phase === 'analyzing' && (
             <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center gap-4 p-6">
-              <div className="relative">
-                <div className="w-16 h-16 rounded-full border-2 border-blue-500/30 flex items-center justify-center">
-                  <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
-                </div>
-              </div>
+              <Loader2 className="w-10 h-10 text-blue-400 animate-spin" />
               <p className="text-sm text-blue-200 text-center">{statusMsg}</p>
-              {/* Progress bar */}
               <div className="w-full bg-white/10 rounded-full h-1.5">
                 <div
                   className="bg-gradient-to-r from-blue-500 to-blue-400 h-1.5 rounded-full transition-all duration-500"
@@ -301,15 +309,13 @@ export default function ScannerPage() {
         {/* Search box */}
         {(phase === 'preview' || phase === 'results') && (
           <div className="flex gap-2">
-            <div className="flex-1 relative">
-              <input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && manualSearch()}
-                placeholder="Nombre de la carta…"
-                className="w-full bg-white/5 border border-white/10 rounded-xl pl-4 pr-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50 focus:bg-white/8"
-              />
-            </div>
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && manualSearch()}
+              placeholder="Nombre de la carta…"
+              className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50"
+            />
             <button
               onClick={manualSearch}
               className="bg-blue-600 hover:bg-blue-500 rounded-xl px-4 flex items-center justify-center transition-colors"
@@ -323,11 +329,13 @@ export default function ScannerPage() {
         {detectedName && phase === 'results' && (
           <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 rounded-xl px-3 py-2">
             <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-            <span className="text-xs text-blue-300">Detectado: <strong className="text-white">{detectedName}</strong></span>
+            <span className="text-xs text-blue-300">
+              Detectado: <strong className="text-white">{detectedName}</strong>
+            </span>
           </div>
         )}
 
-        {/* Results grid estilo Pokécardex */}
+        {/* Results grid */}
         {phase === 'results' && (
           results.length === 0 ? (
             <div className="text-center py-12 text-gray-600 text-sm">
@@ -341,7 +349,7 @@ export default function ScannerPage() {
                 {results.map((card) => (
                   <div
                     key={card.id}
-                    className="bg-[#111118] border border-white/8 rounded-2xl overflow-hidden hover:border-blue-500/30 transition-colors"
+                    className="bg-[#111118] border border-white/8 rounded-2xl overflow-hidden"
                   >
                     <div className="relative">
                       <img
@@ -415,7 +423,7 @@ export default function ScannerPage() {
               </button>
               <button
                 onClick={openCamera}
-                className="bg-white/8 border border-white/10 rounded-2xl px-4 flex items-center justify-center hover:bg-white/12 transition-colors"
+                className="bg-white/8 border border-white/10 rounded-2xl px-4 flex items-center justify-center"
               >
                 <RefreshCw className="w-4 h-4 text-gray-400" />
               </button>
@@ -433,7 +441,7 @@ export default function ScannerPage() {
               </button>
               <button
                 onClick={reset}
-                className="bg-white/8 border border-white/10 rounded-2xl px-4 flex items-center justify-center hover:bg-white/12 transition-colors"
+                className="bg-white/8 border border-white/10 rounded-2xl px-4 flex items-center justify-center"
               >
                 <X className="w-4 h-4 text-gray-400" />
               </button>
@@ -451,7 +459,6 @@ export default function ScannerPage() {
           )}
         </div>
 
-        {/* Info tip */}
         {phase === 'idle' && (
           <p className="text-center text-[11px] text-gray-600 pb-2">
             Fotografía la carta con buena luz · Sin reflejos · Una sola carta
