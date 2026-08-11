@@ -12,6 +12,7 @@ import {
   AlertCircle,
   Plus,
   Loader2,
+  Hash,
 } from 'lucide-react';
 import { RoutePaths } from '@/config';
 import { cx } from '@/utils';
@@ -28,55 +29,118 @@ interface PokemonCard {
 
 type ScanPhase = 'idle' | 'preview' | 'analyzing' | 'results' | 'error';
 
-async function toBase64(file: File): Promise<string> {
+/* ------------------------------------------------------------------ */
+/* Tesseract loader                                                      */
+/* ------------------------------------------------------------------ */
+async function loadTesseract(): Promise<any> {
+  if ((window as any).Tesseract) return (window as any).Tesseract;
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve((reader.result as string).split(',')[1]);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    script.onload = () => resolve((window as any).Tesseract);
+    script.onerror = () => reject(new Error('No se pudo cargar Tesseract'));
+    document.head.appendChild(script);
   });
 }
 
-function extractCardName(fullText: string): string {
-  const lines = fullText.split('\n').map(l => l.trim()).filter(Boolean);
-  const skipWords = [
-    'FASE', 'FASE 2', 'FASE2', 'BASIC', 'STAGE', 'LEVEL', 'ITEM',
-    'TRAINER', 'ENERGY', 'HP', 'PS', 'GX', 'EX', 'BASICO', 'BÁSICO',
-    'HOLOGRAPHIC', 'POKEMON', 'POKÉMON', 'SUPPORTER', 'TOOL',
+/* ------------------------------------------------------------------ */
+/* Extract card number from OCR text                                    */
+/* ------------------------------------------------------------------ */
+function extractCardNumber(text: string): { number: string; total: string } | null {
+  // Match patterns like: 001/015, 025/198, SV001/SV198, SWSH001, etc.
+  const patterns = [
+    /\b([A-Z]{0,4}\d{1,4})\/([A-Z]{0,4}\d{1,4})\b/g,  // 001/015, SV001/SV198
+    /\b(\d{3})\/(\d{3})\b/g,                              // 001/198
+    /\b(\d{2,3})\/(\d{2,3})\b/g,                          // 25/98
   ];
 
-  for (const line of lines.slice(0, 8)) {
+  for (const pattern of patterns) {
+    const matches = [...text.matchAll(pattern)];
+    if (matches.length > 0) {
+      // Take the last match (usually the card number is at the bottom)
+      const match = matches[matches.length - 1];
+      return { number: match[1], total: match[2] };
+    }
+  }
+  return null;
+}
+
+/* ------------------------------------------------------------------ */
+/* Extract Pokemon name from OCR text                                   */
+/* ------------------------------------------------------------------ */
+function extractCardName(text: string): string {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  const skipWords = [
+    'FASE', 'FASE2', 'BASIC', 'STAGE', 'LEVEL', 'ITEM', 'TRAINER',
+    'ENERGY', 'HP', 'PS', 'GX', 'EX', 'BASICO', 'BÁSICO',
+    'HOLOGRAPHIC', 'POKEMON', 'POKÉMON', 'SUPPORTER', 'TOOL', 'V', 'VMAX',
+  ];
+
+  for (const line of lines.slice(0, 6)) {
     const cleaned = line.replace(/[^a-zA-ZÀ-ÿ\s\-]/g, '').trim();
     if (
       cleaned.length >= 3 &&
       cleaned.length <= 25 &&
       !skipWords.some(s => cleaned.toUpperCase() === s) &&
-      !cleaned.match(/^\d+$/)
+      !cleaned.match(/^\d+$/) &&
+      /[a-zA-Z]/.test(cleaned)
     ) {
       return cleaned;
     }
   }
-  return lines[0]?.replace(/[^a-zA-ZÀ-ÿ\s\-]/g, '').trim() ?? '';
+  return '';
 }
 
-async function extractCardNameWithVision(base64: string): Promise<string> {
-  const res = await fetch('/api/vision', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ image: base64 }),
+/* ------------------------------------------------------------------ */
+/* Run OCR on canvas crop                                               */
+/* ------------------------------------------------------------------ */
+async function runOCR(imageUrl: string, cropBottom: boolean = false): Promise<string> {
+  const Tesseract = await loadTesseract();
+
+  // Create canvas to crop image
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const i = new Image();
+    i.crossOrigin = 'anonymous';
+    i.onload = () => resolve(i);
+    i.onerror = reject;
+    i.src = imageUrl;
   });
 
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error ?? `Vision error: ${res.status}`);
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d')!;
+
+  if (cropBottom) {
+    // Crop bottom 20% for card number
+    const cropHeight = Math.floor(img.height * 0.2);
+    const cropY = img.height - cropHeight;
+    canvas.width = img.width;
+    canvas.height = cropHeight;
+    ctx.drawImage(img, 0, cropY, img.width, cropHeight, 0, 0, img.width, cropHeight);
+  } else {
+    // Crop top 25% for card name
+    const cropHeight = Math.floor(img.height * 0.25);
+    canvas.width = img.width;
+    canvas.height = cropHeight;
+    ctx.drawImage(img, 0, 0, img.width, cropHeight, 0, 0, img.width, cropHeight);
   }
 
-  const data = await res.json();
-  if (!data.text) throw new Error('No se detectó texto en la imagen');
-  return extractCardName(data.text);
+  const result = await Tesseract.recognize(canvas, 'eng', { logger: () => {} });
+  return result.data.text;
 }
 
-async function searchPokemonTCG(name: string): Promise<PokemonCard[]> {
+/* ------------------------------------------------------------------ */
+/* Search PokéTCG API                                                   */
+/* ------------------------------------------------------------------ */
+async function searchByNumber(number: string): Promise<PokemonCard[]> {
+  const clean = number.replace(/^0+/, ''); // remove leading zeros
+  const url = `https://api.pokemontcg.io/v2/cards?q=number:${encodeURIComponent(clean)}&pageSize=20&orderBy=-set.releaseDate`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('PokéTCG API error');
+  const json = await res.json();
+  return (json.data ?? []) as PokemonCard[];
+}
+
+async function searchByName(name: string): Promise<PokemonCard[]> {
   const url = `https://api.pokemontcg.io/v2/cards?q=name:"${encodeURIComponent(name)}"&pageSize=20&orderBy=-set.releaseDate`;
   const res = await fetch(url);
   if (!res.ok) throw new Error('PokéTCG API error');
@@ -84,6 +148,17 @@ async function searchPokemonTCG(name: string): Promise<PokemonCard[]> {
   return (json.data ?? []) as PokemonCard[];
 }
 
+async function searchByQuery(query: string): Promise<PokemonCard[]> {
+  // Try name search first
+  const byName = await searchByName(query);
+  if (byName.length > 0) return byName;
+  // Fallback to number search
+  return searchByNumber(query);
+}
+
+/* ------------------------------------------------------------------ */
+/* Collection helpers                                                   */
+/* ------------------------------------------------------------------ */
 function saveToCollection(card: PokemonCard) {
   const raw = localStorage.getItem('pokemon-collection');
   const collection: PokemonCard[] = raw ? JSON.parse(raw) : [];
@@ -102,14 +177,16 @@ function getRarityColor(rarity?: string): string {
   return 'text-gray-400';
 }
 
+/* ------------------------------------------------------------------ */
+/* Component                                                            */
+/* ------------------------------------------------------------------ */
 export default function ScannerPage() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [phase, setPhase] = useState<ScanPhase>('idle');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [currentFile, setCurrentFile] = useState<File | null>(null);
-  const [detectedName, setDetectedName] = useState('');
+  const [detectedInfo, setDetectedInfo] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState<PokemonCard[]>([]);
   const [errorMsg, setErrorMsg] = useState('');
@@ -122,10 +199,9 @@ export default function ScannerPage() {
     if (!file) return;
     const url = URL.createObjectURL(file);
     setPreviewUrl(url);
-    setCurrentFile(file);
     setPhase('preview');
     setResults([]);
-    setDetectedName('');
+    setDetectedInfo('');
     setSearchQuery('');
     setErrorMsg('');
     setStatusMsg('');
@@ -135,39 +211,62 @@ export default function ScannerPage() {
   const openCamera = () => fileInputRef.current?.click();
 
   const analyzeCard = useCallback(async () => {
-    if (!currentFile) return;
+    if (!previewUrl) return;
     setPhase('analyzing');
-    setProgress(20);
-    setStatusMsg('Enviando imagen a Google Vision…');
+    setProgress(15);
+    setStatusMsg('Cargando motor OCR…');
 
     try {
-      const base64 = await toBase64(currentFile);
-      setProgress(50);
-      setStatusMsg('Leyendo texto de la carta…');
+      // Step 1: Try to read card number from bottom
+      setProgress(30);
+      setStatusMsg('Leyendo número de carta…');
+      const bottomText = await runOCR(previewUrl, true);
+      const cardNumber = extractCardNumber(bottomText);
 
-      const name = await extractCardNameWithVision(base64);
-      setProgress(70);
+      let cards: PokemonCard[] = [];
+      let detectedStr = '';
 
-      if (!name) {
-        setStatusMsg('No se detectó nombre. Escríbelo manualmente.');
+      if (cardNumber) {
+        detectedStr = `#${cardNumber.number}/${cardNumber.total}`;
+        setDetectedInfo(detectedStr);
+        setSearchQuery(cardNumber.number);
+        setProgress(60);
+        setStatusMsg(`Número detectado: ${detectedStr} — buscando…`);
+        cards = await searchByNumber(cardNumber.number);
+      }
+
+      // Step 2: If no results by number, try name from top
+      if (cards.length === 0) {
+        setProgress(65);
+        setStatusMsg('Leyendo nombre de la carta…');
+        const topText = await runOCR(previewUrl, false);
+        const name = extractCardName(topText);
+
+        if (name) {
+          detectedStr = name;
+          setDetectedInfo(name);
+          setSearchQuery(name);
+          setProgress(80);
+          setStatusMsg(`Nombre detectado: "${name}" — buscando…`);
+          cards = await searchByName(name);
+        }
+      }
+
+      setProgress(100);
+
+      if (cards.length === 0 && !detectedStr) {
+        setStatusMsg('No se detectó info. Escribe el nombre o número manualmente.');
         setPhase('preview');
         return;
       }
 
-      setDetectedName(name);
-      setSearchQuery(name);
-      setStatusMsg(`Buscando "${name}" en PokéTCG…`);
-      setProgress(85);
-
-      const cards = await searchPokemonTCG(name);
-      setProgress(100);
       setResults(cards);
       setPhase('results');
     } catch (err: any) {
       setErrorMsg(err?.message ?? 'Error al analizar la carta');
       setPhase('error');
     }
-  }, [currentFile]);
+  }, [previewUrl]);
 
   const manualSearch = useCallback(async () => {
     if (!searchQuery.trim()) return;
@@ -175,7 +274,7 @@ export default function ScannerPage() {
     setProgress(50);
     setStatusMsg(`Buscando "${searchQuery}"…`);
     try {
-      const cards = await searchPokemonTCG(searchQuery.trim());
+      const cards = await searchByQuery(searchQuery.trim());
       setProgress(100);
       setResults(cards);
       setPhase('results');
@@ -195,8 +294,7 @@ export default function ScannerPage() {
   const reset = () => {
     setPhase('idle');
     setPreviewUrl(null);
-    setCurrentFile(null);
-    setDetectedName('');
+    setDetectedInfo('');
     setSearchQuery('');
     setResults([]);
     setErrorMsg('');
@@ -227,7 +325,10 @@ export default function ScannerPage() {
       <div className="flex-1 px-4 space-y-4">
 
         {/* Scanner frame */}
-        <div className="relative rounded-2xl overflow-hidden bg-[#111118] border border-white/10" style={{ aspectRatio: '3/4' }}>
+        <div
+          className="relative rounded-2xl overflow-hidden bg-[#111118] border border-white/10"
+          style={{ aspectRatio: '3/4' }}
+        >
           {previewUrl ? (
             <img src={previewUrl} alt="Card preview" className="w-full h-full object-contain" />
           ) : (
@@ -236,10 +337,13 @@ export default function ScannerPage() {
                 <div className="absolute inset-0 rounded-2xl border-2 border-blue-500/30" />
                 <ScanLine className="absolute inset-0 m-auto w-10 h-10 text-blue-400/60" />
               </div>
-              <p className="text-sm text-gray-500 text-center px-8">Apunta la cámara a una carta Pokémon</p>
+              <p className="text-sm text-gray-500 text-center px-8">
+                Apunta la cámara a una carta Pokémon
+              </p>
             </div>
           )}
 
+          {/* Corner guides */}
           {(['tl','tr','bl','br'] as const).map((c) => (
             <span key={c} className={cx(
               'absolute w-5 h-5 border-blue-400',
@@ -250,6 +354,15 @@ export default function ScannerPage() {
             )} />
           ))}
 
+          {/* Number indicator */}
+          {previewUrl && phase === 'preview' && (
+            <div className="absolute bottom-3 left-3 right-3 bg-black/60 backdrop-blur-sm rounded-xl px-3 py-2 flex items-center gap-2">
+              <Hash className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+              <p className="text-[10px] text-gray-300">Asegúrate de que el número de carta es visible abajo</p>
+            </div>
+          )}
+
+          {/* Analyzing overlay */}
           {phase === 'analyzing' && (
             <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center gap-4 p-6">
               <Loader2 className="w-10 h-10 text-blue-400 animate-spin" />
@@ -264,12 +377,14 @@ export default function ScannerPage() {
           )}
         </div>
 
+        {/* Status toast */}
         {statusMsg && phase !== 'analyzing' && (
           <div className="bg-blue-500/10 border border-blue-500/30 rounded-2xl px-4 py-3 text-sm text-blue-300 text-center">
             {statusMsg}
           </div>
         )}
 
+        {/* Error */}
         {phase === 'error' && (
           <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4 flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
@@ -280,33 +395,41 @@ export default function ScannerPage() {
           </div>
         )}
 
+        {/* Search box */}
         {(phase === 'preview' || phase === 'results') && (
           <div className="flex gap-2">
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && manualSearch()}
-              placeholder="Nombre de la carta…"
+              placeholder="Nombre o número de carta…"
               className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50"
             />
-            <button onClick={manualSearch} className="bg-blue-600 hover:bg-blue-500 rounded-xl px-4 flex items-center justify-center transition-colors">
+            <button
+              onClick={manualSearch}
+              className="bg-blue-600 hover:bg-blue-500 rounded-xl px-4 flex items-center justify-center transition-colors"
+            >
               <Search className="w-4 h-4" />
             </button>
           </div>
         )}
 
-        {detectedName && phase === 'results' && (
+        {/* Detected info badge */}
+        {detectedInfo && phase === 'results' && (
           <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 rounded-xl px-3 py-2">
             <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-            <span className="text-xs text-blue-300">Detectado: <strong className="text-white">{detectedName}</strong></span>
+            <span className="text-xs text-blue-300">
+              Detectado: <strong className="text-white">{detectedInfo}</strong>
+            </span>
           </div>
         )}
 
+        {/* Results grid */}
         {phase === 'results' && (
           results.length === 0 ? (
             <div className="text-center py-12 text-gray-600 text-sm">
               <ScanLine className="w-10 h-10 mx-auto mb-3 opacity-30" />
-              No se encontraron cartas. Prueba editando el nombre.
+              No se encontraron cartas. Prueba escribiendo el nombre manualmente.
             </div>
           ) : (
             <>
@@ -326,20 +449,29 @@ export default function ScannerPage() {
                       <p className="text-xs font-bold truncate">{card.name}</p>
                       <p className="text-[10px] text-gray-500 truncate">{card.set.name}</p>
                       {card.rarity && (
-                        <p className={cx('text-[10px] truncate font-medium', getRarityColor(card.rarity))}>{card.rarity}</p>
+                        <p className={cx('text-[10px] truncate font-medium', getRarityColor(card.rarity))}>
+                          {card.rarity}
+                        </p>
                       )}
                       {card.cardmarket?.prices?.averageSellPrice && (
-                        <p className="text-[10px] text-green-400 font-medium">€{card.cardmarket.prices.averageSellPrice.toFixed(2)}</p>
+                        <p className="text-[10px] text-green-400 font-medium">
+                          €{card.cardmarket.prices.averageSellPrice.toFixed(2)}
+                        </p>
                       )}
                       <button
                         onClick={() => addCard(card)}
                         disabled={addedIds.has(card.id)}
                         className={cx(
                           'w-full mt-1 rounded-xl py-2 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all',
-                          addedIds.has(card.id) ? 'bg-green-500/20 text-green-400 cursor-default' : 'bg-blue-600 hover:bg-blue-500 text-white active:scale-95',
+                          addedIds.has(card.id)
+                            ? 'bg-green-500/20 text-green-400 cursor-default'
+                            : 'bg-blue-600 hover:bg-blue-500 text-white active:scale-95',
                         )}
                       >
-                        {addedIds.has(card.id) ? <><CheckCircle2 className="w-3 h-3" /> Añadida</> : <><Plus className="w-3 h-3" /> Añadir</>}
+                        {addedIds.has(card.id)
+                          ? <><CheckCircle2 className="w-3 h-3" /> Añadida</>
+                          : <><Plus className="w-3 h-3" /> Añadir</>
+                        }
                       </button>
                     </div>
                   </div>
@@ -349,37 +481,59 @@ export default function ScannerPage() {
           )
         )}
 
+        {/* Action buttons */}
         <div className="space-y-3 pt-2">
           {phase === 'idle' && (
-            <button onClick={openCamera} className="w-full bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-2xl py-4 font-semibold flex items-center justify-center gap-2 shadow-lg shadow-blue-900/40 active:scale-95 transition-transform">
+            <button
+              onClick={openCamera}
+              className="w-full bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-2xl py-4 font-semibold flex items-center justify-center gap-2 shadow-lg shadow-blue-900/40 active:scale-95 transition-transform"
+            >
               <Camera className="w-5 h-5" />
               Escanear carta
             </button>
           )}
+
           {phase === 'preview' && (
             <div className="flex gap-3">
-              <button onClick={analyzeCard} className="flex-1 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-2xl py-3.5 font-semibold flex items-center justify-center gap-2 shadow-lg shadow-blue-900/40 active:scale-95 transition-transform">
+              <button
+                onClick={analyzeCard}
+                className="flex-1 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-2xl py-3.5 font-semibold flex items-center justify-center gap-2 shadow-lg shadow-blue-900/40 active:scale-95 transition-transform"
+              >
                 <Sparkles className="w-4 h-4" />
                 Identificar carta
               </button>
-              <button onClick={openCamera} className="bg-white/8 border border-white/10 rounded-2xl px-4 flex items-center justify-center">
+              <button
+                onClick={openCamera}
+                className="bg-white/8 border border-white/10 rounded-2xl px-4 flex items-center justify-center"
+              >
                 <RefreshCw className="w-4 h-4 text-gray-400" />
               </button>
             </div>
           )}
+
           {phase === 'results' && (
             <div className="flex gap-3">
-              <button onClick={openCamera} className="flex-1 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-2xl py-3.5 font-semibold flex items-center justify-center gap-2 active:scale-95 transition-transform">
+              <button
+                onClick={openCamera}
+                className="flex-1 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-2xl py-3.5 font-semibold flex items-center justify-center gap-2 active:scale-95 transition-transform"
+              >
                 <Camera className="w-4 h-4" />
                 Escanear otra
               </button>
-              <button onClick={reset} className="bg-white/8 border border-white/10 rounded-2xl px-4 flex items-center justify-center">
+              <button
+                onClick={reset}
+                className="bg-white/8 border border-white/10 rounded-2xl px-4 flex items-center justify-center"
+              >
                 <X className="w-4 h-4 text-gray-400" />
               </button>
             </div>
           )}
+
           {phase === 'error' && (
-            <button onClick={openCamera} className="w-full bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-2xl py-3.5 font-semibold flex items-center justify-center gap-2 active:scale-95 transition-transform">
+            <button
+              onClick={openCamera}
+              className="w-full bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-2xl py-3.5 font-semibold flex items-center justify-center gap-2 active:scale-95 transition-transform"
+            >
               <Camera className="w-4 h-4" />
               Intentar de nuevo
             </button>
@@ -388,12 +542,20 @@ export default function ScannerPage() {
 
         {phase === 'idle' && (
           <p className="text-center text-[11px] text-gray-600 pb-2">
-            Fotografía la carta con buena luz · Sin reflejos · Una sola carta
+            Asegúrate de que el número de carta es visible · Buena luz · Sin reflejos
           </p>
         )}
+
       </div>
 
-      <input ref={fileInputRef} type="file" accept="image/*" capture="environment" onChange={handleFileChange} className="hidden" />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={handleFileChange}
+        className="hidden"
+      />
     </div>
   );
 }
