@@ -1,31 +1,39 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+export const config = { runtime: 'edge' };
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Allow CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
+export default async function handler(req: Request): Promise<Response> {
   if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+    return new Response(null, {
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      },
+    });
   }
 
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 });
   }
 
   const apiKey = process.env.GOOGLE_VISION_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ error: 'Missing Google Vision API key' });
+    return new Response(JSON.stringify({ error: 'Missing API key' }), { status: 500 });
   }
 
-  const { image } = req.body;
+  let body: any;
+  try {
+    body = await req.json();
+  } catch {
+    return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400 });
+  }
+
+  const { image } = body;
   if (!image) {
-    return res.status(400).json({ error: 'Missing image data' });
+    return new Response(JSON.stringify({ error: 'Missing image' }), { status: 400 });
   }
 
   try {
-    const response = await fetch(
+    const visionRes = await fetch(
       `https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`,
       {
         method: 'POST',
@@ -39,16 +47,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     );
 
-    if (!response.ok) {
-      const err = await response.json();
-      return res.status(response.status).json({ error: err });
+    const data = await visionRes.json();
+
+    if (!visionRes.ok) {
+      const errMsg = data?.error?.message ?? `Vision error ${visionRes.status}`;
+      return new Response(JSON.stringify({ error: errMsg }), { status: visionRes.status });
     }
 
-    const data = await response.json();
-    const fullText: string = data.responses?.[0]?.fullTextAnnotation?.text ?? '';
-    
-    return res.status(200).json({ text: fullText });
+    const text: string = data.responses?.[0]?.fullTextAnnotation?.text ?? '';
+    return new Response(JSON.stringify({ text }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+    });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return new Response(JSON.stringify({ error: err.message ?? 'Unknown error' }), { status: 500 });
   }
 }
