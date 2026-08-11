@@ -15,9 +15,7 @@ import {
   Cpu,
 } from 'lucide-react';
 import { Button, Card } from '@/components/ui';
-import { PageHeader } from '@/layouts';
 import { RoutePaths } from '@/config';
-import { useI18n } from '@/i18n';
 import { cx } from '@/utils';
 
 /* ------------------------------------------------------------------ */
@@ -115,7 +113,6 @@ function saveToCollection(card: PokemonCard) {
 /* ------------------------------------------------------------------ */
 export default function ScannerPage() {
   const navigate = useNavigate();
-  const { t } = useI18n();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [phase, setPhase] = useState<ScanPhase>('idle');
@@ -217,15 +214,15 @@ export default function ScannerPage() {
   /* ---------------------------------------------------------------- */
   return (
     <div className="flex flex-col min-h-screen bg-gray-950 text-white pb-24">
-      <PageHeader
-        title={t('scanner.title')}
-        subtitle="ESCÁNER"
-        leftAction={
-          <button onClick={() => navigate(RoutePaths.HOME)} className="p-2 rounded-lg hover:bg-gray-800">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-        }
-      />
+      <div className="flex items-center gap-3 px-4 pt-6 pb-2">
+        <button onClick={() => navigate(RoutePaths.Home)} className="p-2 rounded-lg hover:bg-gray-800">
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <div>
+          <p className="text-xs text-blue-400 font-semibold uppercase tracking-widest">ESCÁNER</p>
+          <h1 className="text-xl font-bold">Escanea una carta</h1>
+        </div>
+      </div>
 
       <div className="flex-1 px-4 pt-4 space-y-4">
 
