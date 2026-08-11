@@ -125,7 +125,6 @@ export default function ScannerPage() {
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const [statusMsg, setStatusMsg] = useState('');
 
-  /* ---- file handling ---- */
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -146,14 +145,11 @@ export default function ScannerPage() {
       setPhase('error');
     }
 
-    // reset input so same file can be selected again
     e.target.value = '';
   }, []);
 
-  /* ---- open camera ---- */
   const openCamera = () => fileInputRef.current?.click();
 
-  /* ---- analyze ---- */
   const analyzeCard = useCallback(async () => {
     if (!base64Image) return;
     setPhase('analyzing');
@@ -174,7 +170,6 @@ export default function ScannerPage() {
     }
   }, [base64Image]);
 
-  /* ---- manual search ---- */
   const manualSearch = useCallback(async () => {
     if (!searchQuery.trim()) return;
     setPhase('analyzing');
@@ -189,7 +184,6 @@ export default function ScannerPage() {
     }
   }, [searchQuery]);
 
-  /* ---- add to collection ---- */
   const addCard = (card: PokemonCard) => {
     saveToCollection(card);
     setAddedIds((prev) => new Set(prev).add(card.id));
@@ -197,7 +191,6 @@ export default function ScannerPage() {
     setTimeout(() => setStatusMsg(''), 2500);
   };
 
-  /* ---- reset ---- */
   const reset = () => {
     setPhase('idle');
     setPreviewUrl(null);
@@ -209,11 +202,10 @@ export default function ScannerPage() {
     setStatusMsg('');
   };
 
-  /* ---------------------------------------------------------------- */
-  /* Render                                                             */
-  /* ---------------------------------------------------------------- */
   return (
     <div className="flex flex-col min-h-screen bg-gray-950 text-white pb-24">
+
+      {/* Header */}
       <div className="flex items-center gap-3 px-4 pt-6 pb-2">
         <button onClick={() => navigate(RoutePaths.Home)} className="p-2 rounded-lg hover:bg-gray-800">
           <ArrowLeft className="w-5 h-5" />
@@ -226,7 +218,7 @@ export default function ScannerPage() {
 
       <div className="flex-1 px-4 pt-4 space-y-4">
 
-        {/* ---- Scanner frame ---- */}
+        {/* Scanner frame */}
         <div className="relative bg-gray-900 rounded-2xl overflow-hidden aspect-[3/4] flex items-center justify-center border border-gray-800">
           {previewUrl ? (
             <img src={previewUrl} alt="Card preview" className="w-full h-full object-contain" />
@@ -237,7 +229,6 @@ export default function ScannerPage() {
             </div>
           )}
 
-          {/* Corner guides */}
           {(['tl','tr','bl','br'] as const).map((corner) => (
             <span
               key={corner}
@@ -251,7 +242,6 @@ export default function ScannerPage() {
             />
           ))}
 
-          {/* Analyzing overlay */}
           {phase === 'analyzing' && (
             <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center gap-3">
               <Cpu className="w-10 h-10 text-blue-400 animate-pulse" />
@@ -260,32 +250,28 @@ export default function ScannerPage() {
           )}
         </div>
 
-        {/* ---- Tip ---- */}
         {phase === 'idle' && (
           <p className="text-center text-xs text-gray-500">
             Para mejores resultados, fotografía una sola carta con buena luz y sin reflejos.
           </p>
         )}
 
-        {/* ---- Status toast ---- */}
         {statusMsg && phase !== 'analyzing' && (
           <div className="bg-blue-900/50 border border-blue-700 rounded-xl px-4 py-3 text-sm text-blue-200 text-center">
             {statusMsg}
           </div>
         )}
 
-        {/* ---- Error ---- */}
         {phase === 'error' && (
-          <Card className="bg-red-900/30 border border-red-700 rounded-xl p-4 flex items-start gap-3">
+          <div className="bg-red-900/30 border border-red-700 rounded-xl p-4 flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="text-sm text-red-200">{errorMsg}</p>
               <button onClick={reset} className="mt-2 text-xs text-red-400 underline">Volver a intentar</button>
             </div>
-          </Card>
+          </div>
         )}
 
-        {/* ---- Search box (shown after preview or results) ---- */}
         {(phase === 'preview' || phase === 'results') && (
           <div className="flex gap-2">
             <div className="flex-1 relative">
@@ -307,7 +293,6 @@ export default function ScannerPage() {
           </div>
         )}
 
-        {/* ---- Detected name badge ---- */}
         {detectedName && phase === 'results' && (
           <div className="flex items-center gap-2 bg-blue-900/30 border border-blue-800 rounded-xl px-3 py-2">
             <Sparkles className="w-4 h-4 text-blue-400" />
@@ -315,89 +300,84 @@ export default function ScannerPage() {
           </div>
         )}
 
-        {/* ---- Results grid ---- */}
         {phase === 'results' && (
-          <>
-            {results.length === 0 ? (
-              <div className="text-center py-8 text-gray-500 text-sm">
-                No se encontraron cartas. Prueba editando el nombre.
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-3">
-                {results.map((card) => (
-                  <Card key={card.id} className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-                    <img src={card.images.small} alt={card.name} className="w-full aspect-[2/3] object-cover" />
-                    <div className="p-2 space-y-1">
-                      <p className="text-xs font-semibold truncate">{card.name}</p>
-                      <p className="text-xs text-gray-400 truncate">{card.set.name}</p>
-                      {card.rarity && <p className="text-xs text-yellow-500 truncate">{card.rarity}</p>}
-                      <button
-                        onClick={() => addCard(card)}
-                        disabled={addedIds.has(card.id)}
-                        className={cx(
-                          'w-full mt-1 rounded-lg py-1.5 text-xs font-medium flex items-center justify-center gap-1 transition-colors',
-                          addedIds.has(card.id)
-                            ? 'bg-green-800 text-green-300 cursor-default'
-                            : 'bg-blue-600 hover:bg-blue-500 text-white',
-                        )}
-                      >
-                        {addedIds.has(card.id) ? (
-                          <><CheckCircle2 className="w-3 h-3" /> Añadida</>
-                        ) : (
-                          <><Plus className="w-3 h-3" /> Añadir</>
-                        )}
-                      </button>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </>
+          results.length === 0 ? (
+            <div className="text-center py-8 text-gray-500 text-sm">
+              No se encontraron cartas. Prueba editando el nombre.
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              {results.map((card) => (
+                <div key={card.id} className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+                  <img src={card.images.small} alt={card.name} className="w-full aspect-[2/3] object-cover" />
+                  <div className="p-2 space-y-1">
+                    <p className="text-xs font-semibold truncate">{card.name}</p>
+                    <p className="text-xs text-gray-400 truncate">{card.set.name}</p>
+                    {card.rarity && <p className="text-xs text-yellow-500 truncate">{card.rarity}</p>}
+                    <button
+                      onClick={() => addCard(card)}
+                      disabled={addedIds.has(card.id)}
+                      className={cx(
+                        'w-full mt-1 rounded-lg py-1.5 text-xs font-medium flex items-center justify-center gap-1 transition-colors',
+                        addedIds.has(card.id)
+                          ? 'bg-green-800 text-green-300 cursor-default'
+                          : 'bg-blue-600 hover:bg-blue-500 text-white',
+                      )}
+                    >
+                      {addedIds.has(card.id) ? (
+                        <><CheckCircle2 className="w-3 h-3" /> Añadida</>
+                      ) : (
+                        <><Plus className="w-3 h-3" /> Añadir</>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
         )}
 
-        {/* ---- Action buttons ---- */}
         <div className="space-y-3 pt-2">
           {phase === 'idle' && (
-            <Button size="md" fullWidth onClick={openCamera} className="bg-blue-600 hover:bg-blue-500 rounded-2xl py-4">
-              <Camera className="w-5 h-5 mr-2" />
+            <button onClick={openCamera} className="w-full bg-blue-600 hover:bg-blue-500 text-white rounded-2xl py-4 font-medium flex items-center justify-center gap-2">
+              <Camera className="w-5 h-5" />
               Escanear carta
-            </Button>
+            </button>
           )}
 
           {phase === 'preview' && (
             <div className="flex gap-3">
-              <Button size="md" fullWidth onClick={analyzeCard} className="bg-blue-600 hover:bg-blue-500 rounded-2xl">
-                <Sparkles className="w-4 h-4 mr-2" />
+              <button onClick={analyzeCard} className="flex-1 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl py-3 font-medium flex items-center justify-center gap-2">
+                <Sparkles className="w-4 h-4" />
                 Analizar con IA
-              </Button>
-              <Button size="md" variant="outline" onClick={openCamera} className="rounded-2xl px-4">
+              </button>
+              <button onClick={openCamera} className="bg-gray-800 border border-gray-700 rounded-2xl px-4 flex items-center justify-center">
                 <RefreshCw className="w-4 h-4" />
-              </Button>
+              </button>
             </div>
           )}
 
           {phase === 'results' && (
             <div className="flex gap-3">
-              <Button size="md" fullWidth onClick={openCamera} className="bg-blue-600 hover:bg-blue-500 rounded-2xl">
-                <Camera className="w-4 h-4 mr-2" />
+              <button onClick={openCamera} className="flex-1 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl py-3 font-medium flex items-center justify-center gap-2">
+                <Camera className="w-4 h-4" />
                 Escanear otra
-              </Button>
-              <Button size="md" variant="outline" onClick={reset} className="rounded-2xl px-4">
+              </button>
+              <button onClick={reset} className="bg-gray-800 border border-gray-700 rounded-2xl px-4 flex items-center justify-center">
                 <X className="w-4 h-4" />
-              </Button>
+              </button>
             </div>
           )}
 
           {phase === 'error' && (
-            <Button size="md" fullWidth onClick={openCamera} className="bg-blue-600 hover:bg-blue-500 rounded-2xl">
-              <Camera className="w-4 h-4 mr-2" />
+            <button onClick={openCamera} className="w-full bg-blue-600 hover:bg-blue-500 text-white rounded-2xl py-3 font-medium flex items-center justify-center gap-2">
+              <Camera className="w-4 h-4" />
               Intentar de nuevo
-            </Button>
+            </button>
           )}
         </div>
       </div>
 
-      {/* Hidden file input */}
       <input
         ref={fileInputRef}
         type="file"
@@ -408,4 +388,4 @@ export default function ScannerPage() {
       />
     </div>
   );
-}
+      }
