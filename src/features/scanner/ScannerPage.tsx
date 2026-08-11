@@ -43,18 +43,15 @@ function extractCardName(fullText: string): string {
     'FASE', 'FASE2', 'FASE 2', 'BASIC', 'STAGE', 'LEVEL', 'ITEM',
     'TRAINER', 'ENERGY', 'HP', 'PS', 'GX', 'EX', 'BASICO', 'BÁSICO',
     'HOLOGRAPHIC', 'POKEMON', 'POKÉMON', 'SUPPORTER', 'TOOL',
-    'V ', 'VMAX', 'VSTAR', 'TAG', 'TEAM',
+    'VMAX', 'VSTAR', 'TAG', 'TEAM',
   ];
 
   for (const line of lines.slice(0, 8)) {
     let cleaned = line.replace(/[^a-zA-ZÀ-ÿ\s\-]/g, '').trim();
-
-    // Remove skip prefixes from the start of the line
     for (const prefix of skipPrefixes) {
       const regex = new RegExp(`^${prefix}\\s*`, 'i');
       cleaned = cleaned.replace(regex, '').trim();
     }
-
     if (
       cleaned.length >= 3 &&
       cleaned.length <= 25 &&
@@ -85,12 +82,27 @@ async function extractCardNameWithVision(base64: string): Promise<string> {
   return extractCardName(data.text);
 }
 
-async function searchPokemonTCG(name: string): Promise<PokemonCard[]> {
+// Search with automatic retry
+async function searchPokemonTCG(name: string, retries = 3): Promise<PokemonCard[]> {
   const url = `https://api.pokemontcg.io/v2/cards?q=name:"${encodeURIComponent(name)}"&pageSize=20&orderBy=-set.releaseDate`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('PokéTCG API error');
-  const json = await res.json();
-  return (json.data ?? []) as PokemonCard[];
+  
+  for (let i = 0; i < retries; i++) {
+    try {
+      const res = await fetch(url);
+      if (res.status === 429) {
+        // Rate limited — wait and retry
+        await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+        continue;
+      }
+      if (!res.ok) throw new Error(`PokéTCG error: ${res.status}`);
+      const json = await res.json();
+      return (json.data ?? []) as PokemonCard[];
+    } catch (err) {
+      if (i === retries - 1) throw err;
+      await new Promise(r => setTimeout(r, 800 * (i + 1)));
+    }
+  }
+  return [];
 }
 
 function saveToCollection(card: PokemonCard) {
@@ -165,7 +177,7 @@ export default function ScannerPage() {
 
       setDetectedName(name);
       setSearchQuery(name);
-      setStatusMsg(`Buscando "${name}" en PokéTCG…`);
+      setStatusMsg(`Buscando "${name}"…`);
       setProgress(85);
 
       const cards = await searchPokemonTCG(name);
