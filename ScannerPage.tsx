@@ -1,11 +1,9 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   Camera,
-  Cpu,
   ScanLine,
-  Image as ImageIcon,
   RefreshCw,
   Sparkles,
   X,
@@ -13,486 +11,393 @@ import {
   CheckCircle2,
   AlertCircle,
   Type,
+  Plus,
+  Cpu,
 } from 'lucide-react';
-
 import { Button, Card } from '@/components/ui';
-import { PageHeader } from '@/layouts';
-import { useScannerStore } from '@/store';
 import { RoutePaths } from '@/config';
-import { useI18n } from '@/i18n';
 import { cx } from '@/utils';
-import { processImage } from '@/features/scanner/utils/image-processor';
-import { scannerService } from '@/features/scanner/services';
-import type { RecognitionResult } from '@/features/scanner/services';
-import { CardImage } from '@/features/catalog/components';
-import { AddToCollectionModal } from '@/features/collection/components';
-import { cardRepository } from '@/features/catalog/services';
-import type { CatalogCard } from '@/features/catalog/types/catalog';
 
-type View = 'capture' | 'analyzing' | 'results' | 'added';
+/* ------------------------------------------------------------------ */
+/* Types                                                                */
+/* ------------------------------------------------------------------ */
+interface PokemonCard {
+  id: string;
+  name: string;
+  number: string;
+  rarity?: string;
+  images: { small: string; large: string };
+  set: { name: string; series: string };
+}
 
-/**
- * Scanner page — capture a card photo, run basic OCR text extraction, search
- * the Pokémon TCG API for matching cards, and let the user pick one to add to
- * their collection. Manual name entry is offered as a fallback when no text is
- * detected or no matches are found.
- */
-export function ScannerPage() {
+type ScanPhase = 'idle' | 'preview' | 'analyzing' | 'results' | 'error';
+
+/* ------------------------------------------------------------------ */
+/* Helpers                                                              */
+/* ------------------------------------------------------------------ */
+function toBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      resolve(result.split(',')[1]);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function identifyCardWithAI(base64Image: string): Promise<string> {
+  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error('Missing Anthropic API key');
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 100,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: { type: 'base64', media_type: 'image/jpeg', data: base64Image },
+            },
+            {
+              type: 'text',
+              text: 'This is a Pokemon trading card. Return ONLY the exact Pokemon name printed on the card, nothing else. No punctuation, no explanation.',
+            },
+          ],
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error((err as any)?.error?.message ?? `API error ${response.status}`);
+  }
+
+  const data = await response.json();
+  const text = data.content?.[0]?.text?.trim() ?? '';
+  if (!text) throw new Error('No card name returned');
+  return text;
+}
+
+async function searchPokemonTCG(name: string): Promise<PokemonCard[]> {
+  const url = `https://api.pokemontcg.io/v2/cards?q=name:"${encodeURIComponent(name)}"&pageSize=20`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('PokéTCG API error');
+  const json = await res.json();
+  return (json.data ?? []) as PokemonCard[];
+}
+
+function saveToCollection(card: PokemonCard) {
+  const raw = localStorage.getItem('pokemon-collection');
+  const collection: PokemonCard[] = raw ? JSON.parse(raw) : [];
+  if (!collection.find((c) => c.id === card.id)) {
+    collection.push(card);
+    localStorage.setItem('pokemon-collection', JSON.stringify(collection));
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Component                                                            */
+/* ------------------------------------------------------------------ */
+export default function ScannerPage() {
   const navigate = useNavigate();
-  const { t } = useI18n();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [view, setView] = useState<View>('capture');
-  const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const [result, setResult] = useState<RecognitionResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [manualQuery, setManualQuery] = useState('');
-  const [manualCards, setManualCards] = useState<CatalogCard[]>([]);
-  const [manualSearching, setManualSearching] = useState(false);
-  const [selectedCard, setSelectedCard] = useState<CatalogCard | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
 
-  const setPhase = useScannerStore((s) => s.setPhase);
-  const setCapturedImageStore = useScannerStore((s) => s.setCapturedImage);
-  const setProcessedImage = useScannerStore((s) => s.setProcessedImage);
-  const setErrorStore = useScannerStore((s) => s.setError);
-  const reset = useScannerStore((s) => s.reset);
+  const [phase, setPhase] = useState<ScanPhase>('idle');
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [base64Image, setBase64Image] = useState<string | null>(null);
+  const [detectedName, setDetectedName] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [results, setResults] = useState<PokemonCard[]>([]);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
+  const [statusMsg, setStatusMsg] = useState('');
 
-  const hasImage = capturedImage !== null;
-
-  const openFilePicker = () => {
-    setError(null);
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  /* ---- file handling ---- */
+  const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    e.target.value = '';
     if (!file) return;
 
-    setIsProcessing(true);
-    setPhase('capturing');
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+
     try {
-      const { dataUrl } = await processImage(file);
-      setCapturedImage(dataUrl);
-      setCapturedImageStore(dataUrl);
-      setProcessedImage(dataUrl);
-      setError(null);
-      setView('capture');
+      const b64 = await toBase64(file);
+      setBase64Image(b64);
+      setPhase('preview');
+      setResults([]);
+      setDetectedName('');
+      setSearchQuery('');
+      setErrorMsg('');
     } catch {
-      setError(t.scanner.imageError);
-      setErrorStore(t.scanner.imageError);
-      setCapturedImage(null);
-      setCapturedImageStore(null);
-      setProcessedImage(null);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleRetake = () => {
-    setCapturedImage(null);
-    setResult(null);
-    setError(null);
-    setManualQuery('');
-    setManualCards([]);
-    setView('capture');
-    reset();
-    openFilePicker();
-  };
-
-  const handleCancel = () => {
-    setCapturedImage(null);
-    setResult(null);
-    setError(null);
-    setManualQuery('');
-    setManualCards([]);
-    setView('capture');
-    reset();
-  };
-
-  const handleAnalyze = async () => {
-    if (!capturedImage) return;
-    setView('analyzing');
-    setPhase('recognizing');
-    setError(null);
-    try {
-      const res = await scannerService.scan({ image: capturedImage, tcg: 'pokemon' });
-      setResult(res);
-      setView('results');
-      setPhase('result');
-    } catch {
-      setError(t.scanner.imageError);
-      setErrorStore(t.scanner.imageError);
-      setView('capture');
+      setErrorMsg('Error reading image');
       setPhase('error');
     }
-  };
 
-  const handleRetryAnalysis = () => {
-    setResult(null);
-    setManualQuery('');
-    setManualCards([]);
-    setView('capture');
-    setPhase('capturing');
-  };
+    // reset input so same file can be selected again
+    e.target.value = '';
+  }, []);
 
-  const handleManualSearch = async () => {
-    const q = manualQuery.trim();
-    if (q.length < 2) return;
-    setManualSearching(true);
+  /* ---- open camera ---- */
+  const openCamera = () => fileInputRef.current?.click();
+
+  /* ---- analyze ---- */
+  const analyzeCard = useCallback(async () => {
+    if (!base64Image) return;
+    setPhase('analyzing');
+    setStatusMsg('Identificando carta con IA…');
+
     try {
-      const page = await cardRepository.search(q, 1);
-      setManualCards(page.cards);
-    } catch {
-      setManualCards([]);
-    } finally {
-      setManualSearching(false);
+      const name = await identifyCardWithAI(base64Image);
+      setDetectedName(name);
+      setSearchQuery(name);
+      setStatusMsg(`Buscando "${name}" en PokéTCG…`);
+
+      const cards = await searchPokemonTCG(name);
+      setResults(cards);
+      setPhase('results');
+    } catch (err: any) {
+      setErrorMsg(err?.message ?? 'Error analyzing card');
+      setPhase('error');
     }
-  };
+  }, [base64Image]);
 
-  const handleSelectCard = (card: CatalogCard) => {
-    setSelectedCard(card);
-    setModalOpen(true);
-  };
-
-  const handleModalClose = () => {
-    setModalOpen(false);
-    if (view === 'results') {
-      setView('added');
+  /* ---- manual search ---- */
+  const manualSearch = useCallback(async () => {
+    if (!searchQuery.trim()) return;
+    setPhase('analyzing');
+    setStatusMsg(`Buscando "${searchQuery}"…`);
+    try {
+      const cards = await searchPokemonTCG(searchQuery.trim());
+      setResults(cards);
+      setPhase('results');
+    } catch (err: any) {
+      setErrorMsg(err?.message ?? 'Search error');
+      setPhase('error');
     }
+  }, [searchQuery]);
+
+  /* ---- add to collection ---- */
+  const addCard = (card: PokemonCard) => {
+    saveToCollection(card);
+    setAddedIds((prev) => new Set(prev).add(card.id));
+    setStatusMsg(`✅ ${card.name} añadida a tu colección`);
+    setTimeout(() => setStatusMsg(''), 2500);
   };
 
-  const handleScanAnother = () => {
-    setCapturedImage(null);
-    setResult(null);
-    setSelectedCard(null);
-    setManualQuery('');
-    setManualCards([]);
-    setView('capture');
-    reset();
-    openFilePicker();
+  /* ---- reset ---- */
+  const reset = () => {
+    setPhase('idle');
+    setPreviewUrl(null);
+    setBase64Image(null);
+    setDetectedName('');
+    setSearchQuery('');
+    setResults([]);
+    setErrorMsg('');
+    setStatusMsg('');
   };
 
-  const detectedText = result?.extracted?.text ?? '';
-  const resultCards = result?.cards ?? [];
-  const showManualFallback =
-    view === 'results' && resultCards.length === 0 && (!result?.extracted || !result.extracted.usedDetector || result.extracted.words.length === 0);
-  const showNoResults =
-    view === 'results' && resultCards.length === 0 && !showManualFallback;
-  const displayCards = resultCards.length > 0 ? resultCards : manualCards;
-
+  /* ---------------------------------------------------------------- */
+  /* Render                                                             */
+  /* ---------------------------------------------------------------- */
   return (
-    <div className="animate-fade-in">
-      <button
-        onClick={() => navigate(RoutePaths.Home)}
-        className="mb-3 inline-flex items-center gap-1 text-sm text-ink-soft transition-colors hover:text-ink"
-      >
-        <ArrowLeft size={16} /> {t.scanner.back}
-      </button>
-
-      <PageHeader
-        eyebrow={t.scanner.eyebrow}
-        title={t.scanner.title}
-        subtitle={t.scanner.subtitle}
-      />
-
-      <div className="mt-8 flex flex-col items-center">
-        {/* Viewport — shows placeholder or captured image */}
-        <div className="relative aspect-[3/4] w-full max-w-xs overflow-hidden rounded-3xl border border-line bg-surface-2">
-          {hasImage && capturedImage ? (
-            <img
-              src={capturedImage}
-              alt={t.scanner.selectOrPhoto}
-              className="h-full w-full object-contain"
-            />
-          ) : (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center">
-              <div
-                className={cx(
-                  'flex h-20 w-20 items-center justify-center rounded-2xl bg-primary/10 text-primary-soft',
-                  !isProcessing && view === 'capture' && 'animate-pulse-glow'
-                )}
-              >
-                {isProcessing || view === 'analyzing' ? (
-                  <RefreshCw size={36} strokeWidth={1.8} className="animate-spin" />
-                ) : (
-                  <ScanLine size={36} strokeWidth={1.8} />
-                )}
-              </div>
-              <p className="px-8 text-sm text-ink-soft">
-                {isProcessing
-                  ? t.scanner.processingImage
-                  : view === 'analyzing'
-                    ? t.scanner.analyzing
-                    : t.scanner.cameraPreview}
-              </p>
-            </div>
-          )}
-
-          {/* Corner guides — always visible */}
-          <span className="absolute left-4 top-4 h-6 w-6 rounded-tl-lg border-l-2 border-t-2 border-primary/50" />
-          <span className="absolute right-4 top-4 h-6 w-6 rounded-tr-lg border-r-2 border-t-2 border-primary/50" />
-          <span className="absolute bottom-4 left-4 h-6 w-6 rounded-bl-lg border-b-2 border-l-2 border-primary/50" />
-          <span className="absolute bottom-4 right-4 h-6 w-6 rounded-br-lg border-b-2 border-r-2 border-primary/50" />
+    <div className="flex flex-col min-h-screen bg-gray-950 text-white pb-24">
+      <div className="flex items-center gap-3 px-4 pt-6 pb-2">
+        <button onClick={() => navigate(RoutePaths.Home)} className="p-2 rounded-lg hover:bg-gray-800">
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <div>
+          <p className="text-xs text-blue-400 font-semibold uppercase tracking-widest">ESCÁNER</p>
+          <h1 className="text-xl font-bold">Escanea una carta</h1>
         </div>
-
-        {/* Hint text */}
-        {view === 'capture' && (
-          <p className="mt-4 max-w-xs px-4 text-center text-xs leading-relaxed text-ink-muted">
-            {t.scanner.captureHint}
-          </p>
-        )}
-
-        {view === 'analyzing' && (
-          <p className="mt-4 max-w-xs px-4 text-center text-xs leading-relaxed text-ink-muted">
-            {t.scanner.analyzingDesc}
-          </p>
-        )}
-
-        {/* Action buttons — capture view */}
-        {view === 'capture' && (
-          <div className="mt-6 flex w-full max-w-xs flex-col gap-3">
-            {!hasImage ? (
-              <Button
-                size="lg"
-                fullWidth
-                leftIcon={<Camera size={20} />}
-                onClick={openFilePicker}
-                disabled={isProcessing}
-              >
-                {t.scanner.scanCard}
-              </Button>
-            ) : (
-              <>
-                <Button
-                  size="lg"
-                  variant="primary"
-                  fullWidth
-                  leftIcon={<Sparkles size={20} />}
-                  onClick={handleAnalyze}
-                  disabled={isProcessing}
-                >
-                  {t.scanner.analyzeCard}
-                </Button>
-                <div className="flex gap-3">
-                  <Button
-                    size="md"
-                    variant="outline"
-                    fullWidth
-                    leftIcon={<RefreshCw size={18} />}
-                    onClick={handleRetake}
-                  >
-                    {t.scanner.changeImage}
-                  </Button>
-                  <Button
-                    size="md"
-                    variant="ghost"
-                    fullWidth
-                    leftIcon={<X size={18} />}
-                    onClick={handleCancel}
-                  >
-                    {t.scanner.cancel}
-                  </Button>
-                </div>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* Added view */}
-        {view === 'added' && (
-          <div className="mt-6 flex w-full max-w-xs flex-col gap-3">
-            <div className="flex items-center justify-center gap-2 rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-sm text-success">
-              <CheckCircle2 size={18} className="shrink-0" />
-              <span>{t.scanner.addedToCollection}</span>
-            </div>
-            <Button
-              size="lg"
-              variant="primary"
-              fullWidth
-              leftIcon={<Camera size={20} />}
-              onClick={handleScanAnother}
-            >
-              {t.scanner.addAnother}
-            </Button>
-            <Button
-              size="md"
-              variant="ghost"
-              fullWidth
-              onClick={handleCancel}
-            >
-              {t.scanner.back}
-            </Button>
-          </div>
-        )}
       </div>
 
-      {/* Results section */}
-      {view === 'results' && (
-        <div className="mt-6 animate-fade-in">
-          {/* Detected text */}
-          {detectedText ? (
-            <div className="mb-4 rounded-2xl border border-line-soft bg-surface-1 p-4">
-              <div className="flex items-start gap-2">
-                <Type size={16} className="mt-0.5 shrink-0 text-primary-soft" />
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">
-                    {t.scanner.detectedText}
-                  </p>
-                  <p className="mt-1 text-sm text-ink">{detectedText}</p>
-                </div>
-              </div>
-            </div>
+      <div className="flex-1 px-4 pt-4 space-y-4">
+
+        {/* ---- Scanner frame ---- */}
+        <div className="relative bg-gray-900 rounded-2xl overflow-hidden aspect-[3/4] flex items-center justify-center border border-gray-800">
+          {previewUrl ? (
+            <img src={previewUrl} alt="Card preview" className="w-full h-full object-contain" />
           ) : (
-            <div className="mb-4 flex items-start gap-2 rounded-2xl border border-line-soft bg-surface-1 p-4">
-              <AlertCircle size={16} className="mt-0.5 shrink-0 text-ink-muted" />
-              <p className="text-sm text-ink-soft">{t.scanner.noTextDetected}</p>
+            <div className="flex flex-col items-center gap-3 text-gray-500">
+              <ScanLine className="w-12 h-12" />
+              <p className="text-sm">La vista de la cámara aparecerá aquí</p>
             </div>
           )}
 
-          {/* Results header */}
-          {displayCards.length > 0 && (
-            <>
-              <h3 className="font-display text-base font-bold text-ink">
-                {t.scanner.resultsTitle}
-              </h3>
-              <p className="mt-1 text-sm text-ink-soft">{t.scanner.resultsDesc}</p>
-            </>
-          )}
+          {/* Corner guides */}
+          {(['tl','tr','bl','br'] as const).map((corner) => (
+            <span
+              key={corner}
+              className={cx(
+                'absolute w-6 h-6 border-blue-400',
+                corner === 'tl' && 'top-3 left-3 border-t-2 border-l-2 rounded-tl-lg',
+                corner === 'tr' && 'top-3 right-3 border-t-2 border-r-2 rounded-tr-lg',
+                corner === 'bl' && 'bottom-3 left-3 border-b-2 border-l-2 rounded-bl-lg',
+                corner === 'br' && 'bottom-3 right-3 border-b-2 border-r-2 rounded-br-lg',
+              )}
+            />
+          ))}
 
-          {/* No results */}
-          {showNoResults && (
-            <div className="rounded-2xl border border-line-soft bg-surface-1 p-6 text-center">
-              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-surface-3 text-ink-muted">
-                <AlertCircle size={24} />
+          {/* Analyzing overlay */}
+          {phase === 'analyzing' && (
+            <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center gap-3">
+              <Cpu className="w-10 h-10 text-blue-400 animate-pulse" />
+              <p className="text-sm text-blue-200 text-center px-4">{statusMsg}</p>
+            </div>
+          )}
+        </div>
+
+        {/* ---- Tip ---- */}
+        {phase === 'idle' && (
+          <p className="text-center text-xs text-gray-500">
+            Para mejores resultados, fotografía una sola carta con buena luz y sin reflejos.
+          </p>
+        )}
+
+        {/* ---- Status toast ---- */}
+        {statusMsg && phase !== 'analyzing' && (
+          <div className="bg-blue-900/50 border border-blue-700 rounded-xl px-4 py-3 text-sm text-blue-200 text-center">
+            {statusMsg}
+          </div>
+        )}
+
+        {/* ---- Error ---- */}
+        {phase === 'error' && (
+          <Card className="bg-red-900/30 border border-red-700 rounded-xl p-4 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm text-red-200">{errorMsg}</p>
+              <button onClick={reset} className="mt-2 text-xs text-red-400 underline">Volver a intentar</button>
+            </div>
+          </Card>
+        )}
+
+        {/* ---- Search box (shown after preview or results) ---- */}
+        {(phase === 'preview' || phase === 'results') && (
+          <div className="flex gap-2">
+            <div className="flex-1 relative">
+              <Type className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && manualSearch()}
+                placeholder="Nombre de la carta…"
+                className="w-full bg-gray-800 border border-gray-700 rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+            <button
+              onClick={manualSearch}
+              className="bg-gray-800 border border-gray-700 rounded-xl px-4 flex items-center justify-center hover:bg-gray-700"
+            >
+              <Search className="w-4 h-4 text-gray-300" />
+            </button>
+          </div>
+        )}
+
+        {/* ---- Detected name badge ---- */}
+        {detectedName && phase === 'results' && (
+          <div className="flex items-center gap-2 bg-blue-900/30 border border-blue-800 rounded-xl px-3 py-2">
+            <Sparkles className="w-4 h-4 text-blue-400" />
+            <span className="text-xs text-blue-300">IA detectó: <strong>{detectedName}</strong></span>
+          </div>
+        )}
+
+        {/* ---- Results grid ---- */}
+        {phase === 'results' && (
+          <>
+            {results.length === 0 ? (
+              <div className="text-center py-8 text-gray-500 text-sm">
+                No se encontraron cartas. Prueba editando el nombre.
               </div>
-              <h3 className="font-semibold text-ink">{t.scanner.noResults}</h3>
-              <p className="mt-1 text-sm text-ink-soft">{t.scanner.noResultsDesc}</p>
-            </div>
-          )}
-
-          {/* Card results grid */}
-          {displayCards.length > 0 && (
-            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {displayCards.slice(0, 12).map((card) => (
-                <ScannerResultCard
-                  key={card.id}
-                  card={card}
-                  onSelect={handleSelectCard}
-                  t={t}
-                />
-              ))}
-            </div>
-          )}
-
-          {/* Manual search fallback */}
-          {showManualFallback && (
-            <div className="mt-2">
-              <h3 className="font-display text-base font-bold text-ink">
-                {t.scanner.manualSearch}
-              </h3>
-              <p className="mt-1 text-sm text-ink-soft">{t.scanner.noTextDetected}</p>
-            </div>
-          )}
-
-          {view === 'results' && (
-            <div className="mt-4 flex gap-3">
-              <div className="flex flex-1 items-center gap-2 rounded-xl border border-line-soft bg-surface-3 px-3">
-                <Search size={16} className="shrink-0 text-ink-muted" />
-                <input
-                  type="text"
-                  value={manualQuery}
-                  onChange={(e) => setManualQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleManualSearch();
-                  }}
-                  placeholder={t.scanner.manualSearchPlaceholder}
-                  className="h-11 w-full bg-transparent text-sm text-ink placeholder:text-ink-faint focus:outline-none"
-                />
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {results.map((card) => (
+                  <Card key={card.id} className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+                    <img src={card.images.small} alt={card.name} className="w-full aspect-[2/3] object-cover" />
+                    <div className="p-2 space-y-1">
+                      <p className="text-xs font-semibold truncate">{card.name}</p>
+                      <p className="text-xs text-gray-400 truncate">{card.set.name}</p>
+                      {card.rarity && <p className="text-xs text-yellow-500 truncate">{card.rarity}</p>}
+                      <button
+                        onClick={() => addCard(card)}
+                        disabled={addedIds.has(card.id)}
+                        className={cx(
+                          'w-full mt-1 rounded-lg py-1.5 text-xs font-medium flex items-center justify-center gap-1 transition-colors',
+                          addedIds.has(card.id)
+                            ? 'bg-green-800 text-green-300 cursor-default'
+                            : 'bg-blue-600 hover:bg-blue-500 text-white',
+                        )}
+                      >
+                        {addedIds.has(card.id) ? (
+                          <><CheckCircle2 className="w-3 h-3" /> Añadida</>
+                        ) : (
+                          <><Plus className="w-3 h-3" /> Añadir</>
+                        )}
+                      </button>
+                    </div>
+                  </Card>
+                ))}
               </div>
-              <Button
-                size="md"
-                variant="primary"
-                onClick={handleManualSearch}
-                disabled={manualQuery.trim().length < 2 || manualSearching}
-                isLoading={manualSearching}
-              >
-                {t.scanner.search}
+            )}
+          </>
+        )}
+
+        {/* ---- Action buttons ---- */}
+        <div className="space-y-3 pt-2">
+          {phase === 'idle' && (
+            <Button size="md" fullWidth onClick={openCamera} className="bg-blue-600 hover:bg-blue-500 rounded-2xl py-4">
+              <Camera className="w-5 h-5 mr-2" />
+              Escanear carta
+            </Button>
+          )}
+
+          {phase === 'preview' && (
+            <div className="flex gap-3">
+              <Button size="md" fullWidth onClick={analyzeCard} className="bg-blue-600 hover:bg-blue-500 rounded-2xl">
+                <Sparkles className="w-4 h-4 mr-2" />
+                Analizar con IA
+              </Button>
+              <Button size="md" variant="outline" onClick={openCamera} className="rounded-2xl px-4">
+                <RefreshCw className="w-4 h-4" />
               </Button>
             </div>
           )}
 
-          {/* Retry / retake actions */}
-          <div className="mt-6 flex w-full gap-3">
-            <Button
-              size="md"
-              variant="outline"
-              fullWidth
-              leftIcon={<RefreshCw size={18} />}
-              onClick={handleRetryAnalysis}
-            >
-              {t.scanner.retryAnalysis}
-            </Button>
-            <Button
-              size="md"
-              variant="ghost"
-              fullWidth
-              leftIcon={<X size={18} />}
-              onClick={handleCancel}
-            >
-              {t.scanner.cancel}
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Info card — shown only in idle/capture state with no image */}
-      {view === 'capture' && !hasImage && (
-        <div className="mt-8 rounded-2xl border border-line-soft bg-surface-1 p-5">
-          <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent/10 text-accent">
-              <Cpu size={20} />
+          {phase === 'results' && (
+            <div className="flex gap-3">
+              <Button size="md" fullWidth onClick={openCamera} className="bg-blue-600 hover:bg-blue-500 rounded-2xl">
+                <Camera className="w-4 h-4 mr-2" />
+                Escanear otra
+              </Button>
+              <Button size="md" variant="outline" onClick={reset} className="rounded-2xl px-4">
+                <X className="w-4 h-4" />
+              </Button>
             </div>
-            <div>
-              <h3 className="font-semibold text-ink">{t.scanner.aiRecognition}</h3>
-              <p className="mt-1 text-sm leading-relaxed text-ink-soft">
-                {t.scanner.aiRecognitionDesc}
-              </p>
-            </div>
-          </div>
+          )}
+
+          {phase === 'error' && (
+            <Button size="md" fullWidth onClick={openCamera} className="bg-blue-600 hover:bg-blue-500 rounded-2xl">
+              <Camera className="w-4 h-4 mr-2" />
+              Intentar de nuevo
+            </Button>
+          )}
         </div>
-      )}
+      </div>
 
-      {/* Error state */}
-      {error && view === 'capture' && (
-        <div className="mt-6 max-w-xs self-center">
-          <div className="flex items-center gap-2 rounded-xl border border-error/30 bg-error/10 px-4 py-3 text-sm text-error">
-            <ImageIcon size={18} className="shrink-0" />
-            <span>{error}</span>
-          </div>
-          <Button
-            size="md"
-            variant="outline"
-            fullWidth
-            className="mt-3"
-            onClick={openFilePicker}
-          >
-            {t.scanner.scanCard}
-          </Button>
-        </div>
-      )}
-
-      {/* Add to collection modal */}
-      {selectedCard && (
-        <AddToCollectionModal
-          card={selectedCard}
-          open={modalOpen}
-          onClose={handleModalClose}
-        />
-      )}
-
-      {/* Hidden file input — accepts any image, camera or gallery */}
+      {/* Hidden file input */}
       <input
         ref={fileInputRef}
         type="file"
@@ -502,48 +407,5 @@ export function ScannerPage() {
         className="hidden"
       />
     </div>
-  );
-}
-
-/* ── Result card tile ──────────────────────────────────────────── */
-
-interface ScannerResultCardProps {
-  card: CatalogCard;
-  onSelect: (card: CatalogCard) => void;
-  t: ReturnType<typeof useI18n>['t'];
-}
-
-function ScannerResultCard({ card, onSelect, t }: ScannerResultCardProps) {
-  return (
-    <Card
-      interactive
-      padding="sm"
-      className="flex flex-col gap-2 animate-scale-in"
-      onClick={() => onSelect(card)}
-      role="button"
-      tabIndex={0}
-      aria-label={`${card.name} from ${card.set.name}`}
-    >
-      <CardImage
-        src={card.images.small}
-        alt={card.name}
-        className="aspect-[3/4] w-full"
-      />
-      <div className="px-1 pb-1">
-        <p className="truncate text-sm font-semibold text-ink">{card.name}</p>
-        <p className="mt-0.5 truncate text-xs text-ink-soft">{card.set.name}</p>
-        <div className="mt-1.5 flex items-center justify-between gap-1.5">
-          <span className="text-[11px] text-ink-muted">#{card.number}</span>
-          {card.rarity && (
-            <span
-              className="truncate text-[11px] font-medium text-accent"
-              title={card.rarity}
-            >
-              {card.rarity}
-            </span>
-          )}
-        </div>
-      </div>
-    </Card>
   );
 }
