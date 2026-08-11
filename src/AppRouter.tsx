@@ -9,7 +9,7 @@ import {
   ProfilePage,
   WishlistPage,
 } from '@/pages';
-import { ScannerPage } from '@/features/scanner/ScannerPage';
+import ScannerPage from '@/features/scanner/ScannerPage';
 import { CardDetailsPage } from '@/features/catalog/pages/CardDetailsPage';
 
 /**
