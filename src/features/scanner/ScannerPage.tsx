@@ -39,19 +39,28 @@ async function toBase64(file: File): Promise<string> {
 
 function extractCardName(fullText: string): string {
   const lines = fullText.split('\n').map(l => l.trim()).filter(Boolean);
-  const skipWords = [
-    'FASE', 'FASE 2', 'FASE2', 'BASIC', 'STAGE', 'LEVEL', 'ITEM',
+  const skipPrefixes = [
+    'FASE', 'FASE2', 'FASE 2', 'BASIC', 'STAGE', 'LEVEL', 'ITEM',
     'TRAINER', 'ENERGY', 'HP', 'PS', 'GX', 'EX', 'BASICO', 'BÁSICO',
     'HOLOGRAPHIC', 'POKEMON', 'POKÉMON', 'SUPPORTER', 'TOOL',
+    'V ', 'VMAX', 'VSTAR', 'TAG', 'TEAM',
   ];
 
   for (const line of lines.slice(0, 8)) {
-    const cleaned = line.replace(/[^a-zA-ZÀ-ÿ\s\-]/g, '').trim();
+    let cleaned = line.replace(/[^a-zA-ZÀ-ÿ\s\-]/g, '').trim();
+
+    // Remove skip prefixes from the start of the line
+    for (const prefix of skipPrefixes) {
+      const regex = new RegExp(`^${prefix}\\s*`, 'i');
+      cleaned = cleaned.replace(regex, '').trim();
+    }
+
     if (
       cleaned.length >= 3 &&
       cleaned.length <= 25 &&
-      !skipWords.some(s => cleaned.toUpperCase() === s) &&
-      !cleaned.match(/^\d+$/)
+      !skipPrefixes.some(s => cleaned.toUpperCase().trim() === s.trim()) &&
+      !cleaned.match(/^\d+$/) &&
+      /[a-zA-Z]/.test(cleaned)
     ) {
       return cleaned;
     }
