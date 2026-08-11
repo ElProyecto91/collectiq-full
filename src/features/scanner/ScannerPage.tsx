@@ -10,11 +10,9 @@ import {
   Search,
   CheckCircle2,
   AlertCircle,
-  Type,
   Plus,
-  Cpu,
+  Loader2,
 } from 'lucide-react';
-import { Button, Card } from '@/components/ui';
 import { RoutePaths } from '@/config';
 import { cx } from '@/utils';
 
@@ -28,6 +26,7 @@ interface PokemonCard {
   rarity?: string;
   images: { small: string; large: string };
   set: { name: string; series: string };
+  cardmarket?: { prices?: { averageSellPrice?: number } };
 }
 
 type ScanPhase = 'idle' | 'preview' | 'analyzing' | 'results' | 'error';
@@ -35,64 +34,36 @@ type ScanPhase = 'idle' | 'preview' | 'analyzing' | 'results' | 'error';
 /* ------------------------------------------------------------------ */
 /* Helpers                                                              */
 /* ------------------------------------------------------------------ */
-function toBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      resolve(result.split(',')[1]);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
+async function extractTextFromImage(imageElement: HTMLImageElement): Promise<string> {
+  const Tesseract = (window as any).Tesseract;
+  if (!Tesseract) throw new Error('Tesseract not loaded');
 
-async function identifyCardWithAI(base64Image: string): Promise<string> {
-  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error('Missing Anthropic API key');
-
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 100,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'image',
-              source: { type: 'base64', media_type: 'image/jpeg', data: base64Image },
-            },
-            {
-              type: 'text',
-              text: 'This is a Pokemon trading card. Return ONLY the exact Pokemon name printed on the card, nothing else. No punctuation, no explanation.',
-            },
-          ],
-        },
-      ],
-    }),
+  const result = await Tesseract.recognize(imageElement, 'eng', {
+    logger: () => {},
   });
 
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error((err as any)?.error?.message ?? `API error ${response.status}`);
+  const text: string = result.data.text;
+  const lines = text.split('\n').map((l: string) => l.trim()).filter(Boolean);
+
+  // Pokemon card name is usually in the first few lines, capitalized
+  for (const line of lines.slice(0, 5)) {
+    const cleaned = line.replace(/[^a-zA-Z\s\-]/g, '').trim();
+    if (cleaned.length >= 3 && cleaned.length <= 30 && /^[A-Z]/.test(cleaned)) {
+      // Skip common non-name words
+      const skip = ['FASE', 'FASE2', 'BASIC', 'STAGE', 'LEVEL', 'ITEM', 'TRAINER', 'ENERGY', 'HP'];
+      if (!skip.some(s => cleaned.toUpperCase().includes(s))) {
+        return cleaned;
+      }
+    }
   }
 
-  const data = await response.json();
-  const text = data.content?.[0]?.text?.trim() ?? '';
-  if (!text) throw new Error('No card name returned');
-  return text;
+  // Fallback: return longest capitalized word
+  const words = text.match(/[A-Z][a-z]{2,}/g) ?? [];
+  return words.sort((a, b) => b.length - a.length)[0] ?? '';
 }
 
 async function searchPokemonTCG(name: string): Promise<PokemonCard[]> {
-  const url = `https://api.pokemontcg.io/v2/cards?q=name:"${encodeURIComponent(name)}"&pageSize=20`;
+  const url = `https://api.pokemontcg.io/v2/cards?q=name:"${encodeURIComponent(name)}"&pageSize=20&orderBy=-set.releaseDate`;
   const res = await fetch(url);
   if (!res.ok) throw new Error('PokéTCG API error');
   const json = await res.json();
@@ -108,78 +79,105 @@ function saveToCollection(card: PokemonCard) {
   }
 }
 
+function getRarityColor(rarity?: string): string {
+  if (!rarity) return 'text-gray-400';
+  const r = rarity.toLowerCase();
+  if (r.includes('secret') || r.includes('hyper')) return 'text-yellow-300';
+  if (r.includes('ultra') || r.includes('rainbow')) return 'text-purple-400';
+  if (r.includes('rare')) return 'text-blue-400';
+  return 'text-gray-400';
+}
+
 /* ------------------------------------------------------------------ */
 /* Component                                                            */
 /* ------------------------------------------------------------------ */
 export default function ScannerPage() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
 
   const [phase, setPhase] = useState<ScanPhase>('idle');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [base64Image, setBase64Image] = useState<string | null>(null);
   const [detectedName, setDetectedName] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState<PokemonCard[]>([]);
   const [errorMsg, setErrorMsg] = useState('');
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const [statusMsg, setStatusMsg] = useState('');
+  const [progress, setProgress] = useState(0);
 
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     const url = URL.createObjectURL(file);
     setPreviewUrl(url);
-
-    try {
-      const b64 = await toBase64(file);
-      setBase64Image(b64);
-      setPhase('preview');
-      setResults([]);
-      setDetectedName('');
-      setSearchQuery('');
-      setErrorMsg('');
-    } catch {
-      setErrorMsg('Error reading image');
-      setPhase('error');
-    }
-
+    setPhase('preview');
+    setResults([]);
+    setDetectedName('');
+    setSearchQuery('');
+    setErrorMsg('');
+    setStatusMsg('');
     e.target.value = '';
   }, []);
 
   const openCamera = () => fileInputRef.current?.click();
 
   const analyzeCard = useCallback(async () => {
-    if (!base64Image) return;
+    if (!imgRef.current) return;
     setPhase('analyzing');
-    setStatusMsg('Identificando carta con IA…');
+    setProgress(0);
+    setStatusMsg('Cargando motor de texto…');
 
     try {
-      const name = await identifyCardWithAI(base64Image);
+      // Load Tesseract dynamically if not loaded
+      if (!(window as any).Tesseract) {
+        await new Promise<void>((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+          script.onload = () => resolve();
+          script.onerror = () => reject(new Error('Failed to load Tesseract'));
+          document.head.appendChild(script);
+        });
+      }
+
+      setStatusMsg('Leyendo texto de la carta…');
+      setProgress(30);
+
+      const name = await extractTextFromImage(imgRef.current);
+
+      if (!name) {
+        setStatusMsg('No se detectó texto. Escribe el nombre manualmente.');
+        setPhase('preview');
+        return;
+      }
+
       setDetectedName(name);
       setSearchQuery(name);
+      setProgress(60);
       setStatusMsg(`Buscando "${name}" en PokéTCG…`);
 
       const cards = await searchPokemonTCG(name);
+      setProgress(100);
       setResults(cards);
       setPhase('results');
     } catch (err: any) {
-      setErrorMsg(err?.message ?? 'Error analyzing card');
+      setErrorMsg(err?.message ?? 'Error al analizar la carta');
       setPhase('error');
     }
-  }, [base64Image]);
+  }, []);
 
   const manualSearch = useCallback(async () => {
     if (!searchQuery.trim()) return;
     setPhase('analyzing');
+    setProgress(50);
     setStatusMsg(`Buscando "${searchQuery}"…`);
     try {
       const cards = await searchPokemonTCG(searchQuery.trim());
+      setProgress(100);
       setResults(cards);
       setPhase('results');
     } catch (err: any) {
-      setErrorMsg(err?.message ?? 'Search error');
+      setErrorMsg(err?.message ?? 'Error de búsqueda');
       setPhase('error');
     }
   }, [searchQuery]);
@@ -188,158 +186,219 @@ export default function ScannerPage() {
     saveToCollection(card);
     setAddedIds((prev) => new Set(prev).add(card.id));
     setStatusMsg(`✅ ${card.name} añadida a tu colección`);
-    setTimeout(() => setStatusMsg(''), 2500);
+    setTimeout(() => setStatusMsg(''), 3000);
   };
 
   const reset = () => {
     setPhase('idle');
     setPreviewUrl(null);
-    setBase64Image(null);
     setDetectedName('');
     setSearchQuery('');
     setResults([]);
     setErrorMsg('');
     setStatusMsg('');
+    setProgress(0);
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-950 text-white pb-24">
+    <div className="flex flex-col min-h-screen bg-[#0a0a0f] text-white pb-24">
 
-      {/* Header */}
-      <div className="flex items-center gap-3 px-4 pt-6 pb-2">
-        <button onClick={() => navigate(RoutePaths.Home)} className="p-2 rounded-lg hover:bg-gray-800">
-          <ArrowLeft className="w-5 h-5" />
-        </button>
-        <div>
-          <p className="text-xs text-blue-400 font-semibold uppercase tracking-widest">ESCÁNER</p>
-          <h1 className="text-xl font-bold">Escanea una carta</h1>
+      {/* Header estilo Pokécardex */}
+      <div className="relative px-4 pt-6 pb-4">
+        <div className="absolute inset-0 bg-gradient-to-b from-blue-950/40 to-transparent pointer-events-none" />
+        <div className="flex items-center gap-3 relative z-10">
+          <button
+            onClick={() => navigate(RoutePaths.Home)}
+            className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+          <div>
+            <p className="text-[10px] text-blue-400 font-bold uppercase tracking-[0.2em]">COLLECTIQ</p>
+            <h1 className="text-lg font-bold leading-tight">Escanear carta</h1>
+          </div>
         </div>
       </div>
 
-      <div className="flex-1 px-4 pt-4 space-y-4">
+      <div className="flex-1 px-4 space-y-4">
 
-        {/* Scanner frame */}
-        <div className="relative bg-gray-900 rounded-2xl overflow-hidden aspect-[3/4] flex items-center justify-center border border-gray-800">
+        {/* Scanner frame estilo Pokécardex */}
+        <div className="relative rounded-2xl overflow-hidden bg-[#111118] border border-white/10"
+          style={{ aspectRatio: '3/4' }}>
+
           {previewUrl ? (
-            <img src={previewUrl} alt="Card preview" className="w-full h-full object-contain" />
+            <img
+              ref={imgRef}
+              src={previewUrl}
+              alt="Card preview"
+              className="w-full h-full object-contain"
+              crossOrigin="anonymous"
+            />
           ) : (
-            <div className="flex flex-col items-center gap-3 text-gray-500">
-              <ScanLine className="w-12 h-12" />
-              <p className="text-sm">La vista de la cámara aparecerá aquí</p>
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
+              {/* Animated scan line */}
+              <div className="relative w-32 h-32">
+                <div className="absolute inset-0 rounded-2xl border-2 border-blue-500/30" />
+                <div className="absolute inset-2 rounded-xl border border-blue-400/20" />
+                <ScanLine className="absolute inset-0 m-auto w-10 h-10 text-blue-400/60" />
+                <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-blue-400 to-transparent animate-pulse" />
+              </div>
+              <p className="text-sm text-gray-500 text-center px-8">
+                Apunta la cámara a una carta Pokémon
+              </p>
             </div>
           )}
 
-          {(['tl','tr','bl','br'] as const).map((corner) => (
-            <span
-              key={corner}
-              className={cx(
-                'absolute w-6 h-6 border-blue-400',
-                corner === 'tl' && 'top-3 left-3 border-t-2 border-l-2 rounded-tl-lg',
-                corner === 'tr' && 'top-3 right-3 border-t-2 border-r-2 rounded-tr-lg',
-                corner === 'bl' && 'bottom-3 left-3 border-b-2 border-l-2 rounded-bl-lg',
-                corner === 'br' && 'bottom-3 right-3 border-b-2 border-r-2 rounded-br-lg',
-              )}
-            />
+          {/* Corner guides */}
+          {(['tl','tr','bl','br'] as const).map((c) => (
+            <span key={c} className={cx(
+              'absolute w-5 h-5 border-blue-400',
+              c === 'tl' && 'top-3 left-3 border-t-2 border-l-2 rounded-tl-lg',
+              c === 'tr' && 'top-3 right-3 border-t-2 border-r-2 rounded-tr-lg',
+              c === 'bl' && 'bottom-3 left-3 border-b-2 border-l-2 rounded-bl-lg',
+              c === 'br' && 'bottom-3 right-3 border-b-2 border-r-2 rounded-br-lg',
+            )} />
           ))}
 
+          {/* Analyzing overlay */}
           {phase === 'analyzing' && (
-            <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center gap-3">
-              <Cpu className="w-10 h-10 text-blue-400 animate-pulse" />
-              <p className="text-sm text-blue-200 text-center px-4">{statusMsg}</p>
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center gap-4 p-6">
+              <div className="relative">
+                <div className="w-16 h-16 rounded-full border-2 border-blue-500/30 flex items-center justify-center">
+                  <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
+                </div>
+              </div>
+              <p className="text-sm text-blue-200 text-center">{statusMsg}</p>
+              {/* Progress bar */}
+              <div className="w-full bg-white/10 rounded-full h-1.5">
+                <div
+                  className="bg-gradient-to-r from-blue-500 to-blue-400 h-1.5 rounded-full transition-all duration-500"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
             </div>
           )}
         </div>
 
-        {phase === 'idle' && (
-          <p className="text-center text-xs text-gray-500">
-            Para mejores resultados, fotografía una sola carta con buena luz y sin reflejos.
-          </p>
-        )}
-
+        {/* Status toast */}
         {statusMsg && phase !== 'analyzing' && (
-          <div className="bg-blue-900/50 border border-blue-700 rounded-xl px-4 py-3 text-sm text-blue-200 text-center">
+          <div className="bg-blue-500/10 border border-blue-500/30 rounded-2xl px-4 py-3 text-sm text-blue-300 text-center">
             {statusMsg}
           </div>
         )}
 
+        {/* Error */}
         {phase === 'error' && (
-          <div className="bg-red-900/30 border border-red-700 rounded-xl p-4 flex items-start gap-3">
+          <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4 flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
             <div className="flex-1">
-              <p className="text-sm text-red-200">{errorMsg}</p>
+              <p className="text-sm text-red-300">{errorMsg}</p>
               <button onClick={reset} className="mt-2 text-xs text-red-400 underline">Volver a intentar</button>
             </div>
           </div>
         )}
 
+        {/* Search box */}
         {(phase === 'preview' || phase === 'results') && (
           <div className="flex gap-2">
             <div className="flex-1 relative">
-              <Type className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && manualSearch()}
                 placeholder="Nombre de la carta…"
-                className="w-full bg-gray-800 border border-gray-700 rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                className="w-full bg-white/5 border border-white/10 rounded-xl pl-4 pr-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50 focus:bg-white/8"
               />
             </div>
             <button
               onClick={manualSearch}
-              className="bg-gray-800 border border-gray-700 rounded-xl px-4 flex items-center justify-center hover:bg-gray-700"
+              className="bg-blue-600 hover:bg-blue-500 rounded-xl px-4 flex items-center justify-center transition-colors"
             >
-              <Search className="w-4 h-4 text-gray-300" />
+              <Search className="w-4 h-4" />
             </button>
           </div>
         )}
 
+        {/* Detected name badge */}
         {detectedName && phase === 'results' && (
-          <div className="flex items-center gap-2 bg-blue-900/30 border border-blue-800 rounded-xl px-3 py-2">
-            <Sparkles className="w-4 h-4 text-blue-400" />
-            <span className="text-xs text-blue-300">IA detectó: <strong>{detectedName}</strong></span>
+          <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 rounded-xl px-3 py-2">
+            <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+            <span className="text-xs text-blue-300">Detectado: <strong className="text-white">{detectedName}</strong></span>
           </div>
         )}
 
+        {/* Results grid estilo Pokécardex */}
         {phase === 'results' && (
           results.length === 0 ? (
-            <div className="text-center py-8 text-gray-500 text-sm">
+            <div className="text-center py-12 text-gray-600 text-sm">
+              <ScanLine className="w-10 h-10 mx-auto mb-3 opacity-30" />
               No se encontraron cartas. Prueba editando el nombre.
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-3">
-              {results.map((card) => (
-                <div key={card.id} className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-                  <img src={card.images.small} alt={card.name} className="w-full aspect-[2/3] object-cover" />
-                  <div className="p-2 space-y-1">
-                    <p className="text-xs font-semibold truncate">{card.name}</p>
-                    <p className="text-xs text-gray-400 truncate">{card.set.name}</p>
-                    {card.rarity && <p className="text-xs text-yellow-500 truncate">{card.rarity}</p>}
-                    <button
-                      onClick={() => addCard(card)}
-                      disabled={addedIds.has(card.id)}
-                      className={cx(
-                        'w-full mt-1 rounded-lg py-1.5 text-xs font-medium flex items-center justify-center gap-1 transition-colors',
-                        addedIds.has(card.id)
-                          ? 'bg-green-800 text-green-300 cursor-default'
-                          : 'bg-blue-600 hover:bg-blue-500 text-white',
+            <>
+              <p className="text-xs text-gray-500">{results.length} resultado{results.length !== 1 ? 's' : ''}</p>
+              <div className="grid grid-cols-2 gap-3">
+                {results.map((card) => (
+                  <div
+                    key={card.id}
+                    className="bg-[#111118] border border-white/8 rounded-2xl overflow-hidden hover:border-blue-500/30 transition-colors"
+                  >
+                    <div className="relative">
+                      <img
+                        src={card.images.small}
+                        alt={card.name}
+                        className="w-full aspect-[2/3] object-cover"
+                      />
+                      {addedIds.has(card.id) && (
+                        <div className="absolute inset-0 bg-green-500/20 flex items-center justify-center">
+                          <CheckCircle2 className="w-8 h-8 text-green-400" />
+                        </div>
                       )}
-                    >
-                      {addedIds.has(card.id) ? (
-                        <><CheckCircle2 className="w-3 h-3" /> Añadida</>
-                      ) : (
-                        <><Plus className="w-3 h-3" /> Añadir</>
+                    </div>
+                    <div className="p-2.5 space-y-1.5">
+                      <p className="text-xs font-bold truncate">{card.name}</p>
+                      <p className="text-[10px] text-gray-500 truncate">{card.set.name}</p>
+                      {card.rarity && (
+                        <p className={cx('text-[10px] truncate font-medium', getRarityColor(card.rarity))}>
+                          {card.rarity}
+                        </p>
                       )}
-                    </button>
+                      {card.cardmarket?.prices?.averageSellPrice && (
+                        <p className="text-[10px] text-green-400 font-medium">
+                          €{card.cardmarket.prices.averageSellPrice.toFixed(2)}
+                        </p>
+                      )}
+                      <button
+                        onClick={() => addCard(card)}
+                        disabled={addedIds.has(card.id)}
+                        className={cx(
+                          'w-full mt-1 rounded-xl py-2 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all',
+                          addedIds.has(card.id)
+                            ? 'bg-green-500/20 text-green-400 cursor-default'
+                            : 'bg-blue-600 hover:bg-blue-500 text-white active:scale-95',
+                        )}
+                      >
+                        {addedIds.has(card.id) ? (
+                          <><CheckCircle2 className="w-3 h-3" /> Añadida</>
+                        ) : (
+                          <><Plus className="w-3 h-3" /> Añadir</>
+                        )}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </>
           )
         )}
 
+        {/* Action buttons */}
         <div className="space-y-3 pt-2">
           {phase === 'idle' && (
-            <button onClick={openCamera} className="w-full bg-blue-600 hover:bg-blue-500 text-white rounded-2xl py-4 font-medium flex items-center justify-center gap-2">
+            <button
+              onClick={openCamera}
+              className="w-full bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-2xl py-4 font-semibold flex items-center justify-center gap-2 shadow-lg shadow-blue-900/40 active:scale-95 transition-transform"
+            >
               <Camera className="w-5 h-5" />
               Escanear carta
             </button>
@@ -347,35 +406,58 @@ export default function ScannerPage() {
 
           {phase === 'preview' && (
             <div className="flex gap-3">
-              <button onClick={analyzeCard} className="flex-1 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl py-3 font-medium flex items-center justify-center gap-2">
+              <button
+                onClick={analyzeCard}
+                className="flex-1 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-2xl py-3.5 font-semibold flex items-center justify-center gap-2 shadow-lg shadow-blue-900/40 active:scale-95 transition-transform"
+              >
                 <Sparkles className="w-4 h-4" />
-                Analizar con IA
+                Identificar carta
               </button>
-              <button onClick={openCamera} className="bg-gray-800 border border-gray-700 rounded-2xl px-4 flex items-center justify-center">
-                <RefreshCw className="w-4 h-4" />
+              <button
+                onClick={openCamera}
+                className="bg-white/8 border border-white/10 rounded-2xl px-4 flex items-center justify-center hover:bg-white/12 transition-colors"
+              >
+                <RefreshCw className="w-4 h-4 text-gray-400" />
               </button>
             </div>
           )}
 
           {phase === 'results' && (
             <div className="flex gap-3">
-              <button onClick={openCamera} className="flex-1 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl py-3 font-medium flex items-center justify-center gap-2">
+              <button
+                onClick={openCamera}
+                className="flex-1 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-2xl py-3.5 font-semibold flex items-center justify-center gap-2 active:scale-95 transition-transform"
+              >
                 <Camera className="w-4 h-4" />
                 Escanear otra
               </button>
-              <button onClick={reset} className="bg-gray-800 border border-gray-700 rounded-2xl px-4 flex items-center justify-center">
-                <X className="w-4 h-4" />
+              <button
+                onClick={reset}
+                className="bg-white/8 border border-white/10 rounded-2xl px-4 flex items-center justify-center hover:bg-white/12 transition-colors"
+              >
+                <X className="w-4 h-4 text-gray-400" />
               </button>
             </div>
           )}
 
           {phase === 'error' && (
-            <button onClick={openCamera} className="w-full bg-blue-600 hover:bg-blue-500 text-white rounded-2xl py-3 font-medium flex items-center justify-center gap-2">
+            <button
+              onClick={openCamera}
+              className="w-full bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-2xl py-3.5 font-semibold flex items-center justify-center gap-2 active:scale-95 transition-transform"
+            >
               <Camera className="w-4 h-4" />
               Intentar de nuevo
             </button>
           )}
         </div>
+
+        {/* Info tip */}
+        {phase === 'idle' && (
+          <p className="text-center text-[11px] text-gray-600 pb-2">
+            Fotografía la carta con buena luz · Sin reflejos · Una sola carta
+          </p>
+        )}
+
       </div>
 
       <input
@@ -388,4 +470,4 @@ export default function ScannerPage() {
       />
     </div>
   );
-      }
+}
