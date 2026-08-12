@@ -103,6 +103,15 @@ export function ExplorerPage() {
   });
   const [statusMsg, setStatusMsg] = useState('');
 
+  // Refresh addedIds when component mounts and after adding
+  const refreshAddedIds = useCallback(() => {
+    setAddedIds(new Set(getCollection().map(e => e.card.id)));
+  }, []);
+
+  useEffect(() => {
+    refreshAddedIds();
+  }, []);
+
   const searchTimeout = useRef<ReturnType<typeof setTimeout>>();
   const sentinelRef = useRef<HTMLDivElement>(null);
 
@@ -156,7 +165,7 @@ export function ExplorerPage() {
 
   const handleAdd = (card: PokemonCard) => {
     addToCollection(card);
-    setAddedIds(prev => new Set(prev).add(card.id));
+    refreshAddedIds();
     setStatusMsg(`✅ ${card.name} añadida a tu colección`);
     setTimeout(() => setStatusMsg(''), 2500);
   };
@@ -278,7 +287,17 @@ export function ExplorerPage() {
                     <p className="text-[10px] text-gray-500 truncate">{card.set.name}</p>
                     {card.rarity && (
                       <p className={cx('text-[10px] truncate font-medium', getRarityColor(card.rarity))}>
-                        {card.rarity}
+                        {card.rarity
+                          .replace('Common', 'Común')
+                          .replace('Uncommon', 'Infrecuente')
+                          .replace('Rare', 'Rara')
+                          .replace('Ultra Rare', 'Ultra Rara')
+                          .replace('Secret Rare', 'Secreta')
+                          .replace('Hyper Rare', 'Hiper Rara')
+                          .replace('Double Rare', 'Doble Rara')
+                          .replace('Illustration Rare', 'Ilustración Rara')
+                          .replace('Special Illustration Rare', 'Ilustración Especial')
+                        }
                       </p>
                     )}
                     {card.cardmarket?.prices?.averageSellPrice && (
