@@ -105,11 +105,32 @@ async function searchPokemonTCG(name: string, retries = 3): Promise<PokemonCard[
   return [];
 }
 
+interface CollectionEntry {
+  card: PokemonCard;
+  quantity: number;
+  favorite: boolean;
+  addedAt: number;
+}
+
 function saveToCollection(card: PokemonCard) {
   const raw = localStorage.getItem('pokemon-collection');
-  const collection: PokemonCard[] = raw ? JSON.parse(raw) : [];
-  if (!collection.find((c) => c.id === card.id)) {
-    collection.push(card);
+  let collection: CollectionEntry[] = [];
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        if (parsed.length > 0 && !('card' in parsed[0])) {
+          collection = parsed.map((c: PokemonCard) => ({
+            card: c, quantity: 1, favorite: false, addedAt: Date.now(),
+          }));
+        } else {
+          collection = parsed;
+        }
+      }
+    } catch { collection = []; }
+  }
+  if (!collection.find((e) => e.card.id === card.id)) {
+    collection.push({ card, quantity: 1, favorite: false, addedAt: Date.now() });
     localStorage.setItem('pokemon-collection', JSON.stringify(collection));
   }
 }
