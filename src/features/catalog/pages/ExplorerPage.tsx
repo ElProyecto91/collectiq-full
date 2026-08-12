@@ -9,6 +9,7 @@ import {
   Search,
   TrendingUp,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { RoutePaths } from '@/config';
 import { cx } from '@/utils';
 
@@ -98,6 +99,7 @@ export function ExplorerPage() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState('');
+  const navigate = useNavigate();
   const [addedIds, setAddedIds] = useState<Set<string>>(() => {
     return new Set(getCollection().map(e => e.card.id));
   });
@@ -276,12 +278,17 @@ export function ExplorerPage() {
             <div className="grid grid-cols-2 gap-3">
               {cards.map(card => (
                 <div key={card.id} className="bg-[#111118] border border-white/8 rounded-2xl overflow-hidden">
-                  <img
-                    src={card.images.small}
-                    alt={card.name}
-                    className="w-full aspect-[2/3] object-cover"
-                    loading="lazy"
-                  />
+                  <div
+                    onClick={() => navigate(`${RoutePaths.Explorer}/card/${card.id}`)}
+                    className="cursor-pointer"
+                  >
+                    <img
+                      src={card.images.small}
+                      alt={card.name}
+                      className="w-full aspect-[2/3] object-cover"
+                      loading="lazy"
+                    />
+                  </div>
                   <div className="p-2.5 space-y-1.5">
                     <p className="text-xs font-bold truncate">{card.name}</p>
                     <p className="text-[10px] text-gray-500 truncate">{card.set.name}</p>
