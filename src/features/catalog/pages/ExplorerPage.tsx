@@ -9,7 +9,6 @@ import {
   Search,
   TrendingUp,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import { RoutePaths } from '@/config';
 import { cx } from '@/utils';
 
