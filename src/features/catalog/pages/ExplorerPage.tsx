@@ -1,144 +1,331 @@
-import { useMemo, useState } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Compass, Loader2, SearchX } from 'lucide-react';
-
-import { Badge, Button, EmptyState, ErrorState, SearchInput } from '@/components/ui';
-import { PageHeader } from '@/layouts';
-import { useInfiniteScroll } from '@/hooks';
+import {
+  Compass,
+  Loader2,
+  SearchX,
+  Plus,
+  CheckCircle2,
+  Search,
+  TrendingUp,
+} from 'lucide-react';
 import { RoutePaths } from '@/config';
 import { cx } from '@/utils';
-import { useI18n } from '@/i18n';
 
-import { useCatalogSearch } from '../hooks';
-import { CatalogCardItem } from '../components';
-import type { CatalogCard } from '../types/catalog';
+interface PokemonCard {
+  id: string;
+  name: string;
+  number: string;
+  rarity?: string;
+  images: { small: string; large: string };
+  set: { name: string; series: string; releaseDate?: string };
+  cardmarket?: { prices?: { averageSellPrice?: number } };
+  types?: string[];
+  supertype?: string;
+}
 
-/**
- * Explorer — the Pokémon catalog browser.
- *
- * A functional search bar queries the Pokémon TCG API by card name, card
- * number, and set name. Results render as premium card tiles in a responsive
- * grid with infinite scrolling. Loading skeletons, error states, and an empty
- * search state are all handled. Tapping a card opens the Card Details page.
- */
+interface CollectionEntry {
+  card: PokemonCard;
+  quantity: number;
+  favorite: boolean;
+  addedAt: number;
+}
+
+const STORAGE_KEY = 'pokemon-collection';
+
+function getCollection(): CollectionEntry[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const data = JSON.parse(raw);
+    if (!Array.isArray(data)) return [];
+    if (data.length === 0) return [];
+    if ('card' in data[0]) return data;
+    return data.map((card: PokemonCard) => ({
+      card, quantity: 1, favorite: false, addedAt: Date.now(),
+    }));
+  } catch { return []; }
+}
+
+function addToCollection(card: PokemonCard) {
+  const collection = getCollection();
+  if (!collection.find(e => e.card.id === card.id)) {
+    collection.push({ card, quantity: 1, favorite: false, addedAt: Date.now() });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(collection));
+  }
+}
+
+function getRarityColor(rarity?: string): string {
+  if (!rarity) return 'text-gray-500';
+  const r = rarity.toLowerCase();
+  if (r.includes('secret') || r.includes('hyper')) return 'text-yellow-400';
+  if (r.includes('ultra') || r.includes('rainbow')) return 'text-purple-400';
+  if (r.includes('rare')) return 'text-blue-400';
+  return 'text-gray-500';
+}
+
+async function searchCards(query: string, page: number): Promise<{ cards: PokemonCard[]; total: number }> {
+  const q = query.trim()
+    ? `name:"*${query.trim()}*"`
+    : 'supertype:Pokémon';
+
+  const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&page=${page}&pageSize=20&orderBy=-set.releaseDate`;
+
+  for (let i = 0; i < 3; i++) {
+    try {
+      const res = await fetch(url);
+      if (res.status === 429) {
+        await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+        continue;
+      }
+      if (!res.ok) throw new Error(`Error ${res.status}`);
+      const json = await res.json();
+      return { cards: json.data ?? [], total: json.totalCount ?? 0 };
+    } catch (err) {
+      if (i === 2) throw err;
+      await new Promise(r => setTimeout(r, 800));
+    }
+  }
+  return { cards: [], total: 0 };
+}
+
 export function ExplorerPage() {
   const [query, setQuery] = useState('');
-  const navigate = useNavigate();
-  const { t, tr } = useI18n();
+  const [cards, setCards] = useState<PokemonCard[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [error, setError] = useState('');
+  const [addedIds, setAddedIds] = useState<Set<string>>(() => {
+    return new Set(getCollection().map(e => e.card.id));
+  });
+  const [statusMsg, setStatusMsg] = useState('');
 
-  const { data, isLoading, isError, error, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } =
-    useCatalogSearch(query);
+  const searchTimeout = useRef<ReturnType<typeof setTimeout>>();
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
-  const sentinelRef = useInfiniteScroll(
-    () => void fetchNextPage(),
-    Boolean(hasNextPage && !isFetchingNextPage)
-  );
+  const doSearch = useCallback(async (q: string, p: number, append: boolean) => {
+    if (append) setIsLoadingMore(true);
+    else setIsLoading(true);
+    setError('');
 
-  const cards = useMemo<CatalogCard[]>(() => {
-    if (!data?.pages) return [];
-    return data.pages.flatMap((page) => page.cards);
-  }, [data]);
+    try {
+      const result = await searchCards(q, p);
+      setTotal(result.total);
+      setCards(prev => append ? [...prev, ...result.cards] : result.cards);
+      setHasMore(result.cards.length === 20);
+      setPage(p);
+    } catch (err: any) {
+      setError(err?.message ?? 'Error al buscar cartas');
+    } finally {
+      setIsLoading(false);
+      setIsLoadingMore(false);
+    }
+  }, []);
 
-  const totalCount = data?.pages?.[0]?.totalCount ?? 0;
-  const hasQuery = query.trim().length > 0;
-  const hasResults = cards.length > 0;
+  // Initial load
+  useEffect(() => {
+    doSearch('', 1, false);
+  }, []);
 
-  const openCard = (card: CatalogCard) => {
-    navigate(`${RoutePaths.Explorer}/card/${card.id}`);
+  // Search with debounce
+  useEffect(() => {
+    clearTimeout(searchTimeout.current);
+    searchTimeout.current = setTimeout(() => {
+      doSearch(query, 1, false);
+    }, 400);
+    return () => clearTimeout(searchTimeout.current);
+  }, [query]);
+
+  // Infinite scroll
+  useEffect(() => {
+    if (!sentinelRef.current || !hasMore) return;
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries[0].isIntersecting && !isLoadingMore) {
+          doSearch(query, page + 1, true);
+        }
+      },
+      { threshold: 0.1 }
+    );
+    observer.observe(sentinelRef.current);
+    return () => observer.disconnect();
+  }, [hasMore, isLoadingMore, page, query]);
+
+  const handleAdd = (card: PokemonCard) => {
+    addToCollection(card);
+    setAddedIds(prev => new Set(prev).add(card.id));
+    setStatusMsg(`✅ ${card.name} añadida a tu colección`);
+    setTimeout(() => setStatusMsg(''), 2500);
   };
 
   return (
-    <div className="space-y-4 pt-3 animate-fade-in">
-      <PageHeader
-        title={t.explorer.title}
-        subtitle={t.explorer.subtitle}
-      />
+    <div className="flex flex-col min-h-screen bg-[#0a0a0f] text-white pb-24">
 
-      <SearchInput
-        value={query}
-        onChange={setQuery}
-        placeholder={t.explorer.searchPlaceholder}
-        ariaLabel={t.explorer.searchAria}
-      />
+      {/* Header */}
+      <div className="px-4 pt-6 pb-4">
+        <p className="text-[10px] text-blue-400 font-bold uppercase tracking-[0.2em]">COLLECTIQ</p>
+        <h1 className="text-2xl font-bold">Explorador</h1>
+        <p className="text-sm text-gray-500">Descubre y añade cartas a tu colección</p>
+      </div>
 
-      {hasResults && (
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-ink-muted">
-            {hasQuery ? tr('explorer.resultsFor', { query: query.trim() }) : t.explorer.latestCards}
-            {totalCount > 0 && ` · ${tr('explorer.matches', { count: totalCount.toLocaleString() })}`}
+      {/* Search */}
+      <div className="px-4 pb-4">
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+          <input
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Buscar carta por nombre…"
+            className="w-full bg-white/5 border border-white/10 rounded-2xl pl-11 pr-4 py-3.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50"
+          />
+          {isLoading && (
+            <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-400 animate-spin" />
+          )}
+        </div>
+      </div>
+
+      {/* Status toast */}
+      {statusMsg && (
+        <div className="mx-4 mb-3 bg-blue-500/10 border border-blue-500/30 rounded-2xl px-4 py-3 text-sm text-blue-300 text-center">
+          {statusMsg}
+        </div>
+      )}
+
+      {/* Results count */}
+      {!isLoading && cards.length > 0 && (
+        <div className="px-4 pb-2 flex items-center gap-2">
+          <TrendingUp className="w-3.5 h-3.5 text-gray-500" />
+          <span className="text-xs text-gray-500">
+            {query.trim()
+              ? `${total.toLocaleString()} resultados para "${query.trim()}"`
+              : 'Cartas más recientes'
+            }
           </span>
         </div>
       )}
 
-      {isLoading ? (
-        <ExplorerGridSkeleton />
-      ) : isError ? (
-        <ErrorState error={error} onRetry={() => void refetch()} title={t.explorer.searchFailed} />
-      ) : !hasResults ? (
-        hasQuery ? (
-          <EmptyState
-            icon={<SearchX size={28} strokeWidth={1.8} />}
-            title={t.explorer.noCardsFound}
-            description={tr('explorer.noCardsFoundDesc', { query: query.trim() })}
-          />
-        ) : (
-          <EmptyState
-            icon={<Compass size={28} strokeWidth={1.8} />}
-            title={t.explorer.startSearching}
-            description={t.explorer.startSearchingDesc}
-          />
-        )
-      ) : (
-        <>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {cards.map((card) => (
-              <CatalogCardItem key={card.id} card={card} onOpen={openCard} />
+      <div className="flex-1 px-4">
+
+        {/* Loading skeleton */}
+        {isLoading && (
+          <div className="grid grid-cols-2 gap-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="bg-[#111118] border border-white/8 rounded-2xl overflow-hidden">
+                <div className="aspect-[2/3] bg-white/5 animate-pulse" />
+                <div className="p-2.5 space-y-2">
+                  <div className="h-3 bg-white/5 rounded animate-pulse w-3/4" />
+                  <div className="h-2.5 bg-white/5 rounded animate-pulse w-1/2" />
+                  <div className="h-7 bg-white/5 rounded-xl animate-pulse mt-2" />
+                </div>
+              </div>
             ))}
           </div>
+        )}
 
-          <div ref={sentinelRef} className="h-px w-full" aria-hidden="true" />
-          {isFetchingNextPage && <LoadingMoreRow />}
-          {hasNextPage && !isFetchingNextPage && (
-            <Button
-              variant="ghost"
-              size="sm"
-              fullWidth
-              onClick={() => void fetchNextPage()}
-              leftIcon={<Loader2 size={15} className="animate-spin" />}
-              className={cx('text-ink-soft')}
+        {/* Error */}
+        {error && !isLoading && (
+          <div className="text-center py-12">
+            <p className="text-red-400 text-sm">{error}</p>
+            <button
+              onClick={() => doSearch(query, 1, false)}
+              className="mt-3 text-xs text-blue-400 underline"
             >
-              {t.explorer.loadMore}
-            </Button>
-          )}
-          {!hasNextPage && hasResults && (
-            <p className="pb-2 text-center text-xs text-ink-faint">{t.explorer.endOfResults}</p>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
+              Reintentar
+            </button>
+          </div>
+        )}
 
-function ExplorerGridSkeleton() {
-  return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-      {Array.from({ length: 6 }).map((_, i) => (
-        <div key={i} className="rounded-2xl border border-line-soft bg-surface-2 p-3">
-          <div className="mb-3 aspect-[3/4] w-full animate-shimmer rounded-xl" />
-          <div className="mb-2 h-3.5 w-3/4 animate-shimmer rounded" />
-          <div className="h-3 w-1/2 animate-shimmer rounded" />
-        </div>
-      ))}
-    </div>
-  );
-}
+        {/* Empty state */}
+        {!isLoading && !error && cards.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center">
+              {query.trim()
+                ? <SearchX size={28} className="text-gray-600" />
+                : <Compass size={28} className="text-gray-600" />
+              }
+            </div>
+            <div>
+              <p className="text-white font-semibold">
+                {query.trim() ? 'No se encontraron cartas' : 'Empieza a explorar'}
+              </p>
+              <p className="text-sm text-gray-500 mt-1">
+                {query.trim()
+                  ? `No hay resultados para "${query.trim()}"`
+                  : 'Escribe el nombre de una carta para buscarla'
+                }
+              </p>
+            </div>
+          </div>
+        )}
 
-function LoadingMoreRow() {
-  const { t } = useI18n();
-  return (
-    <div className="flex items-center justify-center gap-2 py-4 text-sm text-ink-muted">
-      <Loader2 size={16} className="animate-spin" />
-      {t.explorer.loadingMore}
+        {/* Cards grid */}
+        {!isLoading && !error && cards.length > 0 && (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              {cards.map(card => (
+                <div key={card.id} className="bg-[#111118] border border-white/8 rounded-2xl overflow-hidden">
+                  <img
+                    src={card.images.small}
+                    alt={card.name}
+                    className="w-full aspect-[2/3] object-cover"
+                    loading="lazy"
+                  />
+                  <div className="p-2.5 space-y-1.5">
+                    <p className="text-xs font-bold truncate">{card.name}</p>
+                    <p className="text-[10px] text-gray-500 truncate">{card.set.name}</p>
+                    {card.rarity && (
+                      <p className={cx('text-[10px] truncate font-medium', getRarityColor(card.rarity))}>
+                        {card.rarity}
+                      </p>
+                    )}
+                    {card.cardmarket?.prices?.averageSellPrice && (
+                      <p className="text-[10px] text-green-400 font-medium">
+                        €{card.cardmarket.prices.averageSellPrice.toFixed(2)}
+                      </p>
+                    )}
+                    <button
+                      onClick={() => handleAdd(card)}
+                      disabled={addedIds.has(card.id)}
+                      className={cx(
+                        'w-full mt-1 rounded-xl py-2 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all',
+                        addedIds.has(card.id)
+                          ? 'bg-green-500/20 text-green-400 cursor-default'
+                          : 'bg-blue-600 hover:bg-blue-500 text-white active:scale-95',
+                      )}
+                    >
+                      {addedIds.has(card.id)
+                        ? <><CheckCircle2 className="w-3 h-3" /> Añadida</>
+                        : <><Plus className="w-3 h-3" /> Añadir</>
+                      }
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Infinite scroll sentinel */}
+            <div ref={sentinelRef} className="h-4 w-full" />
+
+            {/* Loading more */}
+            {isLoadingMore && (
+              <div className="flex items-center justify-center gap-2 py-4 text-sm text-gray-500">
+                <Loader2 size={16} className="animate-spin" />
+                Cargando más cartas…
+              </div>
+            )}
+
+            {/* End of results */}
+            {!hasMore && cards.length > 0 && (
+              <p className="text-center text-xs text-gray-600 py-4">
+                — Fin de los resultados —
+              </p>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
