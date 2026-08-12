@@ -1,301 +1,365 @@
 import { useNavigate, useParams } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 import {
-  ArrowLeft,
-  Brush,
-  Hash,
-  Layers,
-  Scale,
-  Shield,
-  Sparkles,
-  Type,
-  Zap,
+  ArrowLeft, Brush, Hash, Layers, Scale,
+  Shield, Sparkles, Type, Zap, Heart,
+  CheckCircle2, TrendingUp, ExternalLink,
 } from 'lucide-react';
-
-import { Badge, Button, Card, Skeleton } from '@/components/ui';
 import { RoutePaths } from '@/config';
 import { cx } from '@/utils';
-import { useState } from 'react';
-import { Check, Heart, Pencil } from 'lucide-react';
 
-import { CardImage } from '../components';
-import { AddToCollectionModal } from '@/features/collection/components';
-import { useCollectionItem } from '@/features/collection/hooks';
-import { useCatalogCard } from '../hooks';
-import { useI18n } from '@/i18n';
-import type { CatalogCard, CardLegalities } from '../types/catalog';
+interface CardSet {
+  id: string;
+  name: string;
+  series: string;
+  printedTotal?: number;
+  total?: number;
+  releaseDate?: string;
+  images?: { logo?: string; symbol?: string };
+}
 
-/**
- * Card Details — full card information surface.
- *
- * Reached by tapping a card in the Explorer. Displays the large card image and
- * every relevant attribute (name, HP, types, rarity, set, artist, number,
- * legalities, regulation mark). The "Add to My Collection" flow at the bottom
- * saves the card to the collector's Supabase-backed collection.
- */
+interface CardPrices {
+  averageSellPrice?: number;
+  lowPrice?: number;
+  trendPrice?: number;
+  avg1?: number;
+  avg7?: number;
+  avg30?: number;
+}
+
+interface PokemonCard {
+  id: string;
+  name: string;
+  supertype?: string;
+  subtypes?: string[];
+  hp?: string;
+  types?: string[];
+  number: string;
+  rarity?: string;
+  artist?: string;
+  flavorText?: string;
+  evolvesFrom?: string;
+  retreatCost?: string[];
+  regulationMark?: string;
+  images: { small: string; large: string };
+  set: CardSet;
+  legalities?: Record<string, string>;
+  cardmarket?: { url?: string; prices?: CardPrices };
+  tcgplayer?: { url?: string; prices?: Record<string, { market?: number; mid?: number }> };
+}
+
+interface CollectionEntry {
+  card: PokemonCard;
+  quantity: number;
+  favorite: boolean;
+  addedAt: number;
+}
+
+const STORAGE_KEY = 'pokemon-collection';
+
+function getCollection(): CollectionEntry[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const data = JSON.parse(raw);
+    if (!Array.isArray(data) || data.length === 0) return [];
+    if ('card' in data[0]) return data;
+    return data.map((card: PokemonCard) => ({ card, quantity: 1, favorite: false, addedAt: Date.now() }));
+  } catch { return []; }
+}
+
+function addToCollection(card: PokemonCard) {
+  const collection = getCollection();
+  if (!collection.find(e => e.card.id === card.id)) {
+    collection.push({ card, quantity: 1, favorite: false, addedAt: Date.now() });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(collection));
+  }
+}
+
+function isInCollection(cardId: string): boolean {
+  return getCollection().some(e => e.card.id === cardId);
+}
+
+async function fetchCard(cardId: string): Promise<PokemonCard> {
+  const res = await fetch(`https://api.pokemontcg.io/v2/cards/${cardId}`);
+  if (!res.ok) throw new Error(`Error ${res.status}`);
+  const json = await res.json();
+  return json.data as PokemonCard;
+}
+
+function getRarityColor(rarity?: string): string {
+  if (!rarity) return 'text-gray-400';
+  const r = rarity.toLowerCase();
+  if (r.includes('secret') || r.includes('hyper')) return 'text-yellow-300';
+  if (r.includes('ultra') || r.includes('rainbow')) return 'text-purple-400';
+  if (r.includes('rare')) return 'text-blue-400';
+  return 'text-gray-400';
+}
+
+function translateRarity(rarity?: string): string {
+  if (!rarity) return '—';
+  return rarity
+    .replace('Common', 'Común')
+    .replace('Uncommon', 'Infrecuente')
+    .replace('Double Rare', 'Doble Rara')
+    .replace('Ultra Rare', 'Ultra Rara')
+    .replace('Secret Rare', 'Secreta')
+    .replace('Hyper Rare', 'Hiper Rara')
+    .replace('Illustration Rare', 'Ilustración Rara')
+    .replace('Special Illustration Rare', 'Ilustración Especial')
+    .replace('Rare', 'Rara');
+}
+
+function translateLegality(status: string): string {
+  if (status === 'Legal') return 'Legal';
+  if (status === 'Banned') return 'Prohibida';
+  if (status === 'Restricted') return 'Restringida';
+  return status;
+}
+
 export function CardDetailsPage() {
   const { cardId } = useParams<{ cardId: string }>();
   const navigate = useNavigate();
-  const { data: card, isLoading, isError, error, refetch } = useCatalogCard(cardId);
-  const { t } = useI18n();
+  const [card, setCard] = useState<PokemonCard | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [inCollection, setInCollection] = useState(false);
+  const [justAdded, setJustAdded] = useState(false);
+
+  useEffect(() => {
+    if (!cardId) return;
+    setIsLoading(true);
+    fetchCard(cardId)
+      .then(c => {
+        setCard(c);
+        setInCollection(isInCollection(cardId));
+      })
+      .catch(err => setError(err.message))
+      .finally(() => setIsLoading(false));
+  }, [cardId]);
+
+  const handleAdd = () => {
+    if (!card) return;
+    addToCollection(card);
+    setInCollection(true);
+    setJustAdded(true);
+    setTimeout(() => setJustAdded(false), 2000);
+  };
 
   return (
-    <div className="space-y-5 pt-3 animate-fade-in">
-      <button
-        onClick={() => navigate(RoutePaths.Explorer)}
-        className="inline-flex items-center gap-1 text-sm text-ink-soft transition-colors hover:text-ink"
-      >
-        <ArrowLeft size={16} /> {t.cardDetails.backToExplorer}
-      </button>
+    <div className="flex flex-col min-h-screen bg-[#0a0a0f] text-white pb-24">
 
-      {isLoading ? (
-        <CardDetailsSkeleton />
-      ) : isError ? (
-        <div className="flex flex-col items-center py-16 text-center">
-          <p className="text-sm text-ink-soft">{t.cardDetails.couldNotLoad}</p>
-          <Button variant="outline" size="sm" className="mt-4" onClick={() => void refetch()}>
-            {t.cardDetails.tryAgain}
-          </Button>
-          {error && <p className="mt-2 text-xs text-ink-faint">{error.message}</p>}
-        </div>
-      ) : card ? (
-        <CardDetailsContent card={card} />
-      ) : null}
-    </div>
-  );
-}
-
-function CardDetailsContent({ card }: { card: CatalogCard }) {
-  const { t, tr } = useI18n();
-
-  return (
-    <>
-      {/* Large card image */}
-      <CardImageBlock card={card} />
-
-      {/* Title block */}
-      <div>
-        <h1 className="font-display text-2xl font-bold text-ink">{card.name}</h1>
-        <p className="mt-1 text-sm text-ink-soft">{card.set.name}</p>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          {card.supertype && <Badge variant="primary">{card.supertype}</Badge>}
-          {card.subtypes.map((sub) => (
-            <Badge key={sub}>{sub}</Badge>
-          ))}
-          {card.regulationMark && (
-            <Badge variant="gold">{tr('cardDetails.reg', { mark: card.regulationMark })}</Badge>
-          )}
+      {/* Header */}
+      <div className="px-4 pt-6 pb-4 flex items-center gap-3">
+        <button
+          onClick={() => navigate(RoutePaths.Explorer)}
+          className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center"
+        >
+          <ArrowLeft className="w-4 h-4" />
+        </button>
+        <div>
+          <p className="text-[10px] text-blue-400 font-bold uppercase tracking-[0.2em]">COLLECTIQ</p>
+          <h1 className="text-lg font-bold leading-tight">Detalle de carta</h1>
         </div>
       </div>
 
-      {/* Attribute grid */}
-      <div className="grid grid-cols-2 gap-3">
-        <AttributeTile icon={<Zap size={16} />} label={t.cardDetails.hp} value={card.hp ? String(card.hp) : '—'} />
-        <AttributeTile
-          icon={<Type size={16} />}
-          label={t.cardDetails.types}
-          value={card.types.length > 0 ? card.types.join(' · ') : '—'}
-        />
-        <AttributeTile
-          icon={<Sparkles size={16} />}
-          label={t.cardDetails.rarity}
-          value={card.rarity ?? '—'}
-          accent="gold"
-        />
-        <AttributeTile
-          icon={<Layers size={16} />}
-          label={t.cardDetails.set}
-          value={card.set.name}
-        />
-        <AttributeTile
-          icon={<Brush size={16} />}
-          label={t.cardDetails.artist}
-          value={card.artist ?? '—'}
-        />
-        <AttributeTile
-          icon={<Hash size={16} />}
-          label={t.cardDetails.number}
-          value={`${card.number} / ${card.set.printedTotal ?? '?'}`}
-        />
-        {card.retreatCost !== null && (
-          <AttributeTile
-            icon={<Shield size={16} />}
-            label={t.cardDetails.retreat}
-            value={String(card.retreatCost)}
-          />
-        )}
-        {card.evolvesFrom && (
-          <AttributeTile
-            icon={<Scale size={16} />}
-            label={t.cardDetails.evolvesFrom}
-            value={card.evolvesFrom}
-          />
-        )}
-      </div>
-
-      {/* Legalities */}
-      {card.legalities && <LegalitiesBlock legalities={card.legalities} />}
-
-      {/* Flavor text */}
-      {card.flavorText && (
-        <Card padding="md">
-          <p className="text-sm italic leading-relaxed text-ink-soft">{card.flavorText}</p>
-        </Card>
+      {isLoading && (
+        <div className="flex-1 px-4 space-y-4">
+          <div className="mx-auto w-48 aspect-[2/3] bg-white/5 rounded-2xl animate-pulse" />
+          <div className="h-7 bg-white/5 rounded animate-pulse w-2/3" />
+          <div className="grid grid-cols-2 gap-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="h-20 bg-white/5 rounded-xl animate-pulse" />
+            ))}
+          </div>
+        </div>
       )}
 
-      {/* Add to collection CTA */}
-      <AddToCollectionCta card={card} />
-    </>
-  );
-}
-
-function CardImageBlock({ card }: { card: CatalogCard }) {
-  const src = card.images.large ?? card.images.small;
-
-  return (
-    <div className="mx-auto flex max-w-[280px]">
-      <CardImage
-        src={src}
-        alt={card.name}
-        className="aspect-[3/4] w-full rounded-2xl border border-line"
-        fallbackIconSize={32}
-        lazy={false}
-      />
-    </div>
-  );
-}
-
-function AttributeTile({
-  icon,
-  label,
-  value,
-  accent = 'default',
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  accent?: 'default' | 'gold' | 'primary';
-}) {
-  return (
-    <div className="rounded-xl border border-line-soft bg-surface-2 p-3.5">
-      <div className="mb-1.5 flex items-center gap-1.5 text-ink-muted">
-        {icon}
-        <span className="text-[11px] font-medium uppercase tracking-wide">{label}</span>
-      </div>
-      <p
-        className={cx(
-          'truncate text-sm font-semibold',
-          accent === 'gold' && 'text-accent',
-          accent === 'primary' && 'text-primary-soft',
-          accent === 'default' && 'text-ink'
-        )}
-        title={value}
-      >
-        {value}
-      </p>
-    </div>
-  );
-}
-
-function LegalitiesBlock({ legalities }: { legalities: CardLegalities }) {
-  const { t } = useI18n();
-  const entries = Object.entries(legalities) as Array<[keyof CardLegalities, string]>;
-  if (entries.length === 0) return null;
-
-  return (
-    <Card padding="md">
-      <div className="mb-3 flex items-center gap-2">
-        <Scale size={16} className="text-primary-soft" />
-        <h3 className="text-sm font-semibold text-ink">{t.cardDetails.legalities}</h3>
-      </div>
-      <div className="space-y-2">
-        {entries.map(([format, status]) => {
-          const translated = status === 'Legal' ? t.cardDetails.legal : status === 'Banned' ? t.cardDetails.banned : t.cardDetails.restricted;
-          return (
-            <div key={format} className="flex items-center justify-between">
-              <span className="text-sm capitalize text-ink-soft">{format}</span>
-              <Badge variant={status === 'Legal' ? 'success' : status === 'Banned' ? 'error' : 'warning'}>
-                {translated}
-              </Badge>
-            </div>
-          );
-        })}
-      </div>
-    </Card>
-  );
-}
-
-function AddToCollectionCta({ card }: { card: CatalogCard }) {
-  const { t, tr } = useI18n();
-  const [modalOpen, setModalOpen] = useState(false);
-  const { data: existing, isLoading } = useCollectionItem(card.id);
-
-  if (existing) {
-    return (
-      <>
-        <div className="space-y-2">
-          <Card padding="md" className="flex items-center gap-3 border-success/30 bg-success/5">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-success/15 text-success">
-              <Check size={20} />
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-ink">{t.cardDetails.inYourCollection}</p>
-              <p className="text-xs text-ink-soft">{tr('cardDetails.quantity', { qty: existing.quantity })}</p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              leftIcon={<Pencil size={15} />}
-              onClick={() => setModalOpen(true)}
+      {error && (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-red-400 text-sm">{error}</p>
+            <button
+              onClick={() => cardId && fetchCard(cardId).then(setCard).catch(() => {})}
+              className="mt-3 text-xs text-blue-400 underline"
             >
-              {t.cardDetails.edit}
-            </Button>
-          </Card>
+              Reintentar
+            </button>
+          </div>
         </div>
-        <AddToCollectionModal
-          card={card}
-          open={modalOpen}
-          onClose={() => setModalOpen(false)}
-          existing={existing}
-        />
-      </>
-    );
-  }
+      )}
 
-  return (
-    <>
-      <div className="pb-2">
-        <Button
-          variant="primary"
-          size="lg"
-          fullWidth
-          leftIcon={<Heart size={20} />}
-          onClick={() => setModalOpen(true)}
-          disabled={isLoading}
-        >
-          {t.cardDetails.addToCollection}
-        </Button>
-      </div>
-      <AddToCollectionModal
-        card={card}
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-      />
-    </>
-  );
-}
+      {card && !isLoading && (
+        <div className="flex-1 px-4 space-y-5">
 
-function CardDetailsSkeleton() {
-  return (
-    <>
-      <Skeleton className="mx-auto aspect-[3/4] w-full max-w-[280px] rounded-2xl" />
-      <Skeleton className="h-7 w-2/3" />
-      <Skeleton className="h-4 w-1/3" />
-      <div className="grid grid-cols-2 gap-3">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <Skeleton key={i} className="h-20 w-full rounded-xl" />
-        ))}
-      </div>
-      <Skeleton className="h-14 w-full rounded-2xl" />
-    </>
+          {/* Card image */}
+          <div className="flex justify-center">
+            <img
+              src={card.images.large}
+              alt={card.name}
+              className="w-56 rounded-2xl shadow-2xl shadow-black/50"
+            />
+          </div>
+
+          {/* Title */}
+          <div>
+            <h2 className="text-2xl font-bold">{card.name}</h2>
+            <p className="text-sm text-gray-500 mt-1">{card.set.name}</p>
+            <div className="flex flex-wrap gap-2 mt-3">
+              {card.supertype && (
+                <span className="px-2.5 py-1 rounded-full bg-blue-500/20 text-blue-400 text-xs font-medium">
+                  {card.supertype}
+                </span>
+              )}
+              {card.subtypes?.map(sub => (
+                <span key={sub} className="px-2.5 py-1 rounded-full bg-white/10 text-gray-300 text-xs font-medium">
+                  {sub}
+                </span>
+              ))}
+              {card.regulationMark && (
+                <span className="px-2.5 py-1 rounded-full bg-yellow-500/20 text-yellow-400 text-xs font-medium">
+                  Reg {card.regulationMark}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Attributes grid */}
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { icon: <Zap size={15} />, label: 'HP', value: card.hp ?? '—' },
+              { icon: <Type size={15} />, label: 'Tipos', value: card.types?.join(' · ') || '—' },
+              { icon: <Sparkles size={15} />, label: 'Rareza', value: translateRarity(card.rarity), color: getRarityColor(card.rarity) },
+              { icon: <Layers size={15} />, label: 'Set', value: card.set.name },
+              { icon: <Brush size={15} />, label: 'Artista', value: card.artist ?? '—' },
+              { icon: <Hash size={15} />, label: 'Número', value: `${card.number} / ${card.set.printedTotal ?? '?'}` },
+              ...(card.retreatCost ? [{ icon: <Shield size={15} />, label: 'Retirada', value: String(card.retreatCost.length) }] : []),
+              ...(card.evolvesFrom ? [{ icon: <Scale size={15} />, label: 'Evoluciona de', value: card.evolvesFrom }] : []),
+            ].map(({ icon, label, value, color }) => (
+              <div key={label} className="bg-[#111118] border border-white/8 rounded-xl p-3.5">
+                <div className="flex items-center gap-1.5 text-gray-500 mb-1.5">
+                  {icon}
+                  <span className="text-[10px] font-medium uppercase tracking-wider">{label}</span>
+                </div>
+                <p className={cx('text-sm font-semibold truncate', color ?? 'text-white')} title={value}>
+                  {value}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          {/* Prices */}
+          {card.cardmarket?.prices && (
+            <div className="bg-[#111118] border border-white/8 rounded-2xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <TrendingUp size={16} className="text-green-400" />
+                  <h3 className="text-sm font-semibold">Precios Cardmarket</h3>
+                </div>
+                {card.cardmarket.url && (
+                  <a
+                    href={card.cardmarket.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-xs text-blue-400"
+                  >
+                    Ver <ExternalLink size={11} />
+                  </a>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {card.cardmarket.prices.averageSellPrice != null && (
+                  <div className="bg-white/5 rounded-xl p-2.5 text-center">
+                    <p className="text-[10px] text-gray-500 uppercase tracking-wider">Precio medio</p>
+                    <p className="text-base font-bold text-green-400 mt-0.5">
+                      €{card.cardmarket.prices.averageSellPrice.toFixed(2)}
+                    </p>
+                  </div>
+                )}
+                {card.cardmarket.prices.trendPrice != null && (
+                  <div className="bg-white/5 rounded-xl p-2.5 text-center">
+                    <p className="text-[10px] text-gray-500 uppercase tracking-wider">Tendencia</p>
+                    <p className="text-base font-bold text-blue-400 mt-0.5">
+                      €{card.cardmarket.prices.trendPrice.toFixed(2)}
+                    </p>
+                  </div>
+                )}
+                {card.cardmarket.prices.lowPrice != null && (
+                  <div className="bg-white/5 rounded-xl p-2.5 text-center">
+                    <p className="text-[10px] text-gray-500 uppercase tracking-wider">Precio mínimo</p>
+                    <p className="text-base font-bold text-yellow-400 mt-0.5">
+                      €{card.cardmarket.prices.lowPrice.toFixed(2)}
+                    </p>
+                  </div>
+                )}
+                {card.cardmarket.prices.avg7 != null && (
+                  <div className="bg-white/5 rounded-xl p-2.5 text-center">
+                    <p className="text-[10px] text-gray-500 uppercase tracking-wider">Media 7 días</p>
+                    <p className="text-base font-bold text-white mt-0.5">
+                      €{card.cardmarket.prices.avg7.toFixed(2)}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Legalities */}
+          {card.legalities && Object.keys(card.legalities).length > 0 && (
+            <div className="bg-[#111118] border border-white/8 rounded-2xl p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Scale size={16} className="text-blue-400" />
+                <h3 className="text-sm font-semibold">Legalidades</h3>
+              </div>
+              <div className="space-y-2">
+                {Object.entries(card.legalities).map(([format, status]) => (
+                  <div key={format} className="flex items-center justify-between">
+                    <span className="text-sm text-gray-400 capitalize">{format}</span>
+                    <span className={cx(
+                      'px-2.5 py-0.5 rounded-full text-xs font-medium',
+                      status === 'Legal' && 'bg-green-500/20 text-green-400',
+                      status === 'Banned' && 'bg-red-500/20 text-red-400',
+                      status === 'Restricted' && 'bg-yellow-500/20 text-yellow-400',
+                    )}>
+                      {translateLegality(status)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Flavor text */}
+          {card.flavorText && (
+            <div className="bg-[#111118] border border-white/8 rounded-2xl p-4">
+              <p className="text-sm italic text-gray-400 leading-relaxed">"{card.flavorText}"</p>
+            </div>
+          )}
+
+          {/* Add to collection */}
+          <div className="pb-4">
+            {justAdded ? (
+              <div className="w-full bg-green-500/20 border border-green-500/30 rounded-2xl py-4 flex items-center justify-center gap-2 text-green-400 font-semibold">
+                <CheckCircle2 className="w-5 h-5" />
+                ¡Añadida a tu colección!
+              </div>
+            ) : inCollection ? (
+              <div className="w-full bg-green-500/10 border border-green-500/20 rounded-2xl py-4 flex items-center justify-center gap-2 text-green-400 font-medium text-sm">
+                <CheckCircle2 className="w-4 h-4" />
+                Ya está en tu colección
+              </div>
+            ) : (
+              <button
+                onClick={handleAdd}
+                className="w-full bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-2xl py-4 font-semibold flex items-center justify-center gap-2 shadow-lg shadow-blue-900/40 active:scale-95 transition-transform"
+              >
+                <Heart className="w-5 h-5" />
+                Añadir a Mi Colección
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
