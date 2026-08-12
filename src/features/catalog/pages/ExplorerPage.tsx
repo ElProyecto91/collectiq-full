@@ -112,7 +112,7 @@ export function ExplorerPage() {
     refreshAddedIds();
   }, []);
 
-  const searchTimeout = useRef<ReturnType<typeof setTimeout>>();
+  const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   const doSearch = useCallback(async (q: string, p: number, append: boolean) => {
