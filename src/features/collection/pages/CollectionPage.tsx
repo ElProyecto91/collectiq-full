@@ -100,17 +100,6 @@ export function CollectionPage() {
         <p className="text-sm text-gray-500">Todas tus cartas, en un solo lugar.</p>
       </div>
 
-      {/* Debug button - temporary */}
-      <button
-        onClick={() => {
-          const raw = localStorage.getItem('pokemon-collection');
-          alert(raw ? raw.substring(0, 200) : 'VACÍO - No hay nada guardado');
-        }}
-        className="w-full bg-yellow-500/20 border border-yellow-500/30 rounded-xl py-2 text-xs text-yellow-400"
-      >
-        🔍 Ver localStorage (debug)
-      </button>
-
       {/* Stats */}
       {totalCards > 0 && (
         <div className="grid grid-cols-3 gap-2">
