@@ -1,95 +1,45 @@
-import { Heart, Layers, Minus, Plus, Trash2, Star, TrendingUp } from 'lucide-react';
-import { useState, useEffect, useCallback } from 'react';
+import { Heart, Layers, Minus, Plus, Trash2, Star } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { useCollectionList, useUpdateCollectionItem, useDeleteCollectionItem } from '@/hooks/use-collection';
+import type { CollectionItem } from '@/types';
 
-const STORAGE_KEY = 'pokemon-collection';
-
-interface PokemonCard {
-  id: string;
-  name: string;
-  number: string;
-  rarity?: string;
-  images: { small: string; large: string };
-  set: { name: string; series: string };
-  cardmarket?: { prices?: { averageSellPrice?: number } };
-}
-
-interface CollectionEntry {
-  card: PokemonCard;
-  quantity: number;
-  favorite: boolean;
-  addedAt: number;
-}
-
-function loadCollection(): CollectionEntry[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const data = JSON.parse(raw);
-    // Support both old format (array of cards) and new format (array of entries)
-    if (Array.isArray(data)) {
-      if (data.length === 0) return [];
-      if ('card' in data[0]) return data as CollectionEntry[];
-      // Old format — migrate
-      return data.map((card: PokemonCard) => ({
-        card,
-        quantity: 1,
-        favorite: false,
-        addedAt: Date.now(),
-      }));
-    }
-    return [];
-  } catch {
-    return [];
-  }
-}
-
-function saveCollection(entries: CollectionEntry[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
-}
-
-type SortOption = 'recent' | 'name' | 'rarity' | 'value';
+type SortOption = 'recent' | 'name' | 'value';
 
 export function CollectionPage() {
-  const [entries, setEntries] = useState<CollectionEntry[]>([]);
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SortOption>('recent');
 
-  useEffect(() => {
-    setEntries(loadCollection());
-  }, []);
+  const { data: cards = [], isLoading } = useCollectionList();
+  const { mutate: updateItem } = useUpdateCollectionItem();
+  const { mutate: deleteItem } = useDeleteCollectionItem();
 
-  const updateEntry = useCallback((id: string, update: Partial<CollectionEntry>) => {
-    setEntries(prev => {
-      const next = prev.map(e => e.card.id === id ? { ...e, ...update } : e);
-      saveCollection(next);
-      return next;
-    });
-  }, []);
+  const updateEntry = useCallback((id: string, update: Partial<CollectionItem>) => {
+    updateItem({ id, update });
+  }, [updateItem]);
 
   const removeEntry = useCallback((id: string) => {
-    setEntries(prev => {
-      const next = prev.filter(e => e.card.id !== id);
-      saveCollection(next);
-      return next;
-    });
-  }, []);
+    deleteItem(id);
+  }, [deleteItem]);
 
-  const filtered = entries
-    .filter(e => e.card.name.toLowerCase().includes(search.toLowerCase()))
+  const filtered = [...cards]
+    .filter(c => c.cardName.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => {
-      if (sort === 'recent') return b.addedAt - a.addedAt;
-      if (sort === 'name') return a.card.name.localeCompare(b.card.name);
-      if (sort === 'value') {
-        const va = a.card.cardmarket?.prices?.averageSellPrice ?? 0;
-        const vb = b.card.cardmarket?.prices?.averageSellPrice ?? 0;
-        return vb - va;
-      }
+      if (sort === 'recent') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      if (sort === 'name') return a.cardName.localeCompare(b.cardName);
       return 0;
     });
 
-  const totalCards = entries.reduce((s, e) => s + e.quantity, 0);
-  const uniqueCards = entries.length;
-  const favorites = entries.filter(e => e.favorite).length;
+  const totalCards = cards.reduce((s, c) => s + c.quantity, 0);
+  const uniqueCards = cards.length;
+  const favorites = cards.filter(c => c.favorite).length;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-32">
+        <p className="text-gray-500 text-sm">Cargando colección...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 pt-3 pb-24 px-4">
@@ -143,7 +93,7 @@ export function CollectionPage() {
       </div>
 
       {/* Empty state */}
-      {entries.length === 0 ? (
+      {cards.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
           <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center">
             <Layers size={28} className="text-gray-600" />
@@ -159,10 +109,10 @@ export function CollectionPage() {
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3">
-          {filtered.map(entry => (
+          {filtered.map(card => (
             <CollectionCard
-              key={entry.card.id}
-              entry={entry}
+              key={card.id}
+              card={card}
               onUpdate={updateEntry}
               onRemove={removeEntry}
             />
@@ -174,16 +124,15 @@ export function CollectionPage() {
 }
 
 function CollectionCard({
-  entry,
+  card,
   onUpdate,
   onRemove,
 }: {
-  entry: CollectionEntry;
-  onUpdate: (id: string, update: Partial<CollectionEntry>) => void;
+  card: CollectionItem;
+  onUpdate: (id: string, update: Partial<CollectionItem>) => void;
   onRemove: (id: string) => void;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const { card } = entry;
 
   const handleRemove = () => {
     if (!confirmDelete) {
@@ -199,21 +148,21 @@ function CollectionCard({
       {/* Image */}
       <div className="relative">
         <img
-          src={card.images.small}
-          alt={card.name}
+          src={card.imageUrl ?? ''}
+          alt={card.cardName}
           className="w-full aspect-[2/3] object-cover"
           loading="lazy"
         />
         <button
-          onClick={() => onUpdate(card.id, { favorite: !entry.favorite })}
+          onClick={() => onUpdate(card.id, { favorite: !card.favorite })}
           className="absolute right-1.5 top-1.5 w-8 h-8 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center"
         >
           <Heart
             size={15}
-            className={entry.favorite ? 'fill-yellow-400 text-yellow-400' : 'text-gray-400'}
+            className={card.favorite ? 'fill-yellow-400 text-yellow-400' : 'text-gray-400'}
           />
         </button>
-        {entry.favorite && (
+        {card.favorite && (
           <div className="absolute left-1.5 top-1.5 w-6 h-6 rounded-full bg-yellow-400/90 flex items-center justify-center">
             <Star size={12} className="fill-black text-black" />
           </div>
@@ -222,31 +171,26 @@ function CollectionCard({
 
       {/* Info */}
       <div className="p-2.5 flex-1 space-y-1">
-        <p className="text-xs font-bold truncate text-white">{card.name}</p>
-        <p className="text-[10px] text-gray-500 truncate">{card.set.name}</p>
+        <p className="text-xs font-bold truncate text-white">{card.cardName}</p>
+        <p className="text-[10px] text-gray-500 truncate">{card.setName}</p>
         {card.rarity && <p className="text-[10px] text-blue-400 truncate">{card.rarity}</p>}
-        {card.cardmarket?.prices?.averageSellPrice && (
-          <p className="text-[10px] text-green-400 font-medium">
-            €{card.cardmarket.prices.averageSellPrice.toFixed(2)}
-          </p>
-        )}
       </div>
 
       {/* Controls */}
       <div className="flex items-center justify-between gap-1 px-2.5 pb-2.5">
         <div className="flex items-center gap-1">
           <button
-            onClick={() => entry.quantity > 1 && onUpdate(card.id, { quantity: entry.quantity - 1 })}
-            disabled={entry.quantity <= 1}
+            onClick={() => card.quantity > 1 && onUpdate(card.id, { quantity: card.quantity - 1 })}
+            disabled={card.quantity <= 1}
             className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 disabled:opacity-40"
           >
             <Minus size={13} />
           </button>
           <span className="text-sm font-bold text-white min-w-[1.5rem] text-center">
-            {entry.quantity}
+            {card.quantity}
           </span>
           <button
-            onClick={() => onUpdate(card.id, { quantity: entry.quantity + 1 })}
+            onClick={() => onUpdate(card.id, { quantity: card.quantity + 1 })}
             className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-gray-400"
           >
             <Plus size={13} />
