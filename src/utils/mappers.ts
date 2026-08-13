@@ -65,6 +65,9 @@ export function mapCollectionItem(row: CollectionItemRow): CollectionItem {
     notes: row.notes ?? null,
     favorite: row.favorite ?? false,
     setTotal: row.set_total ?? null,
+    marketPrice: row.market_price ?? null,
+    tcgplayerPrice: row.tcgplayer_price ?? null,
+    currency: row.currency ?? null,
   };
 }
 
@@ -105,6 +108,9 @@ export function toCollectionItemRow(input: CollectionItemInput) {
     notes: input.notes ?? null,
     favorite: input.favorite ?? false,
     set_total: input.setTotal ?? null,
+    market_price: input.marketPrice ?? null,
+    tcgplayer_price: input.tcgplayerPrice ?? null,
+    currency: input.currency ?? 'EUR',
   };
 }
 
