@@ -24,6 +24,7 @@ interface PokemonCard {
   images: { small: string; large: string };
   set: { id: string; name: string; series: string; releaseDate?: string; total?: number };
   cardmarket?: { prices?: { averageSellPrice?: number } };
+  tcgplayer?: { prices?: { normal?: { market?: number }; holofoil?: { market?: number } } };
   types?: string[];
   supertype?: string;
 }
@@ -35,6 +36,12 @@ function getRarityColor(rarity?: string): string {
   if (r.includes('ultra') || r.includes('rainbow')) return 'text-purple-400';
   if (r.includes('rare')) return 'text-blue-400';
   return 'text-gray-500';
+}
+
+function getTCGPlayerPrice(card: PokemonCard): number | null {
+  const prices = card.tcgplayer?.prices;
+  if (!prices) return null;
+  return prices.holofoil?.market ?? prices.normal?.market ?? null;
 }
 
 async function searchCards(query: string, page: number): Promise<{ cards: PokemonCard[]; total: number }> {
@@ -140,6 +147,8 @@ export function ExplorerPage() {
 
   const handleAdd = (card: PokemonCard) => {
     if (!telegramUser?.id) return;
+    const tcgplayerPrice = getTCGPlayerPrice(card);
+    const marketPrice = card.cardmarket?.prices?.averageSellPrice ?? null;
     createItem({
       cardId: card.id,
       tcg: 'pokemon',
@@ -152,6 +161,9 @@ export function ExplorerPage() {
       quantity: 1,
       favorite: false,
       setTotal: card.set.total ?? null,
+      marketPrice,
+      tcgplayerPrice,
+      currency: 'EUR',
     });
     setAddedIds(prev => new Set([...prev, card.id]));
     setStatusMsg(`✅ ${card.name} añadida a tu colección`);
@@ -306,6 +318,11 @@ export function ExplorerPage() {
                     {card.cardmarket?.prices?.averageSellPrice && (
                       <p className="text-[10px] text-green-400 font-medium">
                         €{card.cardmarket.prices.averageSellPrice.toFixed(2)}
+                      </p>
+                    )}
+                    {!card.cardmarket?.prices?.averageSellPrice && getTCGPlayerPrice(card) && (
+                      <p className="text-[10px] text-green-400 font-medium">
+                        ${getTCGPlayerPrice(card)?.toFixed(2)}
                       </p>
                     )}
                     <button
