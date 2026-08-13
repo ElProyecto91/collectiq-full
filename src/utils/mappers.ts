@@ -13,11 +13,6 @@ import type {
   WishlistItemRow,
 } from '@/types/database';
 
-/**
- * Row-to-domain mappers. The database speaks snake_case + raw strings; the
- * rest of the app speaks camelCase + typed unions. These mappers are the only
- * place that translation happens, so a column rename never escapes this file.
- */
 const isTcg = (value: string): value is Tcg =>
   (['pokemon', 'one-piece', 'yugioh', 'lorcana', 'magic'] as const).includes(value as Tcg);
 
@@ -82,10 +77,15 @@ export function mapWishlistItem(row: WishlistItemRow): WishlistItem {
     metadata: row.metadata ?? {},
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    cardName: row.card_name ?? '',
+    setName: row.set_name ?? '',
+    cardNumber: row.card_number ?? '',
+    rarity: row.rarity ?? null,
+    imageUrl: row.image_url ?? null,
+    telegramUserId: row.telegram_user_id,
   };
 }
 
-/** Domain-to-row transforms for inserts/updates (omit server-managed fields). */
 export function toCollectionItemRow(input: CollectionItemInput) {
   return {
     card_id: input.cardId,
@@ -112,5 +112,11 @@ export function toWishlistItemRow(input: WishlistItemInput) {
     max_price: input.maxPrice ?? null,
     notes: input.notes ?? null,
     metadata: input.metadata ?? {},
+    card_name: (input as any).cardName ?? '',
+    set_name: (input as any).setName ?? '',
+    card_number: (input as any).cardNumber ?? '',
+    rarity: (input as any).rarity ?? null,
+    image_url: (input as any).imageUrl ?? null,
+    telegram_user_id: (input as any).telegramUserId ?? 0,
   };
 }
