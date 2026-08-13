@@ -67,15 +67,15 @@ function getRarityColor(rarity?: string): string {
 async function searchCards(query: string, page: number): Promise<{ cards: PokemonCard[]; total: number }> {
   const q = query.trim()
     ? `name:"*${query.trim()}*"`
-    : 'supertype:Pokémon';
+    : 'name:Charizard OR name:Pikachu OR name:Mewtwo';
 
   const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&page=${page}&pageSize=20&orderBy=-set.releaseDate`;
 
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 4; i++) {
     try {
       const res = await fetch(url);
-      if (res.status === 429) {
-        await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+      if (res.status === 429 || res.status === 500 || res.status === 503) {
+        await new Promise(r => setTimeout(r, 1500 * (i + 1)));
         continue;
       }
       if (!res.ok) throw new Error(`Error ${res.status}`);
@@ -128,7 +128,7 @@ export function ExplorerPage() {
       setHasMore(result.cards.length === 20);
       setPage(p);
     } catch (err: any) {
-      setError(err?.message ?? 'Error al buscar cartas');
+      setError('La API de cartas está temporalmente inactiva. Toca Reintentar.');
     } finally {
       setIsLoading(false);
       setIsLoadingMore(false);
