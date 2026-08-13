@@ -1,9 +1,3 @@
-/**
- * Raw database row shapes — the literal column names returned by Supabase.
- * Domain mappers in the service layer convert these to the camelCase domain
- * types in `domain.ts`. Keeping them separate means a column rename only
- * touches the mapper, not every consuming component.
- */
 export interface ProfileRow {
   id: string;
   telegram_id: number | null;
@@ -35,6 +29,7 @@ export interface CollectionItemRow {
   image_url: string | null;
   notes: string | null;
   favorite: boolean;
+  set_total: number | null;
 }
 
 export interface WishlistItemRow {
@@ -53,9 +48,9 @@ export interface WishlistItemRow {
   rarity: string | null;
   image_url: string | null;
   telegram_user_id: number;
+  set_total: number | null;
 }
 
-/** Table names — the single source of truth for `supabase.from(...)`. */
 export const Tables = {
   Profiles: 'profiles',
   CollectionItems: 'collection_items',
