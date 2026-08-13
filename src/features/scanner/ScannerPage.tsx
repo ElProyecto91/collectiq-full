@@ -147,7 +147,7 @@ function getRarityColor(rarity?: string): string {
 export default function ScannerPage() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [showTutorial, setShowTutorial] = useState(() => !localStorage.getItem('scanner-tutorial-seen'));
+  const [showTutorial, setShowTutorial] = useState(true);
 
   const [phase, setPhase] = useState<ScanPhase>('idle');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -176,8 +176,6 @@ export default function ScannerPage() {
   }, []);
 
   const openCamera = () => {
-    localStorage.setItem('scanner-tutorial-seen', '1');
-    setShowTutorial(false);
     fileInputRef.current?.click();
   };
 
@@ -420,12 +418,7 @@ export default function ScannerPage() {
                       <span>O elige una foto existente de tu galería</span>
                     </div>
                   </div>
-                  <button
-                    onClick={() => setShowTutorial(false)}
-                    className="text-xs text-gray-500 underline"
-                  >
-                    No mostrar de nuevo
-                  </button>
+
                 </div>
               )}
               <button onClick={openCamera} className="w-full bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-2xl py-4 font-semibold flex items-center justify-center gap-2 shadow-lg shadow-blue-900/40 active:scale-95 transition-transform">
