@@ -22,7 +22,7 @@ interface PokemonCard {
   number: string;
   rarity?: string;
   images: { small: string; large: string };
-  set: { name: string; series: string; releaseDate?: string };
+  set: { id: string; name: string; series: string; releaseDate?: string; total?: number };
   cardmarket?: { prices?: { averageSellPrice?: number } };
   types?: string[];
   supertype?: string;
@@ -151,6 +151,7 @@ export function ExplorerPage() {
       imageUrl: card.images.small,
       quantity: 1,
       favorite: false,
+      setTotal: card.set.total ?? null,
     });
     setAddedIds(prev => new Set([...prev, card.id]));
     setStatusMsg(`✅ ${card.name} añadida a tu colección`);
@@ -168,6 +169,7 @@ export function ExplorerPage() {
       cardNumber: card.number,
       rarity: card.rarity ?? null,
       imageUrl: card.images.small,
+      setTotal: card.set.total ?? null,
     } as any);
     setWishlistIds(prev => new Set([...prev, card.id]));
     setStatusMsg(`❤️ ${card.name} añadida a tu wishlist`);
