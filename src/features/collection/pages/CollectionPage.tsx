@@ -1,5 +1,5 @@
 import { Heart, Layers, Minus, Plus, Trash2, Star, LayoutGrid, Package } from 'lucide-react';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { useCollectionList, useUpdateCollectionItem, useDeleteCollectionItem } from '@/hooks/use-collection';
 import { useCreateWishlistItem, useWishlistList } from '@/hooks/use-wishlist';
 import { useUserStore } from '@/store';
@@ -15,21 +15,10 @@ interface SetCompletion {
   cards: CollectionItem[];
 }
 
-async function fetchSetTotal(setName: string): Promise<number> {
-  try {
-    const res = await fetch(`https://api.pokemontcg.io/v2/sets?q=name:"${encodeURIComponent(setName)}"&pageSize=1`);
-    const json = await res.json();
-    return json.data?.[0]?.total ?? 0;
-  } catch {
-    return 0;
-  }
-}
-
 export function CollectionPage() {
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SortOption>('recent');
   const [view, setView] = useState<ViewMode>('cards');
-  const [setTotals, setSetTotals] = useState<Record<string, number>>({});
 
   const { data: cards = [], isLoading } = useCollectionList();
   const { data: wishlistItems = [] } = useWishlistList();
@@ -49,21 +38,12 @@ export function CollectionPage() {
   const setGroups: SetCompletion[] = Object.values(
     cards.reduce((acc, card) => {
       const key = card.setName;
-      if (!acc[key]) acc[key] = { setName: key, owned: 0, total: 0, cards: [] };
+      if (!acc[key]) acc[key] = { setName: key, owned: 0, total: card.setTotal ?? 0, cards: [] };
       acc[key].owned += card.quantity;
       acc[key].cards.push(card);
       return acc;
     }, {} as Record<string, SetCompletion>)
   ).sort((a, b) => b.owned - a.owned);
-
-  useEffect(() => {
-    if (view !== 'sets') return;
-    setGroups.forEach(async (group) => {
-      if (setTotals[group.setName] !== undefined) return;
-      const total = await fetchSetTotal(group.setName);
-      setSetTotals(prev => ({ ...prev, [group.setName]: total }));
-    });
-  }, [view, setGroups.length]);
 
   const wishlistCardIds = new Set(wishlistItems.map(w => w.cardId));
 
@@ -199,7 +179,7 @@ export function CollectionPage() {
             </div>
           ) : (
             setGroups.map(group => {
-              const total = setTotals[group.setName] ?? 0;
+              const total = group.total;
               const pct = total > 0 ? Math.round((group.cards.length / total) * 100) : 0;
               const missing = total - group.cards.length;
 
@@ -264,6 +244,7 @@ export function CollectionPage() {
                             cardNumber: c.number,
                             rarity: c.rarity ?? null,
                             imageUrl: c.images?.small ?? null,
+                            setTotal: c.set?.total ?? null,
                           } as any);
                         });
                       }}
