@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Compass,
@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { RoutePaths } from '@/config';
 import { cx } from '@/utils';
+import { useCreateCollectionItem, useCollectionList } from '@/hooks/use-collection';
 
 interface PokemonCard {
   id: string;
@@ -22,37 +23,6 @@ interface PokemonCard {
   cardmarket?: { prices?: { averageSellPrice?: number } };
   types?: string[];
   supertype?: string;
-}
-
-interface CollectionEntry {
-  card: PokemonCard;
-  quantity: number;
-  favorite: boolean;
-  addedAt: number;
-}
-
-const STORAGE_KEY = 'pokemon-collection';
-
-function getCollection(): CollectionEntry[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const data = JSON.parse(raw);
-    if (!Array.isArray(data)) return [];
-    if (data.length === 0) return [];
-    if ('card' in data[0]) return data;
-    return data.map((card: PokemonCard) => ({
-      card, quantity: 1, favorite: false, addedAt: Date.now(),
-    }));
-  } catch { return []; }
-}
-
-function addToCollection(card: PokemonCard) {
-  const collection = getCollection();
-  if (!collection.find(e => e.card.id === card.id)) {
-    collection.push({ card, quantity: 1, favorite: false, addedAt: Date.now() });
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(collection));
-  }
 }
 
 function getRarityColor(rarity?: string): string {
@@ -98,23 +68,20 @@ export function ExplorerPage() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState('');
-  const navigate = useNavigate();
-  const [addedIds, setAddedIds] = useState<Set<string>>(() => {
-    return new Set(getCollection().map(e => e.card.id));
-  });
   const [statusMsg, setStatusMsg] = useState('');
-
-  // Refresh addedIds when component mounts and after adding
-  const refreshAddedIds = useCallback(() => {
-    setAddedIds(new Set(getCollection().map(e => e.card.id)));
-  }, []);
-
-  useEffect(() => {
-    refreshAddedIds();
-  }, []);
-
+  const navigate = useNavigate();
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const sentinelRef = useRef<HTMLDivElement>(null);
+
+  const { data: collectionCards = [] } = useCollectionList();
+  const { mutate: createItem } = useCreateCollectionItem();
+  const telegramUser = window?.Telegram?.WebApp?.initDataUnsafe?.user;
+
+  const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    setAddedIds(new Set(collectionCards.map(c => c.cardId)));
+  }, [collectionCards]);
 
   const doSearch = useCallback(async (q: string, p: number, append: boolean) => {
     if (append) setIsLoadingMore(true);
@@ -135,12 +102,10 @@ export function ExplorerPage() {
     }
   }, []);
 
-  // Initial load
   useEffect(() => {
     doSearch('', 1, false);
   }, []);
 
-  // Search with debounce
   useEffect(() => {
     clearTimeout(searchTimeout.current);
     searchTimeout.current = setTimeout(() => {
@@ -149,7 +114,6 @@ export function ExplorerPage() {
     return () => clearTimeout(searchTimeout.current);
   }, [query]);
 
-  // Infinite scroll
   useEffect(() => {
     if (!sentinelRef.current || !hasMore) return;
     const observer = new IntersectionObserver(
@@ -165,8 +129,20 @@ export function ExplorerPage() {
   }, [hasMore, isLoadingMore, page, query]);
 
   const handleAdd = (card: PokemonCard) => {
-    addToCollection(card);
-    refreshAddedIds();
+    if (!telegramUser?.id) return;
+    createItem({
+      cardId: card.id,
+      tcg: 'pokemon',
+      telegramUserId: telegramUser.id,
+      cardName: card.name,
+      setName: card.set.name,
+      cardNumber: card.number,
+      rarity: card.rarity ?? null,
+      imageUrl: card.images.small,
+      quantity: 1,
+      favorite: false,
+    });
+    setAddedIds(prev => new Set([...prev, card.id]));
     setStatusMsg(`✅ ${card.name} añadida a tu colección`);
     setTimeout(() => setStatusMsg(''), 2500);
   };
@@ -331,10 +307,8 @@ export function ExplorerPage() {
               ))}
             </div>
 
-            {/* Infinite scroll sentinel */}
             <div ref={sentinelRef} className="h-4 w-full" />
 
-            {/* Loading more */}
             {isLoadingMore && (
               <div className="flex items-center justify-center gap-2 py-4 text-sm text-gray-500">
                 <Loader2 size={16} className="animate-spin" />
@@ -342,7 +316,6 @@ export function ExplorerPage() {
               </div>
             )}
 
-            {/* End of results */}
             {!hasMore && cards.length > 0 && (
               <p className="text-center text-xs text-gray-600 py-4">
                 — Fin de los resultados —
