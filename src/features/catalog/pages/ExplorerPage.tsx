@@ -150,14 +150,12 @@ export function ExplorerPage() {
   return (
     <div className="flex flex-col min-h-screen bg-[#0a0a0f] text-white pb-24">
 
-      {/* Header */}
       <div className="px-4 pt-6 pb-4">
         <p className="text-[10px] text-blue-400 font-bold uppercase tracking-[0.2em]">COLLECTIQ</p>
         <h1 className="text-2xl font-bold">Explorador</h1>
         <p className="text-sm text-gray-500">Descubre y añade cartas a tu colección</p>
       </div>
 
-      {/* Search */}
       <div className="px-4 pb-4">
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
@@ -173,14 +171,12 @@ export function ExplorerPage() {
         </div>
       </div>
 
-      {/* Status toast */}
       {statusMsg && (
         <div className="mx-4 mb-3 bg-blue-500/10 border border-blue-500/30 rounded-2xl px-4 py-3 text-sm text-blue-300 text-center">
           {statusMsg}
         </div>
       )}
 
-      {/* Results count */}
       {!isLoading && cards.length > 0 && (
         <div className="px-4 pb-2 flex items-center gap-2">
           <TrendingUp className="w-3.5 h-3.5 text-gray-500" />
@@ -195,7 +191,6 @@ export function ExplorerPage() {
 
       <div className="flex-1 px-4">
 
-        {/* Loading skeleton */}
         {isLoading && (
           <div className="grid grid-cols-2 gap-3">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -211,7 +206,6 @@ export function ExplorerPage() {
           </div>
         )}
 
-        {/* Error */}
         {error && !isLoading && (
           <div className="text-center py-12">
             <p className="text-red-400 text-sm">{error}</p>
@@ -224,7 +218,6 @@ export function ExplorerPage() {
           </div>
         )}
 
-        {/* Empty state */}
         {!isLoading && !error && cards.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
             <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center">
@@ -247,7 +240,6 @@ export function ExplorerPage() {
           </div>
         )}
 
-        {/* Cards grid */}
         {!isLoading && !error && cards.length > 0 && (
           <>
             <div className="grid grid-cols-2 gap-3">
@@ -326,4 +318,4 @@ export function ExplorerPage() {
       </div>
     </div>
   );
-}
+    }
