@@ -81,10 +81,22 @@ function isInCollection(cardId: string): boolean {
 }
 
 async function fetchCard(cardId: string): Promise<PokemonCard> {
-  const res = await fetch(`https://api.pokemontcg.io/v2/cards/${cardId}`);
-  if (!res.ok) throw new Error(`Error ${res.status}`);
-  const json = await res.json();
-  return json.data as PokemonCard;
+  for (let i = 0; i < 4; i++) {
+    try {
+      const res = await fetch(`https://api.pokemontcg.io/v2/cards/${cardId}`);
+      if (res.status === 429 || res.status === 500 || res.status === 503) {
+        await new Promise(r => setTimeout(r, 1500 * (i + 1)));
+        continue;
+      }
+      if (!res.ok) throw new Error(`Error ${res.status}`);
+      const json = await res.json();
+      return json.data as PokemonCard;
+    } catch (err) {
+      if (i === 3) throw err;
+      await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+    }
+  }
+  throw new Error('No se pudo cargar la carta. Inténtalo de nuevo.');
 }
 
 function getRarityColor(rarity?: string): string {
