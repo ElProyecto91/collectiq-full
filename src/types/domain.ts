@@ -46,6 +46,7 @@ export interface CollectionItem extends CardRef {
   imageUrl: string | null;
   notes: string | null;
   favorite: boolean;
+  setTotal: number | null;
 }
 
 export interface CollectionItemInput {
@@ -64,6 +65,7 @@ export interface CollectionItemInput {
   imageUrl?: string | null;
   notes?: string | null;
   favorite?: boolean;
+  setTotal?: number | null;
 }
 
 export type CollectionItemUpdate = Partial<CollectionItemInput>;
@@ -81,6 +83,7 @@ export interface WishlistItem extends CardRef {
   cardNumber: string;
   rarity: string | null;
   imageUrl: string | null;
+  setTotal: number | null;
 }
 
 export interface WishlistItemInput {
@@ -95,6 +98,7 @@ export interface WishlistItemInput {
   cardNumber?: string;
   rarity?: string | null;
   imageUrl?: string | null;
+  setTotal?: number | null;
 }
 
 export type WishlistItemUpdate = Partial<WishlistItemInput>;
