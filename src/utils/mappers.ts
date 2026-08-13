@@ -64,6 +64,7 @@ export function mapCollectionItem(row: CollectionItemRow): CollectionItem {
     imageUrl: row.image_url ?? null,
     notes: row.notes ?? null,
     favorite: row.favorite ?? false,
+    setTotal: row.set_total ?? null,
   };
 }
 
@@ -83,6 +84,7 @@ export function mapWishlistItem(row: WishlistItemRow): WishlistItem {
     rarity: row.rarity ?? null,
     imageUrl: row.image_url ?? null,
     telegramUserId: row.telegram_user_id,
+    setTotal: row.set_total ?? null,
   };
 }
 
@@ -102,6 +104,7 @@ export function toCollectionItemRow(input: CollectionItemInput) {
     image_url: input.imageUrl ?? null,
     notes: input.notes ?? null,
     favorite: input.favorite ?? false,
+    set_total: input.setTotal ?? null,
   };
 }
 
@@ -118,5 +121,6 @@ export function toWishlistItemRow(input: WishlistItemInput) {
     rarity: (input as any).rarity ?? null,
     image_url: (input as any).imageUrl ?? null,
     telegram_user_id: (input as any).telegramUserId ?? 0,
+    set_total: (input as any).setTotal ?? null,
   };
 }
