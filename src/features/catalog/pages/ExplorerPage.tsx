@@ -12,6 +12,7 @@ import {
 import { RoutePaths } from '@/config';
 import { cx } from '@/utils';
 import { useCreateCollectionItem, useCollectionList } from '@/hooks/use-collection';
+import { useUserStore } from '@/store';
 
 interface PokemonCard {
   id: string;
@@ -75,7 +76,7 @@ export function ExplorerPage() {
 
   const { data: collectionCards = [] } = useCollectionList();
   const { mutate: createItem } = useCreateCollectionItem();
-  const telegramUser = window?.Telegram?.WebApp?.initDataUnsafe?.user;
+  const telegramUser = useUserStore((s) => s.telegramUser);
 
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
 
@@ -318,4 +319,4 @@ export function ExplorerPage() {
       </div>
     </div>
   );
-    }
+}
