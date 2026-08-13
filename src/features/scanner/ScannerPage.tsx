@@ -147,7 +147,7 @@ function getRarityColor(rarity?: string): string {
 export default function ScannerPage() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const galleryInputRef = useRef<HTMLInputElement>(null);
+  const [showTutorial, setShowTutorial] = useState(() => !localStorage.getItem('scanner-tutorial-seen'));
 
   const [phase, setPhase] = useState<ScanPhase>('idle');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -175,8 +175,11 @@ export default function ScannerPage() {
     e.target.value = '';
   }, []);
 
-  const openCamera = () => fileInputRef.current?.click();
-  const openGallery = () => galleryInputRef.current?.click();
+  const openCamera = () => {
+    localStorage.setItem('scanner-tutorial-seen', '1');
+    setShowTutorial(false);
+    fileInputRef.current?.click();
+  };
 
   const analyzeCard = useCallback(async () => {
     if (!currentFile) return;
@@ -396,13 +399,38 @@ export default function ScannerPage() {
         <div className="space-y-3 pt-2">
           {phase === 'idle' && (
             <div className="space-y-3">
+              {showTutorial && (
+                <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4 space-y-3">
+                  <p className="text-sm font-semibold text-blue-300">📷 Cómo escanear una carta</p>
+                  <div className="space-y-2 text-xs text-gray-400">
+                    <div className="flex items-start gap-2">
+                      <span className="text-blue-400 font-bold shrink-0">1.</span>
+                      <span>Toca <strong className="text-white">"Escanear carta"</strong> abajo</span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="text-blue-400 font-bold shrink-0">2.</span>
+                      <span>Se abrirá el selector de archivos. Toca los <strong className="text-white">tres puntos ⋮</strong> arriba a la derecha</span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="text-blue-400 font-bold shrink-0">3.</span>
+                      <span>Selecciona <strong className="text-white">"Cámara"</strong> para hacer una foto directamente</span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="text-blue-400 font-bold shrink-0">4.</span>
+                      <span>O elige una foto existente de tu galería</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowTutorial(false)}
+                    className="text-xs text-gray-500 underline"
+                  >
+                    No mostrar de nuevo
+                  </button>
+                </div>
+              )}
               <button onClick={openCamera} className="w-full bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-2xl py-4 font-semibold flex items-center justify-center gap-2 shadow-lg shadow-blue-900/40 active:scale-95 transition-transform">
                 <Camera className="w-5 h-5" />
-                Abrir cámara
-              </button>
-              <button onClick={openGallery} className="w-full bg-white/8 border border-white/10 text-gray-300 rounded-2xl py-3.5 font-medium flex items-center justify-center gap-2 active:scale-95 transition-transform">
-                <Search className="w-4 h-4" />
-                Elegir de galería
+                Escanear carta
               </button>
             </div>
           )}
