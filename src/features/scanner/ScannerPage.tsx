@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import { RoutePaths } from '@/config';
 import { cx } from '@/utils';
+import { useCreateCollectionItem } from '@/hooks/use-collection';
+import { useUserStore } from '@/store';
 
 interface PokemonCard {
   id: string;
@@ -82,7 +84,6 @@ async function extractCardNameWithVision(base64: string): Promise<string> {
   return extractCardName(data.text);
 }
 
-// Search with automatic retry
 async function searchPokemonTCG(name: string, retries = 3): Promise<PokemonCard[]> {
   const url = `https://api.pokemontcg.io/v2/cards?q=name:"${encodeURIComponent(name)}"&pageSize=20&orderBy=-set.releaseDate`;
   
@@ -90,7 +91,6 @@ async function searchPokemonTCG(name: string, retries = 3): Promise<PokemonCard[
     try {
       const res = await fetch(url);
       if (res.status === 429) {
-        // Rate limited — wait and retry
         await new Promise(r => setTimeout(r, 1000 * (i + 1)));
         continue;
       }
@@ -103,36 +103,6 @@ async function searchPokemonTCG(name: string, retries = 3): Promise<PokemonCard[
     }
   }
   return [];
-}
-
-interface CollectionEntry {
-  card: PokemonCard;
-  quantity: number;
-  favorite: boolean;
-  addedAt: number;
-}
-
-function saveToCollection(card: PokemonCard) {
-  const raw = localStorage.getItem('pokemon-collection');
-  let collection: CollectionEntry[] = [];
-  if (raw) {
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        if (parsed.length > 0 && !('card' in parsed[0])) {
-          collection = parsed.map((c: PokemonCard) => ({
-            card: c, quantity: 1, favorite: false, addedAt: Date.now(),
-          }));
-        } else {
-          collection = parsed;
-        }
-      }
-    } catch { collection = []; }
-  }
-  if (!collection.find((e) => e.card.id === card.id)) {
-    collection.push({ card, quantity: 1, favorite: false, addedAt: Date.now() });
-    localStorage.setItem('pokemon-collection', JSON.stringify(collection));
-  }
 }
 
 function getRarityColor(rarity?: string): string {
@@ -159,6 +129,9 @@ export default function ScannerPage() {
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const [statusMsg, setStatusMsg] = useState('');
   const [progress, setProgress] = useState(0);
+
+  const { mutate: createItem } = useCreateCollectionItem();
+  const telegramUser = useUserStore((s) => s.telegramUser);
 
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -231,7 +204,19 @@ export default function ScannerPage() {
   }, [searchQuery]);
 
   const addCard = (card: PokemonCard) => {
-    saveToCollection(card);
+    if (!telegramUser?.id) return;
+    createItem({
+      cardId: card.id,
+      tcg: 'pokemon',
+      telegramUserId: telegramUser.id,
+      cardName: card.name,
+      setName: card.set.name,
+      cardNumber: card.number,
+      rarity: card.rarity ?? null,
+      imageUrl: card.images.small,
+      quantity: 1,
+      favorite: false,
+    });
     setAddedIds((prev) => new Set(prev).add(card.id));
     setStatusMsg(`✅ ${card.name} añadida a tu colección`);
     setTimeout(() => setStatusMsg(''), 3000);
@@ -252,7 +237,6 @@ export default function ScannerPage() {
   return (
     <div className="flex flex-col min-h-screen bg-[#0a0a0f] text-white pb-24">
 
-      {/* Header */}
       <div className="relative px-4 pt-6 pb-4">
         <div className="absolute inset-0 bg-gradient-to-b from-blue-950/40 to-transparent pointer-events-none" />
         <div className="flex items-center gap-3 relative z-10">
@@ -271,7 +255,6 @@ export default function ScannerPage() {
 
       <div className="flex-1 px-4 space-y-4">
 
-        {/* Scanner frame */}
         <div className="relative rounded-2xl overflow-hidden bg-[#111118] border border-white/10" style={{ aspectRatio: '3/4' }}>
           {previewUrl ? (
             <img src={previewUrl} alt="Card preview" className="w-full h-full object-contain" />
@@ -418,7 +401,6 @@ export default function ScannerPage() {
                       <span>O elige una foto existente de tu galería</span>
                     </div>
                   </div>
-
                 </div>
               )}
               <button onClick={openCamera} className="w-full bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-2xl py-4 font-semibold flex items-center justify-center gap-2 shadow-lg shadow-blue-900/40 active:scale-95 transition-transform">
