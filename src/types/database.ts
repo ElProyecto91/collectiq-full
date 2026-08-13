@@ -47,6 +47,12 @@ export interface WishlistItemRow {
   metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+  card_name: string;
+  set_name: string;
+  card_number: string;
+  rarity: string | null;
+  image_url: string | null;
+  telegram_user_id: number;
 }
 
 /** Table names — the single source of truth for `supabase.from(...)`. */
