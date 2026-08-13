@@ -47,6 +47,9 @@ export interface CollectionItem extends CardRef {
   notes: string | null;
   favorite: boolean;
   setTotal: number | null;
+  marketPrice: number | null;
+  tcgplayerPrice: number | null;
+  currency: string | null;
 }
 
 export interface CollectionItemInput {
@@ -66,6 +69,9 @@ export interface CollectionItemInput {
   notes?: string | null;
   favorite?: boolean;
   setTotal?: number | null;
+  marketPrice?: number | null;
+  tcgplayerPrice?: number | null;
+  currency?: string | null;
 }
 
 export type CollectionItemUpdate = Partial<CollectionItemInput>;
