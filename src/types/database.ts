@@ -30,6 +30,9 @@ export interface CollectionItemRow {
   notes: string | null;
   favorite: boolean;
   set_total: number | null;
+  market_price: number | null;
+  tcgplayer_price: number | null;
+  currency: string | null;
 }
 
 export interface WishlistItemRow {
