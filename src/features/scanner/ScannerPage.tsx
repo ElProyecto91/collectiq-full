@@ -147,6 +147,7 @@ function getRarityColor(rarity?: string): string {
 export default function ScannerPage() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
 
   const [phase, setPhase] = useState<ScanPhase>('idle');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -175,6 +176,7 @@ export default function ScannerPage() {
   }, []);
 
   const openCamera = () => fileInputRef.current?.click();
+  const openGallery = () => galleryInputRef.current?.click();
 
   const analyzeCard = useCallback(async () => {
     if (!currentFile) return;
@@ -393,10 +395,16 @@ export default function ScannerPage() {
 
         <div className="space-y-3 pt-2">
           {phase === 'idle' && (
-            <button onClick={openCamera} className="w-full bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-2xl py-4 font-semibold flex items-center justify-center gap-2 shadow-lg shadow-blue-900/40 active:scale-95 transition-transform">
-              <Camera className="w-5 h-5" />
-              Escanear carta
-            </button>
+            <div className="space-y-3">
+              <button onClick={openCamera} className="w-full bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-2xl py-4 font-semibold flex items-center justify-center gap-2 shadow-lg shadow-blue-900/40 active:scale-95 transition-transform">
+                <Camera className="w-5 h-5" />
+                Abrir cámara
+              </button>
+              <button onClick={openGallery} className="w-full bg-white/8 border border-white/10 text-gray-300 rounded-2xl py-3.5 font-medium flex items-center justify-center gap-2 active:scale-95 transition-transform">
+                <Search className="w-4 h-4" />
+                Elegir de galería
+              </button>
+            </div>
           )}
           {phase === 'preview' && (
             <div className="flex gap-3">
