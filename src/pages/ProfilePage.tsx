@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Bell, Check, ChevronRight, Globe, LogOut, Settings, Shield } from 'lucide-react';
+import { Bell, Check, ChevronRight, Globe, LogOut, Settings, Shield, DollarSign } from 'lucide-react';
 
 import { Avatar, Button, Card, StatTile } from '@/components/ui';
 import { PageHeader } from '@/layouts';
@@ -9,13 +9,34 @@ import { formatNumber } from '@/utils';
 import { useI18n, type Locale } from '@/i18n';
 import type { ReactNode } from 'react';
 
-/**
- * Profile — collector identity and settings hub.
- *
- * Shows the Telegram avatar + username, collection statistics, and a settings
- * section with a functional language selector. Other settings rows are
- * placeholders for future preferences and account actions.
- */
+const CURRENCIES = [
+  { value: 'EUR', label: 'Euro', symbol: '€', flag: '🇪🇺' },
+  { value: 'USD', label: 'US Dollar', symbol: '$', flag: '🇺🇸' },
+  { value: 'GBP', label: 'British Pound', symbol: '£', flag: '🇬🇧' },
+  { value: 'JPY', label: 'Japanese Yen', symbol: '¥', flag: '🇯🇵' },
+  { value: 'CAD', label: 'Canadian Dollar', symbol: 'C$', flag: '🇨🇦' },
+  { value: 'AUD', label: 'Australian Dollar', symbol: 'A$', flag: '🇦🇺' },
+  { value: 'CHF', label: 'Swiss Franc', symbol: 'CHF', flag: '🇨🇭' },
+  { value: 'BRL', label: 'Real Brasileño', symbol: 'R$', flag: '🇧🇷' },
+  { value: 'MXN', label: 'Peso Mexicano', symbol: 'MX$', flag: '🇲🇽' },
+  { value: 'PLN', label: 'Polish Złoty', symbol: 'zł', flag: '🇵🇱' },
+] as const;
+
+export type Currency = (typeof CURRENCIES)[number]['value'];
+
+function useCurrencyStore() {
+  const [currency, setCurrencyState] = useState<Currency>(() => {
+    return (localStorage.getItem('collectiq-currency') as Currency) ?? 'EUR';
+  });
+
+  const setCurrency = (c: Currency) => {
+    localStorage.setItem('collectiq-currency', c);
+    setCurrencyState(c);
+  };
+
+  return { currency, setCurrency };
+}
+
 export function ProfilePage() {
   const { isTelegram } = useTelegram();
   const name = useDisplayName();
@@ -29,7 +50,6 @@ export function ProfilePage() {
     <div className="space-y-5 pt-3 animate-fade-in">
       <PageHeader title={t.profile.title} />
 
-      {/* Identity card */}
       <Card variant="glass" padding="lg" className="flex items-center gap-4">
         <Avatar src={telegramUser?.photo_url} name={name} size={72} />
         <div className="min-w-0">
@@ -43,7 +63,6 @@ export function ProfilePage() {
         </div>
       </Card>
 
-      {/* Statistics */}
       <section>
         <h3 className="mb-3 font-display text-base font-semibold text-ink">{t.profile.statistics}</h3>
         <div className="grid grid-cols-3 gap-3">
@@ -51,25 +70,25 @@ export function ProfilePage() {
             <>
               <StatTile label={t.stats.cards} value="—" />
               <StatTile label={t.stats.unique} value="—" />
-              <StatTile label={t.stats.tcgs} value="—" />
+              <StatTile label={t.stats.sets} value="—" />
             </>
           ) : (
             <>
               <StatTile label={t.stats.cards} value={formatNumber(stats.totalItems)} accent="primary" />
               <StatTile label={t.stats.unique} value={formatNumber(stats.uniqueCards)} accent="gold" />
-              <StatTile label={t.stats.tcgs} value={Object.keys(stats.byTcg).length} />
+              <StatTile label={t.stats.sets} value={Object.keys(stats.byTcg).length} />
             </>
           )}
         </div>
       </section>
 
-      {/* Settings */}
       <section>
         <h3 className="mb-3 font-display text-base font-semibold text-ink">{t.profile.settings}</h3>
         <Card padding="none" className="divide-y divide-line-soft">
           <SettingsRow icon={<Settings size={18} />} label={t.profile.preferences} />
           <SettingsRow icon={<Bell size={18} />} label={t.profile.notifications} />
           <LanguageRow />
+          <CurrencyRow />
           <SettingsRow icon={<Shield size={18} />} label={t.profile.privacy} />
         </Card>
       </section>
@@ -156,6 +175,60 @@ function LanguageRow() {
                 {opt.label}
               </span>
               {locale === opt.value && <Check size={16} />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CurrencyRow() {
+  const [open, setOpen] = useState(false);
+  const { currency, setCurrency } = useCurrencyStore();
+  const current = CURRENCIES.find(c => c.value === currency) ?? CURRENCIES[0];
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-surface-3"
+      >
+        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface-3 text-ink-soft">
+          <DollarSign size={18} />
+        </span>
+        <span className="flex-1 text-sm font-medium text-ink">Moneda</span>
+        <span className="text-xs text-ink-muted">{current.flag} {current.value}</span>
+        <ChevronRight
+          size={18}
+          className={`text-ink-faint transition-transform ${open ? 'rotate-90' : ''}`}
+        />
+      </button>
+
+      {open && (
+        <div className="space-y-1 bg-surface-2 px-4 py-2 max-h-64 overflow-y-auto">
+          <p className="mb-2 text-xs text-ink-muted">Elige tu moneda preferida</p>
+          {CURRENCIES.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => {
+                setCurrency(opt.value);
+                setOpen(false);
+              }}
+              className={`flex w-full items-center justify-between rounded-xl px-3 py-3 text-sm font-medium transition-colors ${
+                currency === opt.value
+                  ? 'bg-primary/10 text-primary-soft'
+                  : 'text-ink-soft hover:bg-surface-3'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <span className="text-base">{opt.flag}</span>
+                <span>{opt.label}</span>
+                <span className="text-xs text-ink-muted">{opt.symbol}</span>
+              </span>
+              {currency === opt.value && <Check size={16} />}
             </button>
           ))}
         </div>
