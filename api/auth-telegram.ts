@@ -1,8 +1,6 @@
-import { createHmac } from 'crypto';
-
 export const config = { runtime: 'edge' };
 
-function verifyTelegramData(initData: string, botToken: string): boolean {
+async function verifyTelegramData(initData: string, botToken: string): Promise<boolean> {
   const params = new URLSearchParams(initData);
   const hash = params.get('hash');
   if (!hash) return false;
@@ -13,13 +11,29 @@ function verifyTelegramData(initData: string, botToken: string): boolean {
     .map(([k, v]) => `${k}=${v}`)
     .join('\n');
 
-  const secretKey = createHmac('sha256', 'WebAppData')
-    .update(botToken)
-    .digest();
+  const encoder = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode('WebAppData'),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
 
-  const computedHash = createHmac('sha256', secretKey)
-    .update(dataCheckString)
-    .digest('hex');
+  const secretKey = await crypto.subtle.sign('HMAC', keyMaterial, encoder.encode(botToken));
+
+  const verifyKey = await crypto.subtle.importKey(
+    'raw',
+    secretKey,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+
+  const signature = await crypto.subtle.sign('HMAC', verifyKey, encoder.encode(dataCheckString));
+  const computedHash = Array.from(new Uint8Array(signature))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
 
   return computedHash === hash;
 }
@@ -31,13 +45,13 @@ export default async function handler(req: Request) {
 
   try {
     const { initData } = await req.json();
-    const botToken = process.env.TELEGRAM_BOT_TOKEN ?? '';
+    const botToken = (globalThis as any).process?.env?.TELEGRAM_BOT_TOKEN ?? '';
 
     if (!initData || !botToken) {
       return new Response(JSON.stringify({ error: 'Missing data' }), { status: 400 });
     }
 
-    const isValid = verifyTelegramData(initData, botToken);
+    const isValid = await verifyTelegramData(initData, botToken);
     if (!isValid) {
       return new Response(JSON.stringify({ error: 'Invalid Telegram data' }), { status: 401 });
     }
