@@ -29,7 +29,7 @@ export const en: typeof es = {
     cards: 'Cards',
     unique: 'Unique',
     sets: 'Sets',
-    tcgs: 'TCGs',
+    tcgs: 'Sets',
     total: 'Total',
     favorites: 'Favorites',
     estValue: 'Est. value',
