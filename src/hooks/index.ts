@@ -15,3 +15,4 @@ export {
   useWishlistList,
 } from './use-wishlist';
 export { useInfiniteScroll } from './use-infinite-scroll';
+export { useCurrency } from './use-currency';
