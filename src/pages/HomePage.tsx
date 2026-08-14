@@ -41,13 +41,13 @@ export function HomePage() {
           <p className="text-sm text-ink-soft">{greeting},</p>
           <h1 className="font-display text-2xl font-bold text-ink">{name}</h1>
         </div>
-        <Avatar
-          src={telegramUser?.photo_url}
-          name={name}
-          size={48}
-          className="cursor-pointer"
-          onClick={() => navigate(RoutePaths.Profile)}
-        />
+        <div onClick={() => navigate(RoutePaths.Profile)} className="cursor-pointer">
+          <Avatar
+            src={telegramUser?.photo_url}
+            name={name}
+            size={48}
+          />
+        </div>
       </header>
 
       {totalValue > 0 && (
