@@ -1,3 +1,51 @@
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  Compass,
+  Loader2,
+  SearchX,
+  Plus,
+  CheckCircle2,
+  Search,
+  TrendingUp,
+  Heart,
+} from 'lucide-react';
+import { RoutePaths } from '@/config';
+import { cx } from '@/utils';
+import { useCreateCollectionItem, useCollectionList } from '@/hooks/use-collection';
+import { useCreateWishlistItem, useWishlistList } from '@/hooks/use-wishlist';
+import { useUserStore } from '@/store';
+
+interface PokemonCard {
+  id: string;
+  name: string;
+  number: string;
+  rarity?: string;
+  images: { small: string; large: string };
+  set: { id: string; name: string; series: string; releaseDate?: string; total?: number };
+  cardmarket?: { prices?: { averageSellPrice?: number } };
+  tcgplayer?: { prices?: { normal?: { market?: number }; holofoil?: { market?: number } } };
+  types?: string[];
+  supertype?: string;
+}
+
+function getRarityColor(rarity?: string): string {
+  if (!rarity) return 'text-gray-500';
+  const r = rarity.toLowerCase();
+  if (r.includes('secret') || r.includes('hyper')) return 'text-yellow-400';
+  if (r.includes('ultra') || r.includes('rainbow')) return 'text-purple-400';
+  if (r.includes('rare')) return 'text-blue-400';
+  return 'text-gray-500';
+}
+
+function getTCGPlayerPrice(card: PokemonCard): number | null {
+  const prices = card.tcgplayer?.prices;
+  if (!prices) return null;
+  return prices.holofoil?.market ?? prices.normal?.market ?? null;
+}
+
+const POKEMON_API_KEY = import.meta.env.VITE_POKEMONTCG_API_KEY ?? '';
+
 async function searchCards(query: string, page: number): Promise<{ cards: PokemonCard[]; total: number }> {
   const q = query.trim()
     ? `name:"*${query.trim()}*"`
@@ -9,7 +57,7 @@ async function searchCards(query: string, page: number): Promise<{ cards: Pokemo
     try {
       const res = await fetch(url, {
         headers: {
-          'X-Api-Key': import.meta.env.VITE_POKEMONTCG_API_KEY ?? '',
+          'X-Api-Key': POKEMON_API_KEY,
         },
       });
       if (res.status === 429 || res.status === 500 || res.status === 503) {
@@ -25,4 +73,322 @@ async function searchCards(query: string, page: number): Promise<{ cards: Pokemo
     }
   }
   return { cards: [], total: 0 };
+}
+
+export function ExplorerPage() {
+  const [query, setQuery] = useState('');
+  const [cards, setCards] = useState<PokemonCard[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [error, setError] = useState('');
+  const [statusMsg, setStatusMsg] = useState('');
+  const navigate = useNavigate();
+  const searchTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const cache = useRef<Map<string, { cards: PokemonCard[]; total: number }>>(new Map());
+
+  const { data: collectionCards = [] } = useCollectionList();
+  const { data: wishlistItems = [] } = useWishlistList();
+  const { mutate: createItem } = useCreateCollectionItem();
+  const { mutate: createWishlistItem } = useCreateWishlistItem();
+  const telegramUser = useUserStore((s) => s.telegramUser);
+
+  const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
+  const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    setAddedIds(new Set(collectionCards.map(c => c.cardId)));
+  }, [collectionCards]);
+
+  useEffect(() => {
+    setWishlistIds(new Set(wishlistItems.map(w => w.cardId)));
+  }, [wishlistItems]);
+
+  const doSearch = useCallback(async (q: string, p: number, append: boolean) => {
+    const cacheKey = `${q}-${p}`;
+    if (append) setIsLoadingMore(true);
+    else setIsLoading(true);
+    setError('');
+
+    try {
+      let result;
+      if (cache.current.has(cacheKey)) {
+        result = cache.current.get(cacheKey)!;
+      } else {
+        result = await searchCards(q, p);
+        cache.current.set(cacheKey, result);
+      }
+      setTotal(result.total);
+      setCards(prev => append ? [...prev, ...result.cards] : result.cards);
+      setHasMore(result.cards.length === 20);
+      setPage(p);
+    } catch (err: any) {
+      setError('La API de cartas está temporalmente inactiva. Toca Reintentar.');
+    } finally {
+      setIsLoading(false);
+      setIsLoadingMore(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    doSearch('', 1, false);
+  }, []);
+
+  useEffect(() => {
+    clearTimeout(searchTimeout.current);
+    searchTimeout.current = setTimeout(() => {
+      doSearch(query, 1, false);
+    }, 800);
+    return () => clearTimeout(searchTimeout.current);
+  }, [query]);
+
+  useEffect(() => {
+    if (!sentinelRef.current || !hasMore) return;
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries[0].isIntersecting && !isLoadingMore) {
+          doSearch(query, page + 1, true);
+        }
+      },
+      { threshold: 0.1 }
+    );
+    observer.observe(sentinelRef.current);
+    return () => observer.disconnect();
+  }, [hasMore, isLoadingMore, page, query]);
+
+  const handleAdd = (card: PokemonCard) => {
+    if (!telegramUser?.id) return;
+    const tcgplayerPrice = getTCGPlayerPrice(card);
+    const marketPrice = card.cardmarket?.prices?.averageSellPrice ?? null;
+    createItem({
+      cardId: card.id,
+      tcg: 'pokemon',
+      telegramUserId: telegramUser.id,
+      cardName: card.name,
+      setName: card.set.name,
+      cardNumber: card.number,
+      rarity: card.rarity ?? null,
+      imageUrl: card.images.small,
+      quantity: 1,
+      favorite: false,
+      setTotal: card.set.total ?? null,
+      marketPrice,
+      tcgplayerPrice,
+      currency: 'EUR',
+    });
+    setAddedIds(prev => new Set([...prev, card.id]));
+    setStatusMsg(`✅ ${card.name} añadida a tu colección`);
+    setTimeout(() => setStatusMsg(''), 2500);
+  };
+
+  const handleWishlist = (card: PokemonCard) => {
+    if (!telegramUser?.id) return;
+    createWishlistItem({
+      cardId: card.id,
+      tcg: 'pokemon',
+      telegramUserId: telegramUser.id,
+      cardName: card.name,
+      setName: card.set.name,
+      cardNumber: card.number,
+      rarity: card.rarity ?? null,
+      imageUrl: card.images.small,
+      setTotal: card.set.total ?? null,
+    } as any);
+    setWishlistIds(prev => new Set([...prev, card.id]));
+    setStatusMsg(`❤️ ${card.name} añadida a tu wishlist`);
+    setTimeout(() => setStatusMsg(''), 2500);
+  };
+
+  return (
+    <div className="flex flex-col min-h-screen bg-[#0a0a0f] text-white pb-24">
+
+      <div className="px-4 pt-6 pb-4">
+        <p className="text-[10px] text-blue-400 font-bold uppercase tracking-[0.2em]">COLLECTIQ</p>
+        <h1 className="text-2xl font-bold">Explorador</h1>
+        <p className="text-sm text-gray-500">Descubre y añade cartas a tu colección</p>
+      </div>
+
+      <div className="px-4 pb-4">
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+          <input
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Buscar carta por nombre…"
+            className="w-full bg-white/5 border border-white/10 rounded-2xl pl-11 pr-4 py-3.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50"
+          />
+          {isLoading && (
+            <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-400 animate-spin" />
+          )}
+        </div>
+      </div>
+
+      {statusMsg && (
+        <div className="mx-4 mb-3 bg-blue-500/10 border border-blue-500/30 rounded-2xl px-4 py-3 text-sm text-blue-300 text-center">
+          {statusMsg}
+        </div>
+      )}
+
+      {!isLoading && cards.length > 0 && (
+        <div className="px-4 pb-2 flex items-center gap-2">
+          <TrendingUp className="w-3.5 h-3.5 text-gray-500" />
+          <span className="text-xs text-gray-500">
+            {query.trim()
+              ? `${total.toLocaleString()} resultados para "${query.trim()}"`
+              : 'Cartas más recientes'
+            }
+          </span>
+        </div>
+      )}
+
+      <div className="flex-1 px-4">
+
+        {isLoading && (
+          <div className="grid grid-cols-2 gap-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="bg-[#111118] border border-white/8 rounded-2xl overflow-hidden">
+                <div className="aspect-[2/3] bg-white/5 animate-pulse" />
+                <div className="p-2.5 space-y-2">
+                  <div className="h-3 bg-white/5 rounded animate-pulse w-3/4" />
+                  <div className="h-2.5 bg-white/5 rounded animate-pulse w-1/2" />
+                  <div className="h-7 bg-white/5 rounded-xl animate-pulse mt-2" />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {error && !isLoading && (
+          <div className="text-center py-12">
+            <p className="text-red-400 text-sm">{error}</p>
+            <button
+              onClick={() => doSearch(query, 1, false)}
+              className="mt-3 text-xs text-blue-400 underline"
+            >
+              Reintentar
+            </button>
+          </div>
+        )}
+
+        {!isLoading && !error && cards.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center">
+              {query.trim()
+                ? <SearchX size={28} className="text-gray-600" />
+                : <Compass size={28} className="text-gray-600" />
+              }
+            </div>
+            <div>
+              <p className="text-white font-semibold">
+                {query.trim() ? 'No se encontraron cartas' : 'Empieza a explorar'}
+              </p>
+              <p className="text-sm text-gray-500 mt-1">
+                {query.trim()
+                  ? `No hay resultados para "${query.trim()}"`
+                  : 'Escribe el nombre de una carta para buscarla'
+                }
+              </p>
+            </div>
+          </div>
+        )}
+
+        {!isLoading && !error && cards.length > 0 && (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              {cards.map(card => (
+                <div key={card.id} className="bg-[#111118] border border-white/8 rounded-2xl overflow-hidden">
+                  <div
+                    onClick={() => navigate(`${RoutePaths.Explorer}/card/${card.id}`)}
+                    className="cursor-pointer"
+                  >
+                    <img
+                      src={card.images.small}
+                      alt={card.name}
+                      className="w-full aspect-[2/3] object-cover"
+                      loading="lazy"
+                    />
+                  </div>
+                  <div className="p-2.5 space-y-1.5">
+                    <p className="text-xs font-bold truncate">{card.name}</p>
+                    <p className="text-[10px] text-gray-500 truncate">{card.set.name}</p>
+                    {card.rarity && (
+                      <p className={cx('text-[10px] truncate font-medium', getRarityColor(card.rarity))}>
+                        {card.rarity
+                          .replace('Common', 'Común')
+                          .replace('Uncommon', 'Infrecuente')
+                          .replace('Rare', 'Rara')
+                          .replace('Ultra Rare', 'Ultra Rara')
+                          .replace('Secret Rare', 'Secreta')
+                          .replace('Hyper Rare', 'Hiper Rara')
+                          .replace('Double Rare', 'Doble Rara')
+                          .replace('Illustration Rare', 'Ilustración Rara')
+                          .replace('Special Illustration Rare', 'Ilustración Especial')
+                        }
+                      </p>
+                    )}
+                    {card.cardmarket?.prices?.averageSellPrice && (
+                      <p className="text-[10px] text-green-400 font-medium">
+                        €{card.cardmarket.prices.averageSellPrice.toFixed(2)}
+                      </p>
+                    )}
+                    {!card.cardmarket?.prices?.averageSellPrice && getTCGPlayerPrice(card) && (
+                      <p className="text-[10px] text-green-400 font-medium">
+                        ${getTCGPlayerPrice(card)?.toFixed(2)}
+                      </p>
+                    )}
+                    <button
+                      onClick={() => handleAdd(card)}
+                      disabled={addedIds.has(card.id)}
+                      className={cx(
+                        'w-full mt-1 rounded-xl py-2 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all',
+                        addedIds.has(card.id)
+                          ? 'bg-green-500/20 text-green-400 cursor-default'
+                          : 'bg-blue-600 hover:bg-blue-500 text-white active:scale-95',
+                      )}
+                    >
+                      {addedIds.has(card.id)
+                        ? <><CheckCircle2 className="w-3 h-3" /> Añadida</>
+                        : <><Plus className="w-3 h-3" /> Añadir</>
+                      }
+                    </button>
+                    <button
+                      onClick={() => handleWishlist(card)}
+                      disabled={wishlistIds.has(card.id) || addedIds.has(card.id)}
+                      className={cx(
+                        'w-full rounded-xl py-2 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all',
+                        wishlistIds.has(card.id) || addedIds.has(card.id)
+                          ? 'bg-pink-500/10 text-pink-400 cursor-default'
+                          : 'bg-white/5 border border-white/10 text-gray-400 active:scale-95',
+                      )}
+                    >
+                      <Heart className="w-3 h-3" />
+                      {wishlistIds.has(card.id) ? 'En wishlist' : 'Wishlist'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div ref={sentinelRef} className="h-4 w-full" />
+
+            {isLoadingMore && (
+              <div className="flex items-center justify-center gap-2 py-4 text-sm text-gray-500">
+                <Loader2 size={16} className="animate-spin" />
+                Cargando más cartas…
+              </div>
+            )}
+
+            {!hasMore && cards.length > 0 && (
+              <p className="text-center text-xs text-gray-600 py-4">
+                — Fin de los resultados —
+              </p>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
 }
