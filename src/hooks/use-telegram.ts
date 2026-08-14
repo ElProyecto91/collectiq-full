@@ -6,18 +6,21 @@ import { useAppStore } from '@/store';
 import { useUserStore } from '@/store';
 import type { TelegramUser } from '@/types';
 
-/**
- * Telegram integration hook.
- *
- * Detects the Telegram WebApp on mount, initializes it for display, and loads
- * the Telegram user into the user store. Outside Telegram in development, a
- * synthetic dev user is loaded instead so the app behaves identically to a
- * real Telegram session. In production builds, the dev-user branch is
- * tree-shaken out by Vite's `import.meta.env.DEV` flag.
- *
- * Returns a snapshot so components can branch on `isTelegram` without
- * re-reading the SDK.
- */
+async function verifyTelegramUser(initData: string): Promise<TelegramUser | null> {
+  try {
+    const res = await fetch('/api/auth-telegram', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initData }),
+    });
+    if (!res.ok) return null;
+    const { user } = await res.json();
+    return user ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function useTelegram() {
   const isTelegram = useAppStore((s) => s.isTelegram);
   const setIsTelegram = useAppStore((s) => s.setIsTelegram);
@@ -30,8 +33,11 @@ export function useTelegram() {
 
     if (inside) {
       const webApp = initTelegramWebApp();
+      const initData = webApp?.initData ?? '';
       const tgUser = webApp?.initDataUnsafe?.user ?? null;
+
       if (tgUser) {
+        // Usar datos locales inmediatamente para UX rápida
         const normalized: TelegramUser = {
           id: tgUser.id,
           first_name: tgUser.first_name,
@@ -42,14 +48,22 @@ export function useTelegram() {
           is_premium: tgUser.is_premium,
         };
         setTelegramUser(normalized);
+
+        // Verificar en segundo plano con el servidor
+        if (initData) {
+          verifyTelegramUser(initData).then(verifiedUser => {
+            if (verifiedUser) {
+              setTelegramUser({
+                ...normalized,
+                ...verifiedUser,
+              });
+            }
+          });
+        }
         return;
       }
     }
 
-    // No real Telegram user found — load the dev user in development so the
-    // app works. This also covers the case where the Telegram SDK stub is
-    // present (from index.html) but no actual Telegram session exists, which
-    // is exactly what happens in Bolt Preview.
     if (isDevelopmentMode()) {
       const devUser = getDevUser();
       if (devUser) setTelegramUser(devUser);
