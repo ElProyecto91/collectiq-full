@@ -12,6 +12,7 @@ import {
   AlertCircle,
   Plus,
   Loader2,
+  PenLine,
 } from 'lucide-react';
 import { RoutePaths } from '@/config';
 import { cx } from '@/utils';
@@ -29,7 +30,7 @@ interface PokemonCard {
   tcgplayer?: { prices?: { normal?: { market?: number }; holofoil?: { market?: number } } };
 }
 
-type ScanPhase = 'idle' | 'preview' | 'analyzing' | 'results' | 'error';
+type ScanPhase = 'idle' | 'preview' | 'analyzing' | 'results' | 'no-results' | 'error';
 
 const POKEMON_API_KEY = import.meta.env.VITE_POKEMONTCG_API_KEY ?? '';
 
@@ -42,16 +43,18 @@ async function toBase64(file: File): Promise<string> {
   });
 }
 
-function extractCardName(fullText: string): string {
+function extractCardName(fullText: string): string[] {
   const lines = fullText.split('\n').map(l => l.trim()).filter(Boolean);
   const skipPrefixes = [
     'FASE', 'FASE2', 'FASE 2', 'BASIC', 'STAGE', 'LEVEL', 'ITEM',
     'TRAINER', 'ENERGY', 'HP', 'PS', 'GX', 'EX', 'BASICO', 'BÁSICO',
     'HOLOGRAPHIC', 'POKEMON', 'POKÉMON', 'SUPPORTER', 'TOOL',
-    'VMAX', 'VSTAR', 'TAG', 'TEAM',
+    'VMAX', 'VSTAR', 'TAG', 'TEAM', 'EASE',
   ];
 
-  for (const line of lines.slice(0, 8)) {
+  const candidates: string[] = [];
+
+  for (const line of lines.slice(0, 12)) {
     let cleaned = line.replace(/[^a-zA-ZÀ-ÿ\s\-]/g, '').trim();
     for (const prefix of skipPrefixes) {
       const regex = new RegExp(`^${prefix}\\s*`, 'i');
@@ -64,13 +67,14 @@ function extractCardName(fullText: string): string {
       !cleaned.match(/^\d+$/) &&
       /[a-zA-Z]/.test(cleaned)
     ) {
-      return cleaned;
+      candidates.push(cleaned);
     }
   }
-  return lines[0]?.replace(/[^a-zA-ZÀ-ÿ\s\-]/g, '').trim() ?? '';
+
+  return candidates;
 }
 
-async function extractCardNameWithVision(base64: string): Promise<string> {
+async function extractCardNameWithVision(base64: string): Promise<{ names: string[]; rawText: string }> {
   const res = await fetch('/api/vision', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -84,7 +88,7 @@ async function extractCardNameWithVision(base64: string): Promise<string> {
 
   const data = await res.json();
   if (!data.text) throw new Error('No se detectó texto en la imagen');
-  return extractCardName(data.text);
+  return { names: extractCardName(data.text), rawText: data.text };
 }
 
 function getTCGPlayerPrice(card: PokemonCard): number | null {
@@ -174,24 +178,41 @@ export default function ScannerPage() {
       setProgress(50);
       setStatusMsg('Leyendo texto de la carta…');
 
-      const name = await extractCardNameWithVision(base64);
+      const { names } = await extractCardNameWithVision(base64);
       setProgress(70);
 
-      if (!name) {
-        setStatusMsg('No se detectó nombre. Escríbelo manualmente.');
-        setPhase('preview');
+      if (names.length === 0) {
+        setDetectedName('');
+        setSearchQuery('');
+        setResults([]);
+        setPhase('no-results');
         return;
       }
 
-      setDetectedName(name);
-      setSearchQuery(name);
-      setStatusMsg(`Buscando "${name}"…`);
-      setProgress(85);
+      // Intentar con cada candidato hasta encontrar resultados
+      let cards: PokemonCard[] = [];
+      let usedName = '';
 
-      const cards = await searchPokemonTCG(name);
+      for (const name of names) {
+        setStatusMsg(`Buscando "${name}"…`);
+        setProgress(70 + (names.indexOf(name) * 10));
+        cards = await searchPokemonTCG(name);
+        if (cards.length > 0) {
+          usedName = name;
+          break;
+        }
+      }
+
       setProgress(100);
+      setDetectedName(usedName || names[0]);
+      setSearchQuery(usedName || names[0]);
       setResults(cards);
-      setPhase('results');
+
+      if (cards.length === 0) {
+        setPhase('no-results');
+      } else {
+        setPhase('results');
+      }
     } catch (err: any) {
       const msg = err?.message ?? '';
       if (msg.includes('fetch') || msg.includes('500') || msg.includes('503') || msg.includes('PokéTCG')) {
@@ -212,7 +233,11 @@ export default function ScannerPage() {
       const cards = await searchPokemonTCG(searchQuery.trim());
       setProgress(100);
       setResults(cards);
-      setPhase('results');
+      if (cards.length === 0) {
+        setPhase('no-results');
+      } else {
+        setPhase('results');
+      }
     } catch (err: any) {
       setErrorMsg('La base de datos oficial de Pokémon está caída o en mantenimiento en este momento. Por favor, inténtalo de nuevo en unos minutos.');
       setPhase('error');
@@ -330,7 +355,22 @@ export default function ScannerPage() {
           </div>
         )}
 
-        {(phase === 'preview' || phase === 'results') && (
+        {phase === 'no-results' && (
+          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-2xl p-4 flex items-start gap-3">
+            <PenLine className="w-5 h-5 text-yellow-400 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm text-yellow-300 font-medium">No encontramos la carta</p>
+              <p className="text-xs text-yellow-400/70 mt-1">
+                {detectedName
+                  ? `Detectamos "${detectedName}" pero no hay resultados. Corrige el nombre abajo.`
+                  : 'No detectamos el nombre. Escríbelo manualmente abajo.'
+                }
+              </p>
+            </div>
+          </div>
+        )}
+
+        {(phase === 'preview' || phase === 'results' || phase === 'no-results') && (
           <div className="flex gap-2">
             <input
               value={searchQuery}
@@ -338,6 +378,7 @@ export default function ScannerPage() {
               onKeyDown={(e) => e.key === 'Enter' && manualSearch()}
               placeholder="Nombre de la carta…"
               className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50"
+              autoFocus={phase === 'no-results'}
             />
             <button onClick={manualSearch} className="bg-blue-600 hover:bg-blue-500 rounded-xl px-4 flex items-center justify-center transition-colors">
               <Search className="w-4 h-4" />
@@ -352,54 +393,47 @@ export default function ScannerPage() {
           </div>
         )}
 
-        {phase === 'results' && (
-          results.length === 0 ? (
-            <div className="text-center py-12 text-gray-600 text-sm">
-              <ScanLine className="w-10 h-10 mx-auto mb-3 opacity-30" />
-              No se encontraron cartas. Prueba editando el nombre.
-            </div>
-          ) : (
-            <>
-              <p className="text-xs text-gray-500">{results.length} resultado{results.length !== 1 ? 's' : ''}</p>
-              <div className="grid grid-cols-2 gap-3">
-                {results.map((card) => (
-                  <div key={card.id} className="bg-[#111118] border border-white/8 rounded-2xl overflow-hidden">
-                    <div className="relative">
-                      <img src={card.images.small} alt={card.name} className="w-full aspect-[2/3] object-cover" />
-                      {addedIds.has(card.id) && (
-                        <div className="absolute inset-0 bg-green-500/20 flex items-center justify-center">
-                          <CheckCircle2 className="w-8 h-8 text-green-400" />
-                        </div>
-                      )}
-                    </div>
-                    <div className="p-2.5 space-y-1.5">
-                      <p className="text-xs font-bold truncate">{card.name}</p>
-                      <p className="text-[10px] text-gray-500 truncate">{card.set.name}</p>
-                      {card.rarity && (
-                        <p className={cx('text-[10px] truncate font-medium', getRarityColor(card.rarity))}>{card.rarity}</p>
-                      )}
-                      {card.cardmarket?.prices?.averageSellPrice && (
-                        <p className="text-[10px] text-green-400 font-medium">€{card.cardmarket.prices.averageSellPrice.toFixed(2)}</p>
-                      )}
-                      {!card.cardmarket?.prices?.averageSellPrice && getTCGPlayerPrice(card) && (
-                        <p className="text-[10px] text-green-400 font-medium">${getTCGPlayerPrice(card)?.toFixed(2)}</p>
-                      )}
-                      <button
-                        onClick={() => addCard(card)}
-                        disabled={addedIds.has(card.id)}
-                        className={cx(
-                          'w-full mt-1 rounded-xl py-2 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all',
-                          addedIds.has(card.id) ? 'bg-green-500/20 text-green-400 cursor-default' : 'bg-blue-600 hover:bg-blue-500 text-white active:scale-95',
-                        )}
-                      >
-                        {addedIds.has(card.id) ? <><CheckCircle2 className="w-3 h-3" /> Añadida</> : <><Plus className="w-3 h-3" /> Añadir</>}
-                      </button>
-                    </div>
+        {phase === 'results' && results.length > 0 && (
+          <>
+            <p className="text-xs text-gray-500">{results.length} resultado{results.length !== 1 ? 's' : ''}</p>
+            <div className="grid grid-cols-2 gap-3">
+              {results.map((card) => (
+                <div key={card.id} className="bg-[#111118] border border-white/8 rounded-2xl overflow-hidden">
+                  <div className="relative">
+                    <img src={card.images.small} alt={card.name} className="w-full aspect-[2/3] object-cover" />
+                    {addedIds.has(card.id) && (
+                      <div className="absolute inset-0 bg-green-500/20 flex items-center justify-center">
+                        <CheckCircle2 className="w-8 h-8 text-green-400" />
+                      </div>
+                    )}
                   </div>
-                ))}
-              </div>
-            </>
-          )
+                  <div className="p-2.5 space-y-1.5">
+                    <p className="text-xs font-bold truncate">{card.name}</p>
+                    <p className="text-[10px] text-gray-500 truncate">{card.set.name}</p>
+                    {card.rarity && (
+                      <p className={cx('text-[10px] truncate font-medium', getRarityColor(card.rarity))}>{card.rarity}</p>
+                    )}
+                    {card.cardmarket?.prices?.averageSellPrice && (
+                      <p className="text-[10px] text-green-400 font-medium">€{card.cardmarket.prices.averageSellPrice.toFixed(2)}</p>
+                    )}
+                    {!card.cardmarket?.prices?.averageSellPrice && getTCGPlayerPrice(card) && (
+                      <p className="text-[10px] text-green-400 font-medium">${getTCGPlayerPrice(card)?.toFixed(2)}</p>
+                    )}
+                    <button
+                      onClick={() => addCard(card)}
+                      disabled={addedIds.has(card.id)}
+                      className={cx(
+                        'w-full mt-1 rounded-xl py-2 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all',
+                        addedIds.has(card.id) ? 'bg-green-500/20 text-green-400 cursor-default' : 'bg-blue-600 hover:bg-blue-500 text-white active:scale-95',
+                      )}
+                    >
+                      {addedIds.has(card.id) ? <><CheckCircle2 className="w-3 h-3" /> Añadida</> : <><Plus className="w-3 h-3" /> Añadir</>}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
 
         <div className="space-y-3 pt-2">
@@ -445,7 +479,7 @@ export default function ScannerPage() {
               </button>
             </div>
           )}
-          {phase === 'results' && (
+          {(phase === 'results' || phase === 'no-results') && (
             <div className="flex gap-3">
               <button onClick={openCamera} className="flex-1 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-2xl py-3.5 font-semibold flex items-center justify-center gap-2 active:scale-95 transition-transform">
                 <Camera className="w-4 h-4" />
