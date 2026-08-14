@@ -15,6 +15,7 @@ import { cx } from '@/utils';
 import { useCreateCollectionItem, useCollectionList } from '@/hooks/use-collection';
 import { useCreateWishlistItem, useWishlistList } from '@/hooks/use-wishlist';
 import { useUserStore } from '@/store';
+import { useCurrency } from '@/hooks/use-currency';
 
 interface PokemonCard {
   id: string;
@@ -56,9 +57,7 @@ async function searchCards(query: string, page: number): Promise<{ cards: Pokemo
   for (let i = 0; i < 4; i++) {
     try {
       const res = await fetch(url, {
-        headers: {
-          'X-Api-Key': POKEMON_API_KEY,
-        },
+        headers: { 'X-Api-Key': POKEMON_API_KEY },
       });
       if (res.status === 429 || res.status === 500 || res.status === 503) {
         await new Promise(r => setTimeout(r, 1500 * (i + 1)));
@@ -95,6 +94,7 @@ export function ExplorerPage() {
   const { mutate: createItem } = useCreateCollectionItem();
   const { mutate: createWishlistItem } = useCreateWishlistItem();
   const telegramUser = useUserStore((s) => s.telegramUser);
+  const { formatPrice } = useCurrency();
 
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
@@ -126,7 +126,7 @@ export function ExplorerPage() {
       setHasMore(result.cards.length === 20);
       setPage(p);
     } catch (err: any) {
-      setError('La API de cartas está temporalmente inactiva. Toca Reintentar.');
+      setError('La base de datos oficial de Pokémon está caída o en mantenimiento. Inténtalo de nuevo en unos minutos.');
     } finally {
       setIsLoading(false);
       setIsLoadingMore(false);
@@ -298,78 +298,79 @@ export function ExplorerPage() {
         {!isLoading && !error && cards.length > 0 && (
           <>
             <div className="grid grid-cols-2 gap-3">
-              {cards.map(card => (
-                <div key={card.id} className="bg-[#111118] border border-white/8 rounded-2xl overflow-hidden">
-                  <div
-                    onClick={() => navigate(`${RoutePaths.Explorer}/card/${card.id}`)}
-                    className="cursor-pointer"
-                  >
-                    <img
-                      src={card.images.small}
-                      alt={card.name}
-                      className="w-full aspect-[2/3] object-cover"
-                      loading="lazy"
-                    />
-                  </div>
-                  <div className="p-2.5 space-y-1.5">
-                    <p className="text-xs font-bold truncate">{card.name}</p>
-                    <p className="text-[10px] text-gray-500 truncate">{card.set.name}</p>
-                    {card.rarity && (
-                      <p className={cx('text-[10px] truncate font-medium', getRarityColor(card.rarity))}>
-                        {card.rarity
-                          .replace('Common', 'Común')
-                          .replace('Uncommon', 'Infrecuente')
-                          .replace('Rare', 'Rara')
-                          .replace('Ultra Rare', 'Ultra Rara')
-                          .replace('Secret Rare', 'Secreta')
-                          .replace('Hyper Rare', 'Hiper Rara')
-                          .replace('Double Rare', 'Doble Rara')
-                          .replace('Illustration Rare', 'Ilustración Rara')
-                          .replace('Special Illustration Rare', 'Ilustración Especial')
+              {cards.map(card => {
+                const cardmarketPrice = card.cardmarket?.prices?.averageSellPrice ?? null;
+                const tcgPrice = getTCGPlayerPrice(card);
+                const price = cardmarketPrice ?? tcgPrice;
+
+                return (
+                  <div key={card.id} className="bg-[#111118] border border-white/8 rounded-2xl overflow-hidden">
+                    <div
+                      onClick={() => navigate(`${RoutePaths.Explorer}/card/${card.id}`)}
+                      className="cursor-pointer"
+                    >
+                      <img
+                        src={card.images.small}
+                        alt={card.name}
+                        className="w-full aspect-[2/3] object-cover"
+                        loading="lazy"
+                      />
+                    </div>
+                    <div className="p-2.5 space-y-1.5">
+                      <p className="text-xs font-bold truncate">{card.name}</p>
+                      <p className="text-[10px] text-gray-500 truncate">{card.set.name}</p>
+                      {card.rarity && (
+                        <p className={cx('text-[10px] truncate font-medium', getRarityColor(card.rarity))}>
+                          {card.rarity
+                            .replace('Common', 'Común')
+                            .replace('Uncommon', 'Infrecuente')
+                            .replace('Rare', 'Rara')
+                            .replace('Ultra Rare', 'Ultra Rara')
+                            .replace('Secret Rare', 'Secreta')
+                            .replace('Hyper Rare', 'Hiper Rara')
+                            .replace('Double Rare', 'Doble Rara')
+                            .replace('Illustration Rare', 'Ilustración Rara')
+                            .replace('Special Illustration Rare', 'Ilustración Especial')
+                          }
+                        </p>
+                      )}
+                      {price && (
+                        <p className="text-[10px] text-green-400 font-medium">
+                          {formatPrice(price)}
+                        </p>
+                      )}
+                      <button
+                        onClick={() => handleAdd(card)}
+                        disabled={addedIds.has(card.id)}
+                        className={cx(
+                          'w-full mt-1 rounded-xl py-2 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all',
+                          addedIds.has(card.id)
+                            ? 'bg-green-500/20 text-green-400 cursor-default'
+                            : 'bg-blue-600 hover:bg-blue-500 text-white active:scale-95',
+                        )}
+                      >
+                        {addedIds.has(card.id)
+                          ? <><CheckCircle2 className="w-3 h-3" /> Añadida</>
+                          : <><Plus className="w-3 h-3" /> Añadir</>
                         }
-                      </p>
-                    )}
-                    {card.cardmarket?.prices?.averageSellPrice && (
-                      <p className="text-[10px] text-green-400 font-medium">
-                        €{card.cardmarket.prices.averageSellPrice.toFixed(2)}
-                      </p>
-                    )}
-                    {!card.cardmarket?.prices?.averageSellPrice && getTCGPlayerPrice(card) && (
-                      <p className="text-[10px] text-green-400 font-medium">
-                        ${getTCGPlayerPrice(card)?.toFixed(2)}
-                      </p>
-                    )}
-                    <button
-                      onClick={() => handleAdd(card)}
-                      disabled={addedIds.has(card.id)}
-                      className={cx(
-                        'w-full mt-1 rounded-xl py-2 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all',
-                        addedIds.has(card.id)
-                          ? 'bg-green-500/20 text-green-400 cursor-default'
-                          : 'bg-blue-600 hover:bg-blue-500 text-white active:scale-95',
-                      )}
-                    >
-                      {addedIds.has(card.id)
-                        ? <><CheckCircle2 className="w-3 h-3" /> Añadida</>
-                        : <><Plus className="w-3 h-3" /> Añadir</>
-                      }
-                    </button>
-                    <button
-                      onClick={() => handleWishlist(card)}
-                      disabled={wishlistIds.has(card.id) || addedIds.has(card.id)}
-                      className={cx(
-                        'w-full rounded-xl py-2 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all',
-                        wishlistIds.has(card.id) || addedIds.has(card.id)
-                          ? 'bg-pink-500/10 text-pink-400 cursor-default'
-                          : 'bg-white/5 border border-white/10 text-gray-400 active:scale-95',
-                      )}
-                    >
-                      <Heart className="w-3 h-3" />
-                      {wishlistIds.has(card.id) ? 'En wishlist' : 'Wishlist'}
-                    </button>
+                      </button>
+                      <button
+                        onClick={() => handleWishlist(card)}
+                        disabled={wishlistIds.has(card.id) || addedIds.has(card.id)}
+                        className={cx(
+                          'w-full rounded-xl py-2 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all',
+                          wishlistIds.has(card.id) || addedIds.has(card.id)
+                            ? 'bg-pink-500/10 text-pink-400 cursor-default'
+                            : 'bg-white/5 border border-white/10 text-gray-400 active:scale-95',
+                        )}
+                      >
+                        <Heart className="w-3 h-3" />
+                        {wishlistIds.has(card.id) ? 'En wishlist' : 'Wishlist'}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <div ref={sentinelRef} className="h-4 w-full" />
