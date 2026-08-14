@@ -1,0 +1,22 @@
+{
+  "name": "CollectIQ",
+  "short_name": "CollectIQ",
+  "description": "Tu colección de cartas Pokémon TCG",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#07080c",
+  "theme_color": "#07080c",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
