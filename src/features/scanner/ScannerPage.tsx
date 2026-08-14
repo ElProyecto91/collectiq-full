@@ -24,11 +24,14 @@ interface PokemonCard {
   number: string;
   rarity?: string;
   images: { small: string; large: string };
-  set: { name: string; series: string };
+  set: { name: string; series: string; total?: number };
   cardmarket?: { prices?: { averageSellPrice?: number } };
+  tcgplayer?: { prices?: { normal?: { market?: number }; holofoil?: { market?: number } } };
 }
 
 type ScanPhase = 'idle' | 'preview' | 'analyzing' | 'results' | 'error';
+
+const POKEMON_API_KEY = import.meta.env.VITE_POKEMONTCG_API_KEY ?? '';
 
 async function toBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -84,12 +87,20 @@ async function extractCardNameWithVision(base64: string): Promise<string> {
   return extractCardName(data.text);
 }
 
+function getTCGPlayerPrice(card: PokemonCard): number | null {
+  const prices = card.tcgplayer?.prices;
+  if (!prices) return null;
+  return prices.holofoil?.market ?? prices.normal?.market ?? null;
+}
+
 async function searchPokemonTCG(name: string, retries = 3): Promise<PokemonCard[]> {
   const url = `https://api.pokemontcg.io/v2/cards?q=name:"${encodeURIComponent(name)}"&pageSize=20&orderBy=-set.releaseDate`;
-  
+
   for (let i = 0; i < retries; i++) {
     try {
-      const res = await fetch(url);
+      const res = await fetch(url, {
+        headers: { 'X-Api-Key': POKEMON_API_KEY },
+      });
       if (res.status === 429) {
         await new Promise(r => setTimeout(r, 1000 * (i + 1)));
         continue;
@@ -182,7 +193,12 @@ export default function ScannerPage() {
       setResults(cards);
       setPhase('results');
     } catch (err: any) {
-      setErrorMsg(err?.message ?? 'Error al analizar la carta');
+      const msg = err?.message ?? '';
+      if (msg.includes('fetch') || msg.includes('500') || msg.includes('503') || msg.includes('PokéTCG')) {
+        setErrorMsg('La base de datos oficial de Pokémon está caída o en mantenimiento en este momento. Por favor, inténtalo de nuevo en unos minutos.');
+      } else {
+        setErrorMsg(msg || 'Error al analizar la carta. Inténtalo de nuevo.');
+      }
       setPhase('error');
     }
   }, [currentFile]);
@@ -198,13 +214,15 @@ export default function ScannerPage() {
       setResults(cards);
       setPhase('results');
     } catch (err: any) {
-      setErrorMsg(err?.message ?? 'Error de búsqueda');
+      setErrorMsg('La base de datos oficial de Pokémon está caída o en mantenimiento en este momento. Por favor, inténtalo de nuevo en unos minutos.');
       setPhase('error');
     }
   }, [searchQuery]);
 
   const addCard = (card: PokemonCard) => {
     if (!telegramUser?.id) return;
+    const tcgplayerPrice = getTCGPlayerPrice(card);
+    const marketPrice = card.cardmarket?.prices?.averageSellPrice ?? null;
     createItem({
       cardId: card.id,
       tcg: 'pokemon',
@@ -216,6 +234,10 @@ export default function ScannerPage() {
       imageUrl: card.images.small,
       quantity: 1,
       favorite: false,
+      setTotal: card.set.total ?? null,
+      marketPrice,
+      tcgplayerPrice,
+      currency: 'EUR',
     });
     setAddedIds((prev) => new Set(prev).add(card.id));
     setStatusMsg(`✅ ${card.name} añadida a tu colección`);
@@ -358,6 +380,9 @@ export default function ScannerPage() {
                       )}
                       {card.cardmarket?.prices?.averageSellPrice && (
                         <p className="text-[10px] text-green-400 font-medium">€{card.cardmarket.prices.averageSellPrice.toFixed(2)}</p>
+                      )}
+                      {!card.cardmarket?.prices?.averageSellPrice && getTCGPlayerPrice(card) && (
+                        <p className="text-[10px] text-green-400 font-medium">${getTCGPlayerPrice(card)?.toFixed(2)}</p>
                       )}
                       <button
                         onClick={() => addCard(card)}
