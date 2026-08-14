@@ -1,34 +1,44 @@
 import { useNavigate } from 'react-router-dom';
-import { Compass, Heart, LayoutGrid, ScanLine, Sparkles, TrendingUp, User } from 'lucide-react';
+import { Compass, Heart, LayoutGrid, ScanLine, TrendingUp, User, DollarSign, Trophy, Package } from 'lucide-react';
 
 import { Avatar, Button, Card, StatTile } from '@/components/ui';
-import { useDisplayName, useTelegram } from '@/hooks';
-import { useCollectionStats } from '@/hooks';
+import { useDisplayName, useTelegram, useCollectionStats, useCollectionList } from '@/hooks';
 import { useUserStore } from '@/store';
 import { RoutePaths } from '@/config';
 import { formatNumber } from '@/utils';
 import { useI18n } from '@/i18n';
 import type { ReactNode } from 'react';
 
-/**
- * Home — the collector's landing surface.
- *
- * Greeting (Telegram-aware), the primary scan CTA, quick navigation tiles, a
- * collection statistics snapshot, and a daily tip placeholder. Statistics come
- * from the collection stats query; while it loads, skeletons fill the tiles.
- */
 export function HomePage() {
   const navigate = useNavigate();
   const { isTelegram } = useTelegram();
   const name = useDisplayName();
   const telegramUser = useUserStore((s) => s.telegramUser);
   const { data: stats, isLoading } = useCollectionStats();
+  const { data: cards = [] } = useCollectionList();
   const { t } = useI18n();
 
   const greeting = greetingFor(t);
 
+  // Valor total de la colección
+  const totalValue = cards.reduce((sum, card) => {
+    const price = card.marketPrice ?? card.tcgplayerPrice ?? 0;
+    return sum + price * card.quantity;
+  }, 0);
+
+  // Carta más valiosa
+  const mostValuable = cards.reduce((best, card) => {
+    const price = card.marketPrice ?? card.tcgplayerPrice ?? 0;
+    const bestPrice = best ? (best.marketPrice ?? best.tcgplayerPrice ?? 0) : 0;
+    return price > bestPrice ? card : best;
+  }, cards[0]);
+
+  // Sets únicos
+  const uniqueSets = new Set(cards.map(c => c.setName)).size;
+
   return (
     <div className="space-y-6 bg-gradient-hero -mx-4 px-4 pb-4 pt-3">
+
       {/* Greeting + avatar */}
       <header className="flex items-center justify-between animate-fade-in">
         <div>
@@ -40,8 +50,25 @@ export function HomePage() {
           name={name}
           size={48}
           className="cursor-pointer"
+          onClick={() => navigate(RoutePaths.Profile)}
         />
       </header>
+
+      {/* Valor total */}
+      {totalValue > 0 && (
+        <div
+          onClick={() => navigate(RoutePaths.Collection)}
+          className="bg-gradient-to-r from-blue-600/20 to-purple-600/20 border border-blue-500/20 rounded-2xl p-4 flex items-center gap-4 cursor-pointer animate-fade-up"
+        >
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-500/20">
+            <DollarSign size={24} className="text-blue-400" />
+          </div>
+          <div>
+            <p className="text-xs text-gray-400 uppercase tracking-wider">Valor total</p>
+            <p className="text-2xl font-bold text-white">€{totalValue.toFixed(2)}</p>
+          </div>
+        </div>
+      )}
 
       {/* Hero CTA — scan a card */}
       <Card variant="glass" padding="lg" interactive className="animate-fade-up">
@@ -84,61 +111,44 @@ export function HomePage() {
             <>
               <StatTile label={t.stats.cards} value="—" />
               <StatTile label={t.stats.unique} value="—" />
-              <StatTile label={t.stats.sets} value="—" />
+              <StatTile label="Sets" value="—" />
             </>
           ) : (
             <>
               <StatTile label={t.stats.cards} value={formatNumber(stats.totalItems)} accent="primary" />
               <StatTile label={t.stats.unique} value={formatNumber(stats.uniqueCards)} accent="gold" />
-              <StatTile label={t.stats.tcgs} value={Object.keys(stats.byTcg).length} />
+              <StatTile label="Sets" value={uniqueSets} />
             </>
           )}
         </div>
       </section>
 
-      {/* Daily tip placeholder */}
-      <Card variant="flat" padding="md" className="animate-fade-up">
-        <div className="flex items-start gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent/10 text-accent">
-            <Sparkles size={18} />
+      {/* Carta más valiosa */}
+      {mostValuable && (mostValuable.marketPrice ?? mostValuable.tcgplayerPrice) && (
+        <section className="animate-fade-up">
+          <div className="mb-3 flex items-center gap-2">
+            <Trophy size={16} className="text-yellow-400" />
+            <h2 className="font-display text-base font-semibold text-ink">Carta más valiosa</h2>
           </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-accent">{t.home.dailyTip}</p>
-            <p className="mt-1 text-sm leading-relaxed text-ink-soft">
-              {t.home.dailyTipDesc}
-            </p>
+          <div
+            onClick={() => navigate(RoutePaths.Collection)}
+            className="bg-[#111118] border border-white/8 rounded-2xl p-3 flex items-center gap-3 cursor-pointer"
+          >
+            <img
+              src={mostValuable.imageUrl ?? ''}
+              alt={mostValuable.cardName}
+              className="h-16 w-11 object-cover rounded-lg shrink-0"
+            />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-white truncate">{mostValuable.cardName}</p>
+              <p className="text-xs text-gray-500 truncate">{mostValuable.setName}</p>
+              <p className="text-sm font-bold text-green-400 mt-1">
+                €{(mostValuable.marketPrice ?? mostValuable.tcgplayerPrice ?? 0).toFixed(2)}
+              </p>
+            </div>
           </div>
-        </div>
-      </Card>
+        </section>
+      )}
 
-      {isTelegram === false && <WebFallbackNote />}
-    </div>
-  );
-}
-
-function QuickTile({ icon, label, onClick }: { icon: ReactNode; label: string; onClick: () => void }) {
-  return (
-    <Card interactive padding="md" className="flex items-center gap-3" onClick={onClick} role="button">
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-surface-3 text-primary-soft">
-        {icon}
-      </div>
-      <span className="text-sm font-medium text-ink">{label}</span>
-    </Card>
-  );
-}
-
-function WebFallbackNote() {
-  const { t } = useI18n();
-  return (
-    <p className="pt-2 text-center text-xs text-ink-faint">
-      {t.home.webFallback}
-    </p>
-  );
-}
-
-function greetingFor(t: ReturnType<typeof useI18n>['t']): string {
-  const hour = new Date().getHours();
-  if (hour < 12) return t.home.greeting.morning;
-  if (hour < 18) return t.home.greeting.afternoon;
-  return t.home.greeting.evening;
-}
+      {isTelegram === false && (
+        <p className="
