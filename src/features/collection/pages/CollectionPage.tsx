@@ -3,6 +3,7 @@ import { useState, useCallback } from 'react';
 import { useCollectionList, useUpdateCollectionItem, useDeleteCollectionItem } from '@/hooks/use-collection';
 import { useCreateWishlistItem, useWishlistList } from '@/hooks/use-wishlist';
 import { useUserStore } from '@/store';
+import { useCurrency } from '@/hooks/use-currency';
 import type { CollectionItem } from '@/types';
 
 type SortOption = 'recent' | 'name' | 'value';
@@ -26,6 +27,7 @@ export function CollectionPage() {
   const { mutate: deleteItem } = useDeleteCollectionItem();
   const { mutate: createWishlistItem } = useCreateWishlistItem();
   const telegramUser = useUserStore((s) => s.telegramUser);
+  const { formatPrice } = useCurrency();
 
   const updateEntry = useCallback((id: string, update: Partial<CollectionItem>) => {
     updateItem({ id, update });
@@ -52,6 +54,11 @@ export function CollectionPage() {
     .sort((a, b) => {
       if (sort === 'recent') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       if (sort === 'name') return a.cardName.localeCompare(b.cardName);
+      if (sort === 'value') {
+        const va = a.marketPrice ?? a.tcgplayerPrice ?? 0;
+        const vb = b.marketPrice ?? b.tcgplayerPrice ?? 0;
+        return vb - va;
+      }
       return 0;
     });
 
@@ -161,6 +168,7 @@ export function CollectionPage() {
                   card={card}
                   onUpdate={updateEntry}
                   onRemove={removeEntry}
+                  formatPrice={formatPrice}
                 />
               ))}
             </div>
@@ -268,10 +276,12 @@ function CollectionCard({
   card,
   onUpdate,
   onRemove,
+  formatPrice,
 }: {
   card: CollectionItem;
   onUpdate: (id: string, update: Partial<CollectionItem>) => void;
   onRemove: (id: string) => void;
+  formatPrice: (price: number | null | undefined) => string;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -283,6 +293,8 @@ function CollectionCard({
     }
     onRemove(card.id);
   };
+
+  const price = card.marketPrice ?? card.tcgplayerPrice ?? null;
 
   return (
     <div className="bg-[#111118] border border-white/8 rounded-2xl overflow-hidden flex flex-col">
@@ -313,6 +325,7 @@ function CollectionCard({
         <p className="text-xs font-bold truncate text-white">{card.cardName}</p>
         <p className="text-[10px] text-gray-500 truncate">{card.setName}</p>
         {card.rarity && <p className="text-[10px] text-blue-400 truncate">{card.rarity}</p>}
+        {price && <p className="text-[10px] text-green-400 font-medium">{formatPrice(price)}</p>}
       </div>
 
       <div className="flex items-center justify-between gap-1 px-2.5 pb-2.5">
