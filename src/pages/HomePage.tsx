@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { Compass, Heart, LayoutGrid, ScanLine, TrendingUp, User, DollarSign, Trophy } from 'lucide-react';
 
 import { Avatar, Button, Card, StatTile } from '@/components/ui';
-import { useDisplayName, useTelegram, useCollectionStats, useCollectionList } from '@/hooks';
+import { useDisplayName, useTelegram, useCollectionStats, useCollectionList, useCurrency } from '@/hooks';
 import { useUserStore } from '@/store';
 import { RoutePaths } from '@/config';
 import { formatNumber } from '@/utils';
@@ -17,6 +17,7 @@ export function HomePage() {
   const { data: stats, isLoading } = useCollectionStats();
   const { data: cards = [] } = useCollectionList();
   const { t } = useI18n();
+  const { formatPrice } = useCurrency();
 
   const greeting = greetingFor(t);
 
@@ -60,7 +61,7 @@ export function HomePage() {
           </div>
           <div>
             <p className="text-xs text-gray-400 uppercase tracking-wider">Valor total</p>
-            <p className="text-2xl font-bold text-white">€{totalValue.toFixed(2)}</p>
+            <p className="text-2xl font-bold text-white">{formatPrice(totalValue)}</p>
           </div>
         </div>
       )}
@@ -134,7 +135,7 @@ export function HomePage() {
               <p className="text-sm font-bold text-white truncate">{mostValuable.cardName}</p>
               <p className="text-xs text-gray-500 truncate">{mostValuable.setName}</p>
               <p className="text-sm font-bold text-green-400 mt-1">
-                €{(mostValuable.marketPrice ?? mostValuable.tcgplayerPrice ?? 0).toFixed(2)}
+                {formatPrice(mostValuable.marketPrice ?? mostValuable.tcgplayerPrice ?? 0)}
               </p>
             </div>
           </div>
