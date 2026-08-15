@@ -46,6 +46,12 @@ export function ProfilePage() {
 
   const handle = telegramUser?.username ? `@${telegramUser.username}` : t.profile.noUsername;
 
+  const handleSignOut = () => {
+    localStorage.removeItem('collectiq-session-token');
+    document.cookie = 'collectiq_session=; Path=/; Max-Age=0';
+    window.location.href = '/login';
+  };
+
   return (
     <div className="space-y-5 pt-3 animate-fade-in">
       <PageHeader title={t.profile.title} />
@@ -93,7 +99,14 @@ export function ProfilePage() {
         </Card>
       </section>
 
-      <Button variant="ghost" size="md" fullWidth leftIcon={<LogOut size={18} />} className="text-ink-soft">
+      <Button
+        variant="ghost"
+        size="md"
+        fullWidth
+        leftIcon={<LogOut size={18} />}
+        className="text-ink-soft"
+        onClick={handleSignOut}
+      >
         {t.profile.signOut}
       </Button>
 
