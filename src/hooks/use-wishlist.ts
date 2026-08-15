@@ -4,11 +4,14 @@ import { wishlistService } from '@/services';
 import type { WishlistQueryOptions } from '@/services';
 import { queryKeys } from '@/lib/query-client';
 import { isDevelopmentMode } from '@/lib/dev-user';
+import { useUserStore } from '@/store';
 import type { WishlistItem, WishlistItemInput, WishlistItemUpdate } from '@/types';
 
-/** Wishlist hooks — mirrors the collection hooks' structure. */
 export function useWishlistList(search = '', tcg?: string) {
+  const telegramUser = useUserStore((s) => s.telegramUser);
+
   const options: WishlistQueryOptions = {
+    telegramUserId: telegramUser?.id ?? 0,
     search: search.trim() || undefined,
     tcg: tcg as WishlistQueryOptions['tcg'],
   };
@@ -17,6 +20,7 @@ export function useWishlistList(search = '', tcg?: string) {
     queryKey: queryKeys.wishlistList({ tcg: options.tcg, search: options.search }),
     queryFn: () =>
       isDevelopmentMode() ? Promise.resolve([]) : wishlistService.list(options),
+    enabled: Boolean(telegramUser?.id),
   });
 }
 
