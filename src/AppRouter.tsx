@@ -9,18 +9,10 @@ import {
   ProfilePage,
   WishlistPage,
 } from '@/pages';
+import { LoginPage } from '@/pages/LoginPage';
 import ScannerPage from '@/features/scanner/ScannerPage';
 import { CardDetailsPage } from '@/features/catalog/pages/CardDetailsPage';
 
-/**
- * App router.
- *
- * Primary tabs render inside the AppLayout shell (with bottom navigation).
- * The scanner renders standalone (no bottom nav) for a focused full-screen
- * capture experience. Card details render inside the shell so the bottom nav
- * stays available. Routes are declared here so the navigation graph stays in
- * one place; future features add a route here and a page module.
- */
 const router = createBrowserRouter([
   {
     element: <AppLayout />,
@@ -36,6 +28,10 @@ const router = createBrowserRouter([
   {
     path: RoutePaths.Scanner,
     element: <ScannerPage />,
+  },
+  {
+    path: '/login',
+    element: <LoginPage />,
   },
 ]);
 
