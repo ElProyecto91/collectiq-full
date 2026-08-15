@@ -45,6 +45,7 @@ export function useTelegram() {
   const isTelegram = useAppStore((s) => s.isTelegram);
   const setIsTelegram = useAppStore((s) => s.setIsTelegram);
   const setTelegramUser = useUserStore((s) => s.setTelegramUser);
+  const setSessionLoaded = useUserStore((s) => s.setSessionLoaded);
   const telegramUser = useUserStore((s) => s.telegramUser);
 
   useEffect(() => {
@@ -67,6 +68,7 @@ export function useTelegram() {
           is_premium: tgUser.is_premium,
         };
         setTelegramUser(normalized);
+        setSessionLoaded(true);
 
         if (initData) {
           createSession(initData).then(result => {
@@ -82,7 +84,7 @@ export function useTelegram() {
       }
     }
 
-    // Fuera de Telegram — intentar cargar sesión desde cookie o localStorage
+    // Fuera de Telegram — intentar cargar sesión
     const cookieToken = getTokenFromCookie();
     const savedToken = cookieToken ?? localStorage.getItem(SESSION_KEY);
 
@@ -93,15 +95,19 @@ export function useTelegram() {
         } else {
           localStorage.removeItem(SESSION_KEY);
         }
+        setSessionLoaded(true);
       });
       return;
     }
+
+    // No hay sesión
+    setSessionLoaded(true);
 
     if (isDevelopmentMode()) {
       const devUser = getDevUser();
       if (devUser) setTelegramUser(devUser);
     }
-  }, [setIsTelegram, setTelegramUser]);
+  }, [setIsTelegram, setTelegramUser, setSessionLoaded]);
 
   return { isTelegram, telegramUser };
 }
