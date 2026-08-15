@@ -6,13 +6,25 @@ import { useAppStore } from '@/store';
 import { useUserStore } from '@/store';
 import type { TelegramUser } from '@/types';
 
-async function verifyTelegramUser(initData: string): Promise<TelegramUser | null> {
+const SESSION_KEY = 'collectiq-session-token';
+
+async function createSession(initData: string): Promise<{ user: TelegramUser; token: string } | null> {
   try {
     const res = await fetch('/api/auth-telegram', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ initData }),
     });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+async function loadSession(token: string): Promise<TelegramUser | null> {
+  try {
+    const res = await fetch(`/api/auth-telegram?token=${token}`);
     if (!res.ok) return null;
     const { user } = await res.json();
     return user ?? null;
@@ -37,7 +49,7 @@ export function useTelegram() {
       const tgUser = webApp?.initDataUnsafe?.user ?? null;
 
       if (tgUser) {
-        // Usar datos locales inmediatamente para UX rápida
+        // Usar datos locales inmediatamente
         const normalized: TelegramUser = {
           id: tgUser.id,
           first_name: tgUser.first_name,
@@ -49,19 +61,33 @@ export function useTelegram() {
         };
         setTelegramUser(normalized);
 
-        // Verificar en segundo plano con el servidor
+        // Crear sesión persistente en segundo plano
         if (initData) {
-          verifyTelegramUser(initData).then(verifiedUser => {
-            if (verifiedUser) {
-              setTelegramUser({
-                ...normalized,
-                ...verifiedUser,
-              });
+          createSession(initData).then(result => {
+            if (result?.token) {
+              localStorage.setItem(SESSION_KEY, result.token);
+            }
+            if (result?.user) {
+              setTelegramUser({ ...normalized, ...result.user });
             }
           });
         }
         return;
       }
+    }
+
+    // Fuera de Telegram — intentar cargar sesión guardada
+    const savedToken = localStorage.getItem(SESSION_KEY);
+    if (savedToken) {
+      loadSession(savedToken).then(user => {
+        if (user) {
+          setTelegramUser(user);
+        } else {
+          // Sesión expirada — borrar
+          localStorage.removeItem(SESSION_KEY);
+        }
+      });
+      return;
     }
 
     if (isDevelopmentMode()) {
