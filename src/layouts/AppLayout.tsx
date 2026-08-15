@@ -10,6 +10,7 @@ export function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const telegramUser = useUserStore((s) => s.telegramUser);
+  const sessionLoaded = useUserStore((s) => s.sessionLoaded);
 
   useEffect(() => {
     const webApp = window.Telegram?.WebApp;
@@ -30,16 +31,24 @@ export function AppLayout() {
   }, [location.pathname, navigate]);
 
   useEffect(() => {
-    // Si no está en Telegram y no hay usuario, redirigir al login
+    if (!sessionLoaded) return;
     if (!isInsideTelegram() && !telegramUser) {
-      const timer = setTimeout(() => {
-        if (!useUserStore.getState().telegramUser) {
-          navigate('/login');
-        }
-      }, 2000); // Esperar 2 segundos para que cargue la sesión
-      return () => clearTimeout(timer);
+      navigate('/login');
     }
-  }, [telegramUser, navigate]);
+  }, [sessionLoaded, telegramUser, navigate]);
+
+  if (!sessionLoaded && !isInsideTelegram()) {
+    return (
+      <div className="min-h-screen bg-[#07080c] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-12 h-12 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center">
+            <span className="text-blue-400 font-bold text-lg">CQ</span>
+          </div>
+          <p className="text-gray-500 text-sm">Cargando...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative min-h-dvh bg-base">
