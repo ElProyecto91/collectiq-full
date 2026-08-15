@@ -8,11 +8,6 @@ import type { TelegramUser } from '@/types';
 
 const SESSION_KEY = 'collectiq-session-token';
 
-function getTokenFromCookie(): string | null {
-  const match = document.cookie.match(/collectiq_session=([^;]+)/);
-  return match ? match[1] : null;
-}
-
 function getTokenFromUrl(): string | null {
   const params = new URLSearchParams(window.location.search);
   const token = params.get('token');
@@ -38,11 +33,24 @@ async function createSession(initData: string): Promise<{ user: TelegramUser; to
   }
 }
 
+async function generateAuthCode(telegramUserId: number, userData: any): Promise<string | null> {
+  try {
+    const res = await fetch('/api/auth-code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ telegramUserId, userData }),
+    });
+    if (!res.ok) return null;
+    const { code } = await res.json();
+    return code;
+  } catch {
+    return null;
+  }
+}
+
 async function loadSession(token: string): Promise<TelegramUser | null> {
   try {
-    const res = await fetch(`/api/auth-telegram?token=${token}`, {
-      credentials: 'include',
-    });
+    const res = await fetch(`/api/auth-telegram?token=${token}`);
     if (!res.ok) return null;
     const { user } = await res.json();
     return user ?? null;
@@ -81,16 +89,24 @@ export function useTelegram() {
         setTelegramUser(normalized);
         setSessionLoaded(true);
 
+        // Si viene desde la PWA, generar código de autenticación
+        if (startParam === 'pwa') {
+          generateAuthCode(tgUser.id, normalized).then(code => {
+            if (code) {
+              // Mostrar código al usuario via alert de Telegram
+              webApp?.showAlert?.(
+                `Tu código de acceso es:\n\n🔑 ${code}\n\nIntrodúcelo en la app para iniciar sesión. Válido 5 minutos.`,
+                () => { webApp?.close?.(); }
+              );
+            }
+          });
+          return;
+        }
+
         if (initData) {
           createSession(initData).then(result => {
             if (result?.token) {
               localStorage.setItem(SESSION_KEY, result.token);
-
-              // Si viene desde la PWA, abrir la PWA con el token usando el método oficial
-              if (startParam === 'pwa') {
-                const url = `https://collectiq-full.vercel.app?token=${result.token}`;
-                webApp?.openLink?.(url);
-              }
             }
             if (result?.user) {
               setTelegramUser({ ...normalized, ...result.user });
@@ -101,10 +117,9 @@ export function useTelegram() {
       }
     }
 
-    // Fuera de Telegram — intentar cargar token desde URL primero
+    // Fuera de Telegram
     const urlToken = getTokenFromUrl();
-    const cookieToken = getTokenFromCookie();
-    const savedToken = urlToken ?? cookieToken ?? localStorage.getItem(SESSION_KEY);
+    const savedToken = urlToken ?? localStorage.getItem(SESSION_KEY);
 
     if (savedToken) {
       loadSession(savedToken).then(user => {
