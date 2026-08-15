@@ -1,11 +1,9 @@
 import { ScanLine } from 'lucide-react';
 
-const BOT_USERNAME = 'CollectIQ_bot';
-const APP_URL = 'https://collectiq-full.vercel.app';
-
 export function LoginPage() {
   const handleLogin = () => {
-    window.open(`https://t.me/${BOT_USERNAME}?start=login`, '_blank');
+    sessionStorage.setItem('collectiq-return-url', 'https://collectiq-full.vercel.app');
+    window.open('https://t.me/CollectIQ_bot/app', '_blank');
   };
 
   return (
@@ -34,7 +32,7 @@ export function LoginPage() {
           Abrir en Telegram
         </button>
         <p className="text-xs text-gray-600 text-center">
-          Una vez abierto en Telegram, la próxima vez que uses la app recordará tu sesión automáticamente.
+          Solo necesitas hacerlo una vez. Después la app recordará tu sesión.
         </p>
       </div>
     </div>
