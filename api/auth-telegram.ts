@@ -24,7 +24,6 @@ async function verifyTelegramData(initData: string, botToken: string): Promise<b
   );
 
   const secretKey = await crypto.subtle.sign('HMAC', keyMaterial, encoder.encode(botToken));
-
   const verifyKey = await crypto.subtle.importKey(
     'raw',
     secretKey,
@@ -49,7 +48,6 @@ async function generateToken(): Promise<string> {
 
 export default async function handler(req: Request) {
   if (req.method === 'GET') {
-    // Verificar sesión existente
     const token = new URL(req.url).searchParams.get('token');
     if (!token) return new Response(JSON.stringify({ error: 'No token' }), { status: 400 });
 
@@ -88,7 +86,6 @@ export default async function handler(req: Request) {
       const user = JSON.parse(params.get('user') ?? '{}');
       const token = await generateToken();
 
-      // Guardar sesión en Supabase
       await fetch(`${SUPABASE_URL}/rest/v1/user_sessions`, {
         method: 'POST',
         headers: {
@@ -104,7 +101,10 @@ export default async function handler(req: Request) {
       });
 
       return new Response(JSON.stringify({ ok: true, user, token }), {
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Set-Cookie': `collectiq_session=${token}; Path=/; Max-Age=${90 * 24 * 60 * 60}; SameSite=None; Secure`,
+        },
       });
     } catch (err) {
       return new Response(JSON.stringify({ error: 'Server error' }), { status: 500 });
