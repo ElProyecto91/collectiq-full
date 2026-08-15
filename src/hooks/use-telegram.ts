@@ -13,6 +13,16 @@ function getTokenFromCookie(): string | null {
   return match ? match[1] : null;
 }
 
+function getTokenFromUrl(): string | null {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('token');
+  if (token) {
+    localStorage.setItem(SESSION_KEY, token);
+    window.history.replaceState({}, '', '/');
+  }
+  return token;
+}
+
 async function createSession(initData: string): Promise<{ user: TelegramUser; token: string } | null> {
   try {
     const res = await fetch('/api/auth-telegram', {
@@ -74,6 +84,13 @@ export function useTelegram() {
           createSession(initData).then(result => {
             if (result?.token) {
               localStorage.setItem(SESSION_KEY, result.token);
+
+              // Si el usuario vino desde la PWA, redirigirle de vuelta con el token
+              const returnUrl = sessionStorage.getItem('collectiq-return-url');
+              if (returnUrl) {
+                sessionStorage.removeItem('collectiq-return-url');
+                window.location.href = `${returnUrl}?token=${result.token}`;
+              }
             }
             if (result?.user) {
               setTelegramUser({ ...normalized, ...result.user });
@@ -84,9 +101,10 @@ export function useTelegram() {
       }
     }
 
-    // Fuera de Telegram — intentar cargar sesión
+    // Fuera de Telegram — intentar cargar token desde URL primero
+    const urlToken = getTokenFromUrl();
     const cookieToken = getTokenFromCookie();
-    const savedToken = cookieToken ?? localStorage.getItem(SESSION_KEY);
+    const savedToken = urlToken ?? cookieToken ?? localStorage.getItem(SESSION_KEY);
 
     if (savedToken) {
       loadSession(savedToken).then(user => {
@@ -100,7 +118,6 @@ export function useTelegram() {
       return;
     }
 
-    // No hay sesión
     setSessionLoaded(true);
 
     if (isDevelopmentMode()) {
