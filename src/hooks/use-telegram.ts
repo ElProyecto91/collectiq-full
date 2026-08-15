@@ -86,9 +86,10 @@ export function useTelegram() {
             if (result?.token) {
               localStorage.setItem(SESSION_KEY, result.token);
 
-              // Si viene desde la PWA, redirigir de vuelta con el token
+              // Si viene desde la PWA, abrir la PWA con el token usando el método oficial
               if (startParam === 'pwa') {
-                window.location.href = `https://collectiq-full.vercel.app?token=${result.token}`;
+                const url = `https://collectiq-full.vercel.app?token=${result.token}`;
+                webApp?.openLink?.(url);
               }
             }
             if (result?.user) {
