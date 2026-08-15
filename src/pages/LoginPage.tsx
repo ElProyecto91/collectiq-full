@@ -17,7 +17,7 @@ export function LoginPage() {
   const [error, setError] = useState('');
 
   const handleLogin = () => {
-    window.open('https://t.me/CollectIQ_bot/app?startapp=pwa', '_blank');
+    window.open('https://t.me/CollectIQ_bot?start=getcode', '_blank');
   };
 
   const handleVerify = async () => {
@@ -51,18 +51,23 @@ export function LoginPage() {
       </div>
 
       <div className="w-full max-w-sm bg-[#111118] border border-white/8 rounded-2xl p-6 flex flex-col gap-4">
-        <p className="text-sm text-gray-400 text-center font-medium">
-          Paso 1 — Obtén tu código
-        </p>
-        <button
-          onClick={handleLogin}
-          className="w-full bg-[#2AABEE] text-white rounded-2xl py-3.5 font-semibold flex items-center justify-center gap-3 active:scale-95 transition-transform"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
-            <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.941z"/>
-          </svg>
-          Abrir en Telegram
-        </button>
+        <div>
+          <p className="text-sm text-gray-400 text-center font-medium mb-1">
+            Paso 1 — Obtén tu código
+          </p>
+          <p className="text-xs text-gray-600 text-center mb-3">
+            El bot de Telegram te enviará un código de acceso
+          </p>
+          <button
+            onClick={handleLogin}
+            className="w-full bg-[#2AABEE] text-white rounded-2xl py-3.5 font-semibold flex items-center justify-center gap-3 active:scale-95 transition-transform"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
+              <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.941z"/>
+            </svg>
+            Obtener código via Telegram
+          </button>
+        </div>
 
         <div className="border-t border-white/8 pt-4">
           <p className="text-sm text-gray-400 text-center font-medium mb-3">
