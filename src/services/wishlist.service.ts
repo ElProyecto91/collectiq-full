@@ -5,6 +5,7 @@ import { Tables } from '@/types';
 import { mapWishlistItem, toWishlistItemRow } from '@/utils/mappers';
 
 export interface WishlistQueryOptions {
+  telegramUserId?: number;
   tcg?: Tcg;
   search?: string;
   orderBy?: string;
@@ -12,17 +13,13 @@ export interface WishlistQueryOptions {
   limit?: number;
 }
 
-/**
- * Wishlist service — CRUD for cards a collector wants.
- * Mirrors the collection service shape so a future trading flow can diff a
- * user's wishlist against another user's collection with symmetric code.
- */
 class WishlistService extends BaseSupabaseService {
   async list(opts: WishlistQueryOptions = {}): Promise<WishlistItem[]> {
     let query = this.client.from(Tables.WishlistItems).select('*');
 
+    if (opts.telegramUserId) query = query.eq('telegram_user_id', opts.telegramUserId);
     if (opts.tcg) query = query.eq('tcg', opts.tcg);
-    if (opts.search) query = query.ilike('card_id', `%${opts.search}%`);
+    if (opts.search) query = query.ilike('card_name', `%${opts.search}%`);
     query = query.order(opts.orderBy ?? 'created_at', { ascending: opts.ascending ?? false });
     if (opts.limit) query = query.limit(opts.limit);
 
