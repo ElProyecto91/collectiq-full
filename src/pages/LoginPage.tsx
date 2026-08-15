@@ -1,26 +1,12 @@
-import { useEffect } from 'react';
 import { ScanLine } from 'lucide-react';
 
-const BOT_NAME = 'CollectIQ_bot';
+const BOT_USERNAME = 'CollectIQ_bot';
+const APP_URL = 'https://collectiq-full.vercel.app';
 
 export function LoginPage() {
-  useEffect(() => {
-    // Cargar el script del widget de Telegram
-    const script = document.createElement('script');
-    script.src = 'https://telegram.org/js/telegram-widget.js?22';
-    script.setAttribute('data-telegram-login', BOT_NAME);
-    script.setAttribute('data-size', 'large');
-    script.setAttribute('data-auth-url', 'https://collectiq-full.vercel.app/api/telegram-callback');
-    script.setAttribute('data-request-access', 'write');
-    script.async = true;
-
-    const container = document.getElementById('telegram-login-container');
-    if (container) container.appendChild(script);
-
-    return () => {
-      if (container) container.innerHTML = '';
-    };
-  }, []);
+  const handleLogin = () => {
+    window.open(`https://t.me/${BOT_USERNAME}?start=login`, '_blank');
+  };
 
   return (
     <div className="min-h-screen bg-[#07080c] flex flex-col items-center justify-center px-6 gap-8">
@@ -36,14 +22,21 @@ export function LoginPage() {
 
       <div className="w-full max-w-sm bg-[#111118] border border-white/8 rounded-2xl p-6 flex flex-col items-center gap-4">
         <p className="text-sm text-gray-400 text-center">
-          Inicia sesión con tu cuenta de Telegram para acceder a tu colección
+          Abre CollectIQ desde Telegram para acceder a tu colección
         </p>
-        <div id="telegram-login-container" />
+        <button
+          onClick={handleLogin}
+          className="w-full bg-[#2AABEE] text-white rounded-2xl py-4 font-semibold flex items-center justify-center gap-3 active:scale-95 transition-transform"
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
+            <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.941z"/>
+          </svg>
+          Abrir en Telegram
+        </button>
+        <p className="text-xs text-gray-600 text-center">
+          Una vez abierto en Telegram, la próxima vez que uses la app recordará tu sesión automáticamente.
+        </p>
       </div>
-
-      <p className="text-xs text-gray-600 text-center">
-        Al iniciar sesión, aceptas que CollectIQ acceda a tu información básica de Telegram.
-      </p>
     </div>
   );
 }
