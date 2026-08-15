@@ -1,12 +1,15 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useEffect } from 'react';
 import { BottomNav } from './BottomNav';
+import { useUserStore } from '@/store';
+import { isInsideTelegram } from '@/lib/telegram';
 
 const ROOT_PATHS = ['/', '/collection', '/explorer', '/wishlist', '/profile'];
 
 export function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
+  const telegramUser = useUserStore((s) => s.telegramUser);
 
   useEffect(() => {
     const webApp = window.Telegram?.WebApp;
@@ -25,6 +28,18 @@ export function AppLayout() {
       webApp.BackButton?.offClick(() => navigate(-1));
     };
   }, [location.pathname, navigate]);
+
+  useEffect(() => {
+    // Si no está en Telegram y no hay usuario, redirigir al login
+    if (!isInsideTelegram() && !telegramUser) {
+      const timer = setTimeout(() => {
+        if (!useUserStore.getState().telegramUser) {
+          navigate('/login');
+        }
+      }, 2000); // Esperar 2 segundos para que cargue la sesión
+      return () => clearTimeout(timer);
+    }
+  }, [telegramUser, navigate]);
 
   return (
     <div className="relative min-h-dvh bg-base">
