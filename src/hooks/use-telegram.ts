@@ -66,6 +66,7 @@ export function useTelegram() {
       const webApp = initTelegramWebApp();
       const initData = webApp?.initData ?? '';
       const tgUser = webApp?.initDataUnsafe?.user ?? null;
+      const startParam = webApp?.initDataUnsafe?.start_param ?? '';
 
       if (tgUser) {
         const normalized: TelegramUser = {
@@ -85,10 +86,9 @@ export function useTelegram() {
             if (result?.token) {
               localStorage.setItem(SESSION_KEY, result.token);
 
-              // Si el usuario vino desde la PWA, redirigirle de vuelta con el token
-              const returnUrl = sessionStorage.getItem('collectiq-return-url');
-              if (returnUrl) {
-                sessionStorage.removeItem('collectiq-return-url');
+              // Si viene con parámetro de retorno, redirigir a la PWA con el token
+              if (startParam.startsWith('return_')) {
+                const returnUrl = decodeURIComponent(startParam.replace('return_', ''));
                 window.location.href = `${returnUrl}?token=${result.token}`;
               }
             }
