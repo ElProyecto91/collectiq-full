@@ -8,11 +8,17 @@ import type { TelegramUser } from '@/types';
 
 const SESSION_KEY = 'collectiq-session-token';
 
+function getTokenFromCookie(): string | null {
+  const match = document.cookie.match(/collectiq_session=([^;]+)/);
+  return match ? match[1] : null;
+}
+
 async function createSession(initData: string): Promise<{ user: TelegramUser; token: string } | null> {
   try {
     const res = await fetch('/api/auth-telegram', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ initData }),
     });
     if (!res.ok) return null;
@@ -24,7 +30,9 @@ async function createSession(initData: string): Promise<{ user: TelegramUser; to
 
 async function loadSession(token: string): Promise<TelegramUser | null> {
   try {
-    const res = await fetch(`/api/auth-telegram?token=${token}`);
+    const res = await fetch(`/api/auth-telegram?token=${token}`, {
+      credentials: 'include',
+    });
     if (!res.ok) return null;
     const { user } = await res.json();
     return user ?? null;
@@ -49,7 +57,6 @@ export function useTelegram() {
       const tgUser = webApp?.initDataUnsafe?.user ?? null;
 
       if (tgUser) {
-        // Usar datos locales inmediatamente
         const normalized: TelegramUser = {
           id: tgUser.id,
           first_name: tgUser.first_name,
@@ -61,7 +68,6 @@ export function useTelegram() {
         };
         setTelegramUser(normalized);
 
-        // Crear sesión persistente en segundo plano
         if (initData) {
           createSession(initData).then(result => {
             if (result?.token) {
@@ -76,14 +82,15 @@ export function useTelegram() {
       }
     }
 
-    // Fuera de Telegram — intentar cargar sesión guardada
-    const savedToken = localStorage.getItem(SESSION_KEY);
+    // Fuera de Telegram — intentar cargar sesión desde cookie o localStorage
+    const cookieToken = getTokenFromCookie();
+    const savedToken = cookieToken ?? localStorage.getItem(SESSION_KEY);
+
     if (savedToken) {
       loadSession(savedToken).then(user => {
         if (user) {
           setTelegramUser(user);
         } else {
-          // Sesión expirada — borrar
           localStorage.removeItem(SESSION_KEY);
         }
       });
