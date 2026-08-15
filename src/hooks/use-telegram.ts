@@ -89,11 +89,10 @@ export function useTelegram() {
         setTelegramUser(normalized);
         setSessionLoaded(true);
 
-        // Si viene desde la PWA, generar código de autenticación
+        // Si viene desde la PWA, generar código
         if (startParam === 'pwa') {
           generateAuthCode(tgUser.id, normalized).then(code => {
             if (code) {
-              // Mostrar código al usuario via alert de Telegram
               webApp?.showAlert?.(
                 `Tu código de acceso es:\n\n🔑 ${code}\n\nIntrodúcelo en la app para iniciar sesión. Válido 5 minutos.`,
                 () => { webApp?.close?.(); }
@@ -126,13 +125,17 @@ export function useTelegram() {
         if (user) {
           setTelegramUser(user);
         } else {
+          // Sesión inválida — limpiar todo
           localStorage.removeItem(SESSION_KEY);
+          setTelegramUser(null);
         }
         setSessionLoaded(true);
       });
       return;
     }
 
+    // No hay sesión guardada
+    setTelegramUser(null);
     setSessionLoaded(true);
 
     if (isDevelopmentMode()) {
