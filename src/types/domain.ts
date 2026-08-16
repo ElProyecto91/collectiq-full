@@ -20,6 +20,25 @@ export type CardCondition =
 
 export type CardVariant = 'normal' | 'holofoil' | 'reverseHolofoil' | 'firstEdition' | 'promo';
 
+export type CardLanguage =
+  | 'en' | 'es' | 'ja' | 'de' | 'fr' | 'it' | 'pt' | 'ko' | 'zh-hant' | 'th' | 'id' | 'ru' | 'pl';
+
+export const CARD_LANGUAGES: { code: CardLanguage; label: string; flag: string }[] = [
+  { code: 'en', label: 'English', flag: '🇬🇧' },
+  { code: 'es', label: 'Español', flag: '🇪🇸' },
+  { code: 'ja', label: '日本語', flag: '🇯🇵' },
+  { code: 'de', label: 'Deutsch', flag: '🇩🇪' },
+  { code: 'fr', label: 'Français', flag: '🇫🇷' },
+  { code: 'it', label: 'Italiano', flag: '🇮🇹' },
+  { code: 'pt', label: 'Português', flag: '🇵🇹' },
+  { code: 'ko', label: '한국어', flag: '🇰🇷' },
+  { code: 'zh-hant', label: '繁體中文', flag: '🇨🇳' },
+  { code: 'th', label: 'ภาษาไทย', flag: '🇹🇭' },
+  { code: 'id', label: 'Bahasa Indonesia', flag: '🇮🇩' },
+  { code: 'ru', label: 'Русский', flag: '🇷🇺' },
+  { code: 'pl', label: 'Polski', flag: '🇵🇱' },
+];
+
 export interface CardGrade {
   authority: 'PSA' | 'BGS' | 'CGC' | string;
   score: number;
@@ -53,6 +72,7 @@ export interface CollectionItem extends CardRef {
   tcgplayerPrice: number | null;
   currency: string | null;
   variant: CardVariant | null;
+  cardLanguage: CardLanguage | null;
 }
 
 export interface CollectionItemInput {
@@ -76,6 +96,7 @@ export interface CollectionItemInput {
   tcgplayerPrice?: number | null;
   currency?: string | null;
   variant?: CardVariant | null;
+  cardLanguage?: CardLanguage | null;
 }
 
 export type CollectionItemUpdate = Partial<CollectionItemInput>;
