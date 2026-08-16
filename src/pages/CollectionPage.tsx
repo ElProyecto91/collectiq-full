@@ -1,9 +1,12 @@
-import { Heart, Layers, Minus, Plus, Trash2, Star, LayoutGrid, Package } from 'lucide-react';
-import { useState, useCallback, useEffect } from 'react';
+import { Heart, Layers, Minus, Plus, Trash2, Star, LayoutGrid, Package, Sparkles, X } from 'lucide-react';
+import { useState, useCallback } from 'react';
 import { useCollectionList, useUpdateCollectionItem, useDeleteCollectionItem } from '@/hooks/use-collection';
 import { useCreateWishlistItem, useWishlistList } from '@/hooks/use-wishlist';
 import { useUserStore } from '@/store';
-import type { CollectionItem } from '@/types';
+import { useCurrency } from '@/hooks/use-currency';
+import { useI18n } from '@/i18n';
+import type { CollectionItem, CardVariant, CardLanguage, CardCondition, GradingCompany, PurchaseSource } from '@/types';
+import { CARD_LANGUAGES, GRADING_COMPANIES, PURCHASE_SOURCES } from '@/types';
 
 type SortOption = 'recent' | 'name' | 'value';
 type ViewMode = 'cards' | 'sets';
@@ -15,21 +18,404 @@ interface SetCompletion {
   cards: CollectionItem[];
 }
 
-async function fetchSetTotal(setName: string): Promise<number> {
-  try {
-    const res = await fetch(`https://api.pokemontcg.io/v2/sets?q=name:"${encodeURIComponent(setName)}"&pageSize=1`);
-    const json = await res.json();
-    return json.data?.[0]?.total ?? 0;
-  } catch {
-    return 0;
-  }
+const VARIANTS: { key: CardVariant; label: string; emoji: string }[] = [
+  { key: 'normal', label: 'Normal', emoji: '🃏' },
+  { key: 'holofoil', label: 'Holofoil', emoji: '✨' },
+  { key: 'reverseHolofoil', label: 'Reverse Holo', emoji: '🌈' },
+  { key: 'firstEdition', label: '1st Edition', emoji: '⭐' },
+  { key: 'promo', label: 'Promo', emoji: '🎁' },
+];
+
+const CONDITIONS: { key: CardCondition; label: string; color: string }[] = [
+  { key: 'mint', label: 'Mint', color: 'text-green-400' },
+  { key: 'near-mint', label: 'Near Mint', color: 'text-green-300' },
+  { key: 'lightly-played', label: 'Lightly Played', color: 'text-yellow-400' },
+  { key: 'moderately-played', label: 'Moderately Played', color: 'text-orange-400' },
+  { key: 'heavily-played', label: 'Heavily Played', color: 'text-red-400' },
+  { key: 'damaged', label: 'Damaged', color: 'text-red-600' },
+];
+
+function CardZoom({ card, onClose }: { card: CollectionItem; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-6" onClick={onClose}>
+      <button onClick={onClose} className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 flex items-center justify-center">
+        <X size={20} className="text-white" />
+      </button>
+      <div onClick={e => e.stopPropagation()}>
+        <img src={card.imageUrl ?? ''} alt={card.cardName} className="w-full max-w-xs rounded-2xl shadow-2xl" />
+        <p className="text-white text-center font-bold mt-3">{card.cardName}</p>
+        <p className="text-gray-400 text-center text-sm">{card.setName}</p>
+      </div>
+    </div>
+  );
+}
+
+function EditCardModal({
+  card,
+  onSave,
+  onClose,
+}: {
+  card: CollectionItem;
+  onSave: (update: Partial<CollectionItem>) => void;
+  onClose: () => void;
+}) {
+  const { t } = useI18n();
+  const { formatPrice } = useCurrency();
+
+  const [variant, setVariant] = useState<CardVariant>(card.variant ?? 'normal');
+  const [language, setLanguage] = useState<CardLanguage>(card.cardLanguage ?? 'en');
+  const [condition, setCondition] = useState<CardCondition | null>(card.condition ?? null);
+  const [purchasePrice, setPurchasePrice] = useState<string>(card.purchasePrice?.toString() ?? '');
+  const [purchaseSource, setPurchaseSource] = useState<PurchaseSource | null>(card.purchaseSource ?? null);
+  const [acquiredAt, setAcquiredAt] = useState<string>(card.acquiredAt?.split('T')[0] ?? '');
+  const [notes, setNotes] = useState<string>(card.notes ?? '');
+  const [inSleeve, setInSleeve] = useState<boolean>(card.inSleeve ?? false);
+  const [inBinder, setInBinder] = useState<boolean>(card.inBinder ?? false);
+  const [gradingCompany, setGradingCompany] = useState<GradingCompany | null>(card.gradingCompany ?? null);
+  const [gradingScore, setGradingScore] = useState<string>(card.gradingScore?.toString() ?? '');
+  const [gradingCertificate, setGradingCertificate] = useState<string>(card.gradingCertificate ?? '');
+  const [gradeCentering, setGradeCentering] = useState<string>(card.gradeCentering?.toString() ?? '');
+  const [gradeCorners, setGradeCorners] = useState<string>(card.gradeCorners?.toString() ?? '');
+  const [gradeEdges, setGradeEdges] = useState<string>(card.gradeEdges?.toString() ?? '');
+  const [gradeSurface, setGradeSurface] = useState<string>(card.gradeSurface?.toString() ?? '');
+  const [step, setStep] = useState<'main' | 'variant' | 'language' | 'condition' | 'grading' | 'acquisition'>('main');
+
+  const currentVariant = VARIANTS.find(v => v.key === variant);
+  const currentLanguage = CARD_LANGUAGES.find(l => l.code === language);
+  const currentCondition = CONDITIONS.find(c => c.key === condition);
+
+  const handleSave = () => {
+    onSave({
+      variant,
+      cardLanguage: language,
+      condition,
+      purchasePrice: purchasePrice ? parseFloat(purchasePrice) : null,
+      purchaseSource,
+      acquiredAt: acquiredAt || null,
+      notes: notes || null,
+      inSleeve,
+      inBinder,
+      gradingCompany,
+      gradingScore: gradingScore ? parseFloat(gradingScore) : null,
+      gradingCertificate: gradingCertificate || null,
+      gradeCentering: gradeCentering ? parseFloat(gradeCentering) : null,
+      gradeCorners: gradeCorners ? parseFloat(gradeCorners) : null,
+      gradeEdges: gradeEdges ? parseFloat(gradeEdges) : null,
+      gradeSurface: gradeSurface ? parseFloat(gradeSurface) : null,
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full max-w-md bg-[#111118] border border-white/10 rounded-t-2xl p-4 space-y-3 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+
+        {step === 'main' && (
+          <>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-bold text-white">Editar carta</p>
+                <p className="text-xs text-gray-500 mt-0.5">{card.cardName}</p>
+              </div>
+              <button onClick={onClose} className="text-gray-500 text-xs bg-white/5 px-3 py-1.5 rounded-lg">{t.common.cancel}</button>
+            </div>
+
+            {/* Variante */}
+            <button onClick={() => setStep('variant')} className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-left">
+              <span className="text-xl">{currentVariant?.emoji}</span>
+              <div className="flex-1">
+                <p className="text-xs text-gray-500">{t.variants.title}</p>
+                <p className="text-sm text-white font-medium">{currentVariant?.label}</p>
+              </div>
+              <span className="text-gray-500 text-xs">›</span>
+            </button>
+
+            {/* Idioma */}
+            <button onClick={() => setStep('language')} className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-left">
+              <span className="text-xl">{currentLanguage?.flag}</span>
+              <div className="flex-1">
+                <p className="text-xs text-gray-500">{t.cardLanguages.title}</p>
+                <p className="text-sm text-white font-medium">{currentLanguage?.label}</p>
+              </div>
+              <span className="text-gray-500 text-xs">›</span>
+            </button>
+
+            {/* Condición */}
+            <button onClick={() => setStep('condition')} className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-left">
+              <span className="text-xl">🔍</span>
+              <div className="flex-1">
+                <p className="text-xs text-gray-500">Condición</p>
+                <p className={`text-sm font-medium ${currentCondition?.color ?? 'text-gray-400'}`}>
+                  {currentCondition?.label ?? 'Sin especificar'}
+                </p>
+              </div>
+              <span className="text-gray-500 text-xs">›</span>
+            </button>
+
+            {/* Grading */}
+            <button onClick={() => setStep('grading')} className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-left">
+              <span className="text-xl">🏆</span>
+              <div className="flex-1">
+                <p className="text-xs text-gray-500">Grading profesional</p>
+                <p className="text-sm text-white font-medium">
+                  {gradingCompany ? `${gradingCompany} ${gradingScore ? `· ${gradingScore}` : ''}` : 'Sin grading'}
+                </p>
+              </div>
+              <span className="text-gray-500 text-xs">›</span>
+            </button>
+
+            {/* Adquisición */}
+            <button onClick={() => setStep('acquisition')} className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-left">
+              <span className="text-xl">💰</span>
+              <div className="flex-1">
+                <p className="text-xs text-gray-500">Adquisición</p>
+                <p className="text-sm text-white font-medium">
+                  {purchasePrice ? `${purchasePrice}€` : ''}{purchaseSource ? ` · ${PURCHASE_SOURCES.find(s => s.code === purchaseSource)?.emoji}` : ''}{!purchasePrice && !purchaseSource ? 'Sin especificar' : ''}
+                </p>
+              </div>
+              <span className="text-gray-500 text-xs">›</span>
+            </button>
+
+            {/* Funda / Álbum */}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setInSleeve(!inSleeve)}
+                className={`flex items-center gap-2 border rounded-xl px-3 py-3 transition-all ${inSleeve ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/8'}`}
+              >
+                <span className="text-lg">🛡️</span>
+                <div className="text-left">
+                  <p className="text-xs font-medium text-white">En funda</p>
+                  <p className="text-[10px] text-gray-500">{inSleeve ? 'Sí' : 'No'}</p>
+                </div>
+              </button>
+              <button
+                onClick={() => setInBinder(!inBinder)}
+                className={`flex items-center gap-2 border rounded-xl px-3 py-3 transition-all ${inBinder ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/8'}`}
+              >
+                <span className="text-lg">📁</span>
+                <div className="text-left">
+                  <p className="text-xs font-medium text-white">En álbum</p>
+                  <p className="text-[10px] text-gray-500">{inBinder ? 'Sí' : 'No'}</p>
+                </div>
+              </button>
+            </div>
+
+            {/* Notas */}
+            <div>
+              <p className="text-xs text-gray-500 mb-1.5">Notas personales</p>
+              <textarea
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                placeholder="Estado de la carta, historial, planes..."
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50 resize-none h-20"
+              />
+            </div>
+
+            <button
+              onClick={handleSave}
+              className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold active:scale-95 transition-transform"
+            >
+              {t.common.saveChanges}
+            </button>
+          </>
+        )}
+
+        {step === 'variant' && (
+          <>
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-bold text-white">{t.variants.select}</p>
+              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">← Volver</button>
+            </div>
+            <div className="space-y-2">
+              {VARIANTS.map(v => (
+                <button key={v.key} onClick={() => { setVariant(v.key); setStep('main'); }}
+                  className={`w-full flex items-center gap-3 border rounded-xl px-3 py-3 text-left transition-all ${variant === v.key ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/8'}`}>
+                  <span className="text-xl">{v.emoji}</span>
+                  <p className="text-sm text-white font-medium">{v.label}</p>
+                  {variant === v.key && <span className="ml-auto text-blue-400">✓</span>}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        {step === 'language' && (
+          <>
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-bold text-white">{t.cardLanguages.select}</p>
+              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">← Volver</button>
+            </div>
+            <div className="space-y-2 max-h-72 overflow-y-auto">
+              {CARD_LANGUAGES.map(lang => (
+                <button key={lang.code} onClick={() => { setLanguage(lang.code); setStep('main'); }}
+                  className={`w-full flex items-center gap-3 border rounded-xl px-3 py-3 text-left transition-all ${language === lang.code ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/8'}`}>
+                  <span className="text-xl">{lang.flag}</span>
+                  <p className="text-sm text-white font-medium">{lang.label}</p>
+                  {language === lang.code && <span className="ml-auto text-blue-400">✓</span>}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        {step === 'condition' && (
+          <>
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-bold text-white">Condición de la carta</p>
+              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">← Volver</button>
+            </div>
+            <div className="space-y-2">
+              <button onClick={() => { setCondition(null); setStep('main'); }}
+                className={`w-full flex items-center gap-3 border rounded-xl px-3 py-3 text-left transition-all ${condition === null ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/8'}`}>
+                <span className="text-xl">❓</span>
+                <p className="text-sm text-white font-medium">Sin especificar</p>
+                {condition === null && <span className="ml-auto text-blue-400">✓</span>}
+              </button>
+              {CONDITIONS.map(c => (
+                <button key={c.key} onClick={() => { setCondition(c.key); setStep('main'); }}
+                  className={`w-full flex items-center gap-3 border rounded-xl px-3 py-3 text-left transition-all ${condition === c.key ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/8'}`}>
+                  <div className={`w-3 h-3 rounded-full ${c.color.replace('text-', 'bg-')}`} />
+                  <p className={`text-sm font-medium ${c.color}`}>{c.label}</p>
+                  {condition === c.key && <span className="ml-auto text-blue-400">✓</span>}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        {step === 'grading' && (
+          <>
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-bold text-white">Grading profesional</p>
+              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">← Volver</button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <p className="text-xs text-gray-500 mb-1.5">Empresa de grading</p>
+                <div className="grid grid-cols-3 gap-2">
+                  <button onClick={() => setGradingCompany(null)}
+                    className={`py-2 rounded-xl text-xs font-medium border transition-all ${gradingCompany === null ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-white/5 border-white/8 text-gray-400'}`}>
+                    Ninguna
+                  </button>
+                  {GRADING_COMPANIES.map(g => (
+                    <button key={g.code} onClick={() => setGradingCompany(g.code)}
+                      className={`py-2 rounded-xl text-xs font-medium border transition-all ${gradingCompany === g.code ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-white/5 border-white/8 text-gray-400'}`}>
+                      {g.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {gradingCompany && (
+                <>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1.5">Nota global (1-10)</p>
+                    <input
+                      type="number"
+                      min="1" max="10" step="0.5"
+                      value={gradingScore}
+                      onChange={e => setGradingScore(e.target.value)}
+                      placeholder="ej: 9.5"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50"
+                    />
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1.5">Número de certificado</p>
+                    <input
+                      type="text"
+                      value={gradingCertificate}
+                      onChange={e => setGradingCertificate(e.target.value)}
+                      placeholder="ej: 12345678"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50"
+                    />
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1.5">Sub-notas</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { label: 'Centrado', value: gradeCentering, set: setGradeCentering },
+                        { label: 'Esquinas', value: gradeCorners, set: setGradeCorners },
+                        { label: 'Bordes', value: gradeEdges, set: setGradeEdges },
+                        { label: 'Superficie', value: gradeSurface, set: setGradeSurface },
+                      ].map(sub => (
+                        <div key={sub.label}>
+                          <p className="text-[10px] text-gray-500 mb-1">{sub.label}</p>
+                          <input
+                            type="number" min="1" max="10" step="0.5"
+                            value={sub.value}
+                            onChange={e => sub.set(e.target.value)}
+                            placeholder="1-10"
+                            className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              <button onClick={() => setStep('main')} className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold">
+                Guardar grading
+              </button>
+            </div>
+          </>
+        )}
+
+        {step === 'acquisition' && (
+          <>
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-bold text-white">Datos de adquisición</p>
+              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">← Volver</button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <p className="text-xs text-gray-500 mb-1.5">Precio pagado</p>
+                <input
+                  type="number" min="0" step="0.01"
+                  value={purchasePrice}
+                  onChange={e => setPurchasePrice(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50"
+                />
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 mb-1.5">Cómo la conseguiste</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {PURCHASE_SOURCES.map(s => (
+                    <button key={s.code} onClick={() => setPurchaseSource(s.code)}
+                      className={`flex flex-col items-center py-2.5 rounded-xl text-xs border transition-all ${purchaseSource === s.code ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-white/5 border-white/8 text-gray-400'}`}>
+                      <span className="text-lg mb-0.5">{s.emoji}</span>
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 mb-1.5">Fecha de adquisición</p>
+                <input
+                  type="date"
+                  value={acquiredAt}
+                  onChange={e => setAcquiredAt(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500/50"
+                />
+              </div>
+              <button onClick={() => setStep('main')} className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold">
+                Guardar adquisición
+              </button>
+            </div>
+          </>
+        )}
+
+      </div>
+    </div>
+  );
 }
 
 export function CollectionPage() {
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SortOption>('recent');
   const [view, setView] = useState<ViewMode>('cards');
-  const [setTotals, setSetTotals] = useState<Record<string, number>>({});
+  const [editingCard, setEditingCard] = useState<CollectionItem | null>(null);
+  const [zoomedCard, setZoomedCard] = useState<CollectionItem | null>(null);
 
   const { data: cards = [], isLoading } = useCollectionList();
   const { data: wishlistItems = [] } = useWishlistList();
@@ -37,6 +423,8 @@ export function CollectionPage() {
   const { mutate: deleteItem } = useDeleteCollectionItem();
   const { mutate: createWishlistItem } = useCreateWishlistItem();
   const telegramUser = useUserStore((s) => s.telegramUser);
+  const { formatPrice } = useCurrency();
+  const { t } = useI18n();
 
   const updateEntry = useCallback((id: string, update: Partial<CollectionItem>) => {
     updateItem({ id, update });
@@ -46,26 +434,15 @@ export function CollectionPage() {
     deleteItem(id);
   }, [deleteItem]);
 
-  // Agrupar cartas por set
   const setGroups: SetCompletion[] = Object.values(
     cards.reduce((acc, card) => {
       const key = card.setName;
-      if (!acc[key]) acc[key] = { setName: key, owned: 0, total: 0, cards: [] };
+      if (!acc[key]) acc[key] = { setName: key, owned: 0, total: card.setTotal ?? 0, cards: [] };
       acc[key].owned += card.quantity;
       acc[key].cards.push(card);
       return acc;
     }, {} as Record<string, SetCompletion>)
   ).sort((a, b) => b.owned - a.owned);
-
-  // Cargar totales de cada set desde PokéTCG API
-  useEffect(() => {
-    if (view !== 'sets') return;
-    setGroups.forEach(async (group) => {
-      if (setTotals[group.setName] !== undefined) return;
-      const total = await fetchSetTotal(group.setName);
-      setSetTotals(prev => ({ ...prev, [group.setName]: total }));
-    });
-  }, [view, setGroups.length]);
 
   const wishlistCardIds = new Set(wishlistItems.map(w => w.cardId));
 
@@ -74,6 +451,11 @@ export function CollectionPage() {
     .sort((a, b) => {
       if (sort === 'recent') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       if (sort === 'name') return a.cardName.localeCompare(b.cardName);
+      if (sort === 'value') {
+        const va = a.marketPrice ?? a.tcgplayerPrice ?? 0;
+        const vb = b.marketPrice ?? b.tcgplayerPrice ?? 0;
+        return vb - va;
+      }
       return 0;
     });
 
@@ -92,17 +474,27 @@ export function CollectionPage() {
   return (
     <div className="space-y-4 pt-3 pb-24 px-4">
 
+      {zoomedCard && <CardZoom card={zoomedCard} onClose={() => setZoomedCard(null)} />}
+
+      {editingCard && (
+        <EditCardModal
+          card={editingCard}
+          onSave={(update) => { updateEntry(editingCard.id, update); setEditingCard(null); }}
+          onClose={() => setEditingCard(null)}
+        />
+      )}
+
       <div>
-        <h1 className="text-2xl font-bold text-white">Colección</h1>
-        <p className="text-sm text-gray-500">Todas tus cartas, en un solo lugar.</p>
+        <h1 className="text-2xl font-bold text-white">{t.collection.title}</h1>
+        <p className="text-sm text-gray-500">{t.collection.subtitle}</p>
       </div>
 
       {totalCards > 0 && (
         <div className="grid grid-cols-3 gap-2">
           {[
-            { label: 'Cartas', value: totalCards, color: 'text-blue-400' },
-            { label: 'Únicas', value: uniqueCards, color: 'text-purple-400' },
-            { label: 'Favoritas', value: favorites, color: 'text-yellow-400' },
+            { label: t.stats.cards, value: totalCards, color: 'text-blue-400' },
+            { label: t.stats.unique, value: uniqueCards, color: 'text-purple-400' },
+            { label: t.stats.favorites, value: favorites, color: 'text-yellow-400' },
           ].map(({ label, value, color }) => (
             <div key={label} className="bg-[#111118] border border-white/8 rounded-2xl p-3 text-center">
               <p className={`text-xl font-bold ${color}`}>{value}</p>
@@ -112,26 +504,17 @@ export function CollectionPage() {
         </div>
       )}
 
-      {/* Toggle vista */}
       {cards.length > 0 && (
         <div className="flex gap-2 bg-white/5 rounded-xl p-1">
-          <button
-            onClick={() => setView('cards')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors ${
-              view === 'cards' ? 'bg-blue-600 text-white' : 'text-gray-400'
-            }`}
-          >
+          <button onClick={() => setView('cards')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors ${view === 'cards' ? 'bg-blue-600 text-white' : 'text-gray-400'}`}>
             <LayoutGrid size={13} />
-            Cartas
+            {t.collection.title}
           </button>
-          <button
-            onClick={() => setView('sets')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors ${
-              view === 'sets' ? 'bg-blue-600 text-white' : 'text-gray-400'
-            }`}
-          >
+          <button onClick={() => setView('sets')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors ${view === 'sets' ? 'bg-blue-600 text-white' : 'text-gray-400'}`}>
             <Package size={13} />
-            Sets
+            {t.stats.sets}
           </button>
         </div>
       )}
@@ -139,25 +522,17 @@ export function CollectionPage() {
       {view === 'cards' && (
         <>
           <div className="relative">
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Busca en tu colección"
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50"
-            />
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder={t.collection.searchPlaceholder}
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50" />
           </div>
 
           <div className="flex items-center gap-2 overflow-x-auto pb-1">
-            <span className="shrink-0 text-xs text-gray-500">Ordenar</span>
+            <span className="shrink-0 text-xs text-gray-500">{t.collection.sort}</span>
             {(['recent', 'name', 'value'] as SortOption[]).map(opt => (
-              <button
-                key={opt}
-                onClick={() => setSort(opt)}
-                className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                  sort === opt ? 'bg-blue-600 text-white' : 'bg-white/5 text-gray-400'
-                }`}
-              >
-                {opt === 'recent' ? 'Recientes' : opt === 'name' ? 'Nombre' : 'Valor'}
+              <button key={opt} onClick={() => setSort(opt)}
+                className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${sort === opt ? 'bg-blue-600 text-white' : 'bg-white/5 text-gray-400'}`}>
+                {opt === 'recent' ? t.collection.sortRecent : opt === 'name' ? t.collection.sortName : t.collection.sortValue}
               </button>
             ))}
           </div>
@@ -168,13 +543,13 @@ export function CollectionPage() {
                 <Layers size={28} className="text-gray-600" />
               </div>
               <div>
-                <p className="text-white font-semibold">Aún no tienes cartas</p>
-                <p className="text-sm text-gray-500 mt-1">Escanea cartas para empezar tu colección.</p>
+                <p className="text-white font-semibold">{t.collection.noCardsYet}</p>
+                <p className="text-sm text-gray-500 mt-1">{t.collection.noCardsYetDesc}</p>
               </div>
             </div>
           ) : filtered.length === 0 ? (
             <div className="text-center py-12 text-gray-500 text-sm">
-              No hay cartas que coincidan con "{search}"
+              {t.collection.noMatchesDesc.replace('{search}', search)}
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3">
@@ -184,6 +559,9 @@ export function CollectionPage() {
                   card={card}
                   onUpdate={updateEntry}
                   onRemove={removeEntry}
+                  onEdit={() => setEditingCard(card)}
+                  onZoom={() => setZoomedCard(card)}
+                  formatPrice={formatPrice}
                 />
               ))}
             </div>
@@ -202,7 +580,7 @@ export function CollectionPage() {
             </div>
           ) : (
             setGroups.map(group => {
-              const total = setTotals[group.setName] ?? 0;
+              const total = group.total;
               const pct = total > 0 ? Math.round((group.cards.length / total) * 100) : 0;
               const missing = total - group.cards.length;
 
@@ -217,29 +595,21 @@ export function CollectionPage() {
                       </p>
                     </div>
                     {pct === 100 && (
-                      <span className="shrink-0 text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-medium">
-                        ✓ Completo
-                      </span>
+                      <span className="shrink-0 text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-medium">✓ Completo</span>
                     )}
                   </div>
 
                   {total > 0 && (
                     <div className="w-full bg-white/10 rounded-full h-1.5">
-                      <div
-                        className="bg-gradient-to-r from-blue-600 to-blue-400 h-1.5 rounded-full transition-all"
-                        style={{ width: `${pct}%` }}
-                      />
+                      <div className="bg-gradient-to-r from-blue-600 to-blue-400 h-1.5 rounded-full transition-all" style={{ width: `${pct}%` }} />
                     </div>
                   )}
 
                   <div className="flex gap-2 overflow-x-auto pb-1">
                     {group.cards.slice(0, 5).map(card => (
-                      <img
-                        key={card.id}
-                        src={card.imageUrl ?? ''}
-                        alt={card.cardName}
-                        className="h-14 w-10 object-cover rounded-lg shrink-0"
-                      />
+                      <img key={card.id} src={card.imageUrl ?? ''} alt={card.cardName}
+                        className="h-14 w-10 object-cover rounded-lg shrink-0 cursor-pointer active:scale-95 transition-transform"
+                        onClick={() => setZoomedCard(card)} />
                     ))}
                     {group.cards.length > 5 && (
                       <div className="h-14 w-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
@@ -251,22 +621,15 @@ export function CollectionPage() {
                   {missing > 0 && total > 0 && telegramUser?.id && (
                     <button
                       onClick={async () => {
-                        const res = await fetch(
-                          `https://api.pokemontcg.io/v2/cards?q=set.name:"${encodeURIComponent(group.setName)}"&pageSize=250`
-                        );
+                        const res = await fetch(`https://api.pokemontcg.io/v2/cards?q=set.name:"${encodeURIComponent(group.setName)}"&pageSize=250`);
                         const json = await res.json();
                         const ownedIds = new Set(group.cards.map(c => c.cardId));
                         const missingCards = (json.data ?? []).filter((c: any) => !ownedIds.has(c.id) && !wishlistCardIds.has(c.id));
                         missingCards.forEach((c: any) => {
                           createWishlistItem({
-                            cardId: c.id,
-                            tcg: 'pokemon',
-                            telegramUserId: telegramUser.id,
-                            cardName: c.name,
-                            setName: c.set.name,
-                            cardNumber: c.number,
-                            rarity: c.rarity ?? null,
-                            imageUrl: c.images?.small ?? null,
+                            cardId: c.id, tcg: 'pokemon', telegramUserId: telegramUser.id,
+                            cardName: c.name, setName: c.set.name, cardNumber: c.number,
+                            rarity: c.rarity ?? null, imageUrl: c.images?.small ?? null, setTotal: c.set?.total ?? null,
                           } as any);
                         });
                       }}
@@ -287,85 +650,82 @@ export function CollectionPage() {
 }
 
 function CollectionCard({
-  card,
-  onUpdate,
-  onRemove,
+  card, onUpdate, onRemove, onEdit, onZoom, formatPrice,
 }: {
   card: CollectionItem;
   onUpdate: (id: string, update: Partial<CollectionItem>) => void;
   onRemove: (id: string) => void;
+  onEdit: () => void;
+  onZoom: () => void;
+  formatPrice: (price: number | null | undefined) => string;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const handleRemove = () => {
-    if (!confirmDelete) {
-      setConfirmDelete(true);
-      setTimeout(() => setConfirmDelete(false), 3000);
-      return;
-    }
+    if (!confirmDelete) { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); return; }
     onRemove(card.id);
   };
 
+  const price = card.marketPrice ?? card.tcgplayerPrice ?? null;
+  const variantEmoji = VARIANTS.find(v => v.key === card.variant)?.emoji ?? '🃏';
+  const langFlag = CARD_LANGUAGES.find(l => l.code === card.cardLanguage)?.flag ?? '🇬🇧';
+  const conditionColor = CONDITIONS.find(c => c.key === card.condition)?.color;
+
   return (
     <div className="bg-[#111118] border border-white/8 rounded-2xl overflow-hidden flex flex-col">
-      <div className="relative">
-        <img
-          src={card.imageUrl ?? ''}
-          alt={card.cardName}
-          className="w-full aspect-[2/3] object-cover"
-          loading="lazy"
-        />
-        <button
-          onClick={() => onUpdate(card.id, { favorite: !card.favorite })}
-          className="absolute right-1.5 top-1.5 w-8 h-8 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center"
-        >
-          <Heart
-            size={15}
-            className={card.favorite ? 'fill-yellow-400 text-yellow-400' : 'text-gray-400'}
-          />
+      <div className="relative cursor-pointer" onClick={onZoom}>
+        <img src={card.imageUrl ?? ''} alt={card.cardName} className="w-full aspect-[2/3] object-cover" loading="lazy" />
+        <button onClick={e => { e.stopPropagation(); onUpdate(card.id, { favorite: !card.favorite }); }}
+          className="absolute right-1.5 top-1.5 w-8 h-8 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center">
+          <Heart size={15} className={card.favorite ? 'fill-yellow-400 text-yellow-400' : 'text-gray-400'} />
         </button>
         {card.favorite && (
           <div className="absolute left-1.5 top-1.5 w-6 h-6 rounded-full bg-yellow-400/90 flex items-center justify-center">
             <Star size={12} className="fill-black text-black" />
           </div>
         )}
+        {card.gradingCompany && (
+          <div className="absolute top-1.5 left-1.5 bg-yellow-400/90 rounded-full px-1.5 py-0.5">
+            <span className="text-[9px] font-bold text-black">{card.gradingCompany} {card.gradingScore}</span>
+          </div>
+        )}
+        <div className="absolute bottom-1.5 left-1.5 flex gap-1">
+          <span className="text-sm bg-black/60 backdrop-blur-sm rounded-full px-1.5 py-0.5">{variantEmoji}</span>
+          <span className="text-sm bg-black/60 backdrop-blur-sm rounded-full px-1.5 py-0.5">{langFlag}</span>
+          {card.inSleeve && <span className="text-sm bg-black/60 backdrop-blur-sm rounded-full px-1.5 py-0.5">🛡️</span>}
+          {card.inBinder && <span className="text-sm bg-black/60 backdrop-blur-sm rounded-full px-1.5 py-0.5">📁</span>}
+        </div>
       </div>
 
       <div className="p-2.5 flex-1 space-y-1">
         <p className="text-xs font-bold truncate text-white">{card.cardName}</p>
         <p className="text-[10px] text-gray-500 truncate">{card.setName}</p>
-        {card.rarity && <p className="text-[10px] text-blue-400 truncate">{card.rarity}</p>}
+        {card.condition && <p className={`text-[10px] font-medium ${conditionColor}`}>{CONDITIONS.find(c => c.key === card.condition)?.label}</p>}
+        {price && <p className="text-[10px] text-green-400 font-medium">{formatPrice(price)}</p>}
+        {card.purchasePrice && <p className="text-[10px] text-gray-500">Pagado: {formatPrice(card.purchasePrice)}</p>}
       </div>
 
       <div className="flex items-center justify-between gap-1 px-2.5 pb-2.5">
         <div className="flex items-center gap-1">
-          <button
-            onClick={() => card.quantity > 1 && onUpdate(card.id, { quantity: card.quantity - 1 })}
-            disabled={card.quantity <= 1}
-            className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 disabled:opacity-40"
-          >
+          <button onClick={() => card.quantity > 1 && onUpdate(card.id, { quantity: card.quantity - 1 })} disabled={card.quantity <= 1}
+            className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 disabled:opacity-40">
             <Minus size={13} />
           </button>
-          <span className="text-sm font-bold text-white min-w-[1.5rem] text-center">
-            {card.quantity}
-          </span>
-          <button
-            onClick={() => onUpdate(card.id, { quantity: card.quantity + 1 })}
-            className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-gray-400"
-          >
+          <span className="text-sm font-bold text-white min-w-[1.5rem] text-center">{card.quantity}</span>
+          <button onClick={() => onUpdate(card.id, { quantity: card.quantity + 1 })}
+            className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-gray-400">
             <Plus size={13} />
           </button>
         </div>
-        <button
-          onClick={handleRemove}
-          className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-colors ${
-            confirmDelete
-              ? 'border-red-500 bg-red-500/10 text-red-400'
-              : 'border-white/10 bg-white/5 text-gray-500'
-          }`}
-        >
-          <Trash2 size={13} />
-        </button>
+        <div className="flex gap-1">
+          <button onClick={onEdit} className="w-7 h-7 rounded-lg border border-white/10 bg-white/5 flex items-center justify-center text-blue-400">
+            <Sparkles size={13} />
+          </button>
+          <button onClick={handleRemove}
+            className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-colors ${confirmDelete ? 'border-red-500 bg-red-500/10 text-red-400' : 'border-white/10 bg-white/5 text-gray-500'}`}>
+            <Trash2 size={13} />
+          </button>
+        </div>
       </div>
     </div>
   );
