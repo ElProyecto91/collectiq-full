@@ -272,4 +272,4 @@ export const en: typeof es = {
     imageUnavailable: '{alt} image unavailable',
     noImage: 'No image',
   },
-};
+}; 
