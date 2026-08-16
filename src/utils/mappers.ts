@@ -1,6 +1,3 @@
-Ahora actualiza **`src/utils/mappers.ts`**:
-
-```typescript
 import type {
   CardCondition,
   CardLanguage,
@@ -173,6 +170,3 @@ export function toWishlistItemRow(input: WishlistItemInput) {
     set_total: (input as any).setTotal ?? null,
   };
 }
-```
-
-Pega en `src/utils/mappers.ts`, guarda y dime. 🚀
