@@ -9,7 +9,6 @@ import {
   Search,
   TrendingUp,
   Heart,
-  ChevronDown,
 } from 'lucide-react';
 import { RoutePaths } from '@/config';
 import { cx } from '@/utils';
@@ -91,30 +90,69 @@ function VariantSelector({
   const { t } = useI18n();
   const { formatPrice } = useCurrency();
 
-  const variants: { key: CardVariant; label: string; price: number | null }[] = [
-    { key: 'normal', label: t.variants.normal, price: card.tcgplayer?.prices?.normal?.market ?? card.cardmarket?.prices?.averageSellPrice ?? null },
-    { key: 'holofoil', label: t.variants.holofoil, price: card.tcgplayer?.prices?.holofoil?.market ?? null },
-    { key: 'reverseHolofoil', label: t.variants.reverseHolofoil, price: card.tcgplayer?.prices?.reverseHolofoil?.market ?? null },
-    { key: 'firstEdition', label: t.variants.firstEdition, price: null },
-    { key: 'promo', label: t.variants.promo, price: null },
+  const variants: { key: CardVariant; label: string; desc: string; emoji: string; price: number | null }[] = [
+    {
+      key: 'normal',
+      label: 'Normal',
+      desc: t.variants.normalDesc ?? 'Carta estándar sin acabado especial',
+      emoji: '🃏',
+      price: card.tcgplayer?.prices?.normal?.market ?? card.cardmarket?.prices?.averageSellPrice ?? null,
+    },
+    {
+      key: 'holofoil',
+      label: 'Holofoil ✨',
+      desc: t.variants.holofoilDesc ?? 'La imagen del Pokémon brilla con efecto holográfico',
+      emoji: '✨',
+      price: card.tcgplayer?.prices?.holofoil?.market ?? null,
+    },
+    {
+      key: 'reverseHolofoil',
+      label: 'Reverse Holofoil 🌈',
+      desc: t.variants.reverseHolofoilDesc ?? 'El borde y fondo brillan, pero la imagen es mate',
+      emoji: '🌈',
+      price: card.tcgplayer?.prices?.reverseHolofoil?.market ?? null,
+    },
+    {
+      key: 'firstEdition',
+      label: 'Primera Edición ⭐',
+      desc: t.variants.firstEditionDesc ?? 'Tiene el sello "1st Edition" — muy rara y valiosa',
+      emoji: '⭐',
+      price: null,
+    },
+    {
+      key: 'promo',
+      label: 'Promo 🎁',
+      desc: t.variants.promoDesc ?? 'Carta especial de evento, regalo o torneo',
+      emoji: '🎁',
+      price: null,
+    },
   ];
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div className="w-full max-w-md bg-[#111118] border border-white/10 rounded-t-2xl p-4 space-y-3" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <p className="text-sm font-bold text-white">{t.variants.select}</p>
-          <button onClick={onClose} className="text-gray-500 text-xs">{t.common.cancel}</button>
+          <div>
+            <p className="text-sm font-bold text-white">{t.variants.select}</p>
+            <p className="text-xs text-gray-500 mt-0.5">{card.name}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-500 text-xs bg-white/5 px-3 py-1.5 rounded-lg">{t.common.cancel}</button>
         </div>
-        <div className="space-y-2">
+        <div className="space-y-2 max-h-80 overflow-y-auto">
           {variants.map(v => (
             <button
               key={v.key}
               onClick={() => onSelect(v.key)}
-              className="w-full flex items-center justify-between bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-left active:scale-95 transition-transform"
+              className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-3 py-3 text-left active:scale-95 transition-transform hover:border-blue-500/30"
             >
-              <span className="text-sm text-white">{v.label}</span>
-              {v.price && <span className="text-xs text-green-400">{formatPrice(v.price)}</span>}
+              <span className="text-2xl shrink-0">{v.emoji}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-white">{v.label}</p>
+                <p className="text-[10px] text-gray-500 mt-0.5">{v.desc}</p>
+              </div>
+              {v.price && (
+                <span className="text-xs text-green-400 shrink-0 font-medium">{formatPrice(v.price)}</span>
+              )}
             </button>
           ))}
         </div>
