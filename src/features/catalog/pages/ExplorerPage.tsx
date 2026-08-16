@@ -17,7 +17,8 @@ import { useCreateWishlistItem, useWishlistList } from '@/hooks/use-wishlist';
 import { useUserStore } from '@/store';
 import { useCurrency } from '@/hooks/use-currency';
 import { useI18n } from '@/i18n';
-import type { CardVariant } from '@/types';
+import type { CardVariant, CardLanguage } from '@/types';
+import { CARD_LANGUAGES } from '@/types';
 
 interface PokemonCard {
   id: string;
@@ -78,51 +79,53 @@ async function searchCards(query: string, page: number): Promise<{ cards: Pokemo
   return { cards: [], total: 0 };
 }
 
-function VariantSelector({
+function AddCardSelector({
   card,
-  onSelect,
+  onAdd,
   onClose,
 }: {
   card: PokemonCard;
-  onSelect: (variant: CardVariant) => void;
+  onAdd: (variant: CardVariant, language: CardLanguage) => void;
   onClose: () => void;
 }) {
   const { t } = useI18n();
   const { formatPrice } = useCurrency();
+  const [step, setStep] = useState<'variant' | 'language'>('variant');
+  const [selectedVariant, setSelectedVariant] = useState<CardVariant>('normal');
 
   const variants: { key: CardVariant; label: string; desc: string; emoji: string; price: number | null }[] = [
     {
       key: 'normal',
-      label: 'Normal',
-      desc: t.variants.normalDesc ?? 'Carta estándar sin acabado especial',
+      label: t.variants.normal,
+      desc: t.variants.normalDesc,
       emoji: '🃏',
       price: card.tcgplayer?.prices?.normal?.market ?? card.cardmarket?.prices?.averageSellPrice ?? null,
     },
     {
       key: 'holofoil',
-      label: 'Holofoil ✨',
-      desc: t.variants.holofoilDesc ?? 'La imagen del Pokémon brilla con efecto holográfico',
+      label: t.variants.holofoil,
+      desc: t.variants.holofoilDesc,
       emoji: '✨',
       price: card.tcgplayer?.prices?.holofoil?.market ?? null,
     },
     {
       key: 'reverseHolofoil',
-      label: 'Reverse Holofoil 🌈',
-      desc: t.variants.reverseHolofoilDesc ?? 'El borde y fondo brillan, pero la imagen es mate',
+      label: t.variants.reverseHolofoil,
+      desc: t.variants.reverseHolofoilDesc,
       emoji: '🌈',
       price: card.tcgplayer?.prices?.reverseHolofoil?.market ?? null,
     },
     {
       key: 'firstEdition',
-      label: 'Primera Edición ⭐',
-      desc: t.variants.firstEditionDesc ?? 'Tiene el sello "1st Edition" — muy rara y valiosa',
+      label: t.variants.firstEdition,
+      desc: t.variants.firstEditionDesc,
       emoji: '⭐',
       price: null,
     },
     {
       key: 'promo',
-      label: 'Promo 🎁',
-      desc: t.variants.promoDesc ?? 'Carta especial de evento, regalo o torneo',
+      label: t.variants.promo,
+      desc: t.variants.promoDesc,
       emoji: '🎁',
       price: null,
     },
@@ -131,31 +134,58 @@ function VariantSelector({
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div className="w-full max-w-md bg-[#111118] border border-white/10 rounded-t-2xl p-4 space-y-3" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-bold text-white">{t.variants.select}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{card.name}</p>
-          </div>
-          <button onClick={onClose} className="text-gray-500 text-xs bg-white/5 px-3 py-1.5 rounded-lg">{t.common.cancel}</button>
-        </div>
-        <div className="space-y-2 max-h-80 overflow-y-auto">
-          {variants.map(v => (
-            <button
-              key={v.key}
-              onClick={() => onSelect(v.key)}
-              className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-3 py-3 text-left active:scale-95 transition-transform hover:border-blue-500/30"
-            >
-              <span className="text-2xl shrink-0">{v.emoji}</span>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-white">{v.label}</p>
-                <p className="text-[10px] text-gray-500 mt-0.5">{v.desc}</p>
+
+        {step === 'variant' && (
+          <>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-bold text-white">{t.variants.select}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{card.name}</p>
               </div>
-              {v.price && (
-                <span className="text-xs text-green-400 shrink-0 font-medium">{formatPrice(v.price)}</span>
-              )}
-            </button>
-          ))}
-        </div>
+              <button onClick={onClose} className="text-gray-500 text-xs bg-white/5 px-3 py-1.5 rounded-lg">{t.common.cancel}</button>
+            </div>
+            <div className="space-y-2 max-h-72 overflow-y-auto">
+              {variants.map(v => (
+                <button
+                  key={v.key}
+                  onClick={() => { setSelectedVariant(v.key); setStep('language'); }}
+                  className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-3 py-3 text-left active:scale-95 transition-transform hover:border-blue-500/30"
+                >
+                  <span className="text-2xl shrink-0">{v.emoji}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-white">{v.label}</p>
+                    <p className="text-[10px] text-gray-500 mt-0.5">{v.desc}</p>
+                  </div>
+                  {v.price && <span className="text-xs text-green-400 shrink-0 font-medium">{formatPrice(v.price)}</span>}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        {step === 'language' && (
+          <>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-bold text-white">{t.cardLanguages.select}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{card.name}</p>
+              </div>
+              <button onClick={() => setStep('variant')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">← Volver</button>
+            </div>
+            <div className="space-y-2 max-h-72 overflow-y-auto">
+              {CARD_LANGUAGES.map(lang => (
+                <button
+                  key={lang.code}
+                  onClick={() => onAdd(selectedVariant, lang.code)}
+                  className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-3 py-3 text-left active:scale-95 transition-transform hover:border-blue-500/30"
+                >
+                  <span className="text-2xl shrink-0">{lang.flag}</span>
+                  <p className="text-sm font-semibold text-white">{lang.label}</p>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -171,7 +201,7 @@ export function ExplorerPage() {
   const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState('');
   const [statusMsg, setStatusMsg] = useState('');
-  const [variantCard, setVariantCard] = useState<PokemonCard | null>(null);
+  const [selectorCard, setSelectorCard] = useState<PokemonCard | null>(null);
   const navigate = useNavigate();
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -185,12 +215,9 @@ export function ExplorerPage() {
   const { formatPrice } = useCurrency();
   const { t } = useI18n();
 
-  const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
+  // Permitir múltiples entradas de la misma carta con diferente variante/idioma
+  const addedIds = new Set(collectionCards.map(c => c.cardId));
   const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
-
-  useEffect(() => {
-    setAddedIds(new Set(collectionCards.map(c => c.cardId)));
-  }, [collectionCards]);
 
   useEffect(() => {
     setWishlistIds(new Set(wishlistItems.map(w => w.cardId)));
@@ -240,7 +267,7 @@ export function ExplorerPage() {
     return () => observer.disconnect();
   }, [hasMore, isLoadingMore, page, query]);
 
-  const handleAdd = (card: PokemonCard, variant: CardVariant = 'normal') => {
+  const handleAdd = (card: PokemonCard, variant: CardVariant, language: CardLanguage) => {
     if (!telegramUser?.id) return;
     const price = getPriceForVariant(card, variant);
     const marketPrice = card.cardmarket?.prices?.averageSellPrice ?? null;
@@ -260,11 +287,11 @@ export function ExplorerPage() {
       tcgplayerPrice: price,
       currency: 'EUR',
       variant,
+      cardLanguage: language,
     });
-    setAddedIds(prev => new Set([...prev, card.id]));
     setStatusMsg(`✅ ${card.name} añadida a tu colección`);
     setTimeout(() => setStatusMsg(''), 2500);
-    setVariantCard(null);
+    setSelectorCard(null);
   };
 
   const handleWishlist = (card: PokemonCard) => {
@@ -288,11 +315,11 @@ export function ExplorerPage() {
   return (
     <div className="flex flex-col min-h-screen bg-[#0a0a0f] text-white pb-24">
 
-      {variantCard && (
-        <VariantSelector
-          card={variantCard}
-          onSelect={(variant) => handleAdd(variantCard, variant)}
-          onClose={() => setVariantCard(null)}
+      {selectorCard && (
+        <AddCardSelector
+          card={selectorCard}
+          onAdd={(variant, language) => handleAdd(selectorCard, variant, language)}
+          onClose={() => setSelectorCard(null)}
         />
       )}
 
@@ -376,10 +403,16 @@ export function ExplorerPage() {
             <div className="grid grid-cols-2 gap-3">
               {cards.map(card => {
                 const price = card.cardmarket?.prices?.averageSellPrice ?? card.tcgplayer?.prices?.holofoil?.market ?? card.tcgplayer?.prices?.normal?.market ?? null;
+                const alreadyAdded = addedIds.has(card.id);
                 return (
                   <div key={card.id} className="bg-[#111118] border border-white/8 rounded-2xl overflow-hidden">
-                    <div onClick={() => navigate(`${RoutePaths.Explorer}/card/${card.id}`)} className="cursor-pointer">
+                    <div onClick={() => navigate(`${RoutePaths.Explorer}/card/${card.id}`)} className="cursor-pointer relative">
                       <img src={card.images.small} alt={card.name} className="w-full aspect-[2/3] object-cover" loading="lazy" />
+                      {alreadyAdded && (
+                        <div className="absolute top-1.5 right-1.5 bg-green-500/90 rounded-full p-0.5">
+                          <CheckCircle2 size={14} className="text-white" />
+                        </div>
+                      )}
                     </div>
                     <div className="p-2.5 space-y-1.5">
                       <p className="text-xs font-bold truncate">{card.name}</p>
@@ -401,26 +434,18 @@ export function ExplorerPage() {
                       )}
                       {price && <p className="text-[10px] text-green-400 font-medium">{formatPrice(price)}</p>}
                       <button
-                        onClick={() => addedIds.has(card.id) ? null : setVariantCard(card)}
-                        disabled={addedIds.has(card.id)}
-                        className={cx(
-                          'w-full mt-1 rounded-xl py-2 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all',
-                          addedIds.has(card.id)
-                            ? 'bg-green-500/20 text-green-400 cursor-default'
-                            : 'bg-blue-600 hover:bg-blue-500 text-white active:scale-95',
-                        )}
+                        onClick={() => setSelectorCard(card)}
+                        className="w-full mt-1 rounded-xl py-2 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all bg-blue-600 hover:bg-blue-500 text-white active:scale-95"
                       >
-                        {addedIds.has(card.id)
-                          ? <><CheckCircle2 className="w-3 h-3" /> Añadida</>
-                          : <><Plus className="w-3 h-3" /> Añadir</>
-                        }
+                        <Plus className="w-3 h-3" />
+                        {alreadyAdded ? 'Añadir otra' : 'Añadir'}
                       </button>
                       <button
                         onClick={() => handleWishlist(card)}
-                        disabled={wishlistIds.has(card.id) || addedIds.has(card.id)}
+                        disabled={wishlistIds.has(card.id)}
                         className={cx(
                           'w-full rounded-xl py-2 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all',
-                          wishlistIds.has(card.id) || addedIds.has(card.id)
+                          wishlistIds.has(card.id)
                             ? 'bg-pink-500/10 text-pink-400 cursor-default'
                             : 'bg-white/5 border border-white/10 text-gray-400 active:scale-95',
                         )}
