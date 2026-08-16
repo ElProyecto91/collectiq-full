@@ -33,6 +33,7 @@ export interface CollectionItemRow {
   market_price: number | null;
   tcgplayer_price: number | null;
   currency: string | null;
+  variant: string | null;
 }
 
 export interface WishlistItemRow {
