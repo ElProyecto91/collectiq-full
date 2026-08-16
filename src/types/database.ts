@@ -34,6 +34,7 @@ export interface CollectionItemRow {
   tcgplayer_price: number | null;
   currency: string | null;
   variant: string | null;
+  card_language: string | null;
 }
 
 export interface WishlistItemRow {
