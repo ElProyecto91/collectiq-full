@@ -70,6 +70,24 @@ export const es = {
     select: 'Selecciona la variante',
   },
 
+  cardLanguages: {
+    title: 'Idioma de la carta',
+    select: 'Selecciona el idioma de tu carta',
+    en: 'Inglés',
+    es: 'Español',
+    ja: 'Japonés',
+    de: 'Alemán',
+    fr: 'Francés',
+    it: 'Italiano',
+    pt: 'Portugués',
+    ko: 'Coreano',
+    'zh-hant': 'Chino tradicional',
+    th: 'Tailandés',
+    id: 'Indonesio',
+    ru: 'Ruso',
+    pl: 'Polaco',
+  },
+
   collectionTile: {
     removeFavorite: 'Quitar de favoritos',
     markFavorite: 'Marcar como favorito',
