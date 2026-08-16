@@ -9,6 +9,7 @@ import {
   Search,
   TrendingUp,
   Heart,
+  ChevronDown,
 } from 'lucide-react';
 import { RoutePaths } from '@/config';
 import { cx } from '@/utils';
@@ -16,6 +17,8 @@ import { useCreateCollectionItem, useCollectionList } from '@/hooks/use-collecti
 import { useCreateWishlistItem, useWishlistList } from '@/hooks/use-wishlist';
 import { useUserStore } from '@/store';
 import { useCurrency } from '@/hooks/use-currency';
+import { useI18n } from '@/i18n';
+import type { CardVariant } from '@/types';
 
 interface PokemonCard {
   id: string;
@@ -25,7 +28,7 @@ interface PokemonCard {
   images: { small: string; large: string };
   set: { id: string; name: string; series: string; releaseDate?: string; total?: number };
   cardmarket?: { prices?: { averageSellPrice?: number } };
-  tcgplayer?: { prices?: { normal?: { market?: number }; holofoil?: { market?: number } } };
+  tcgplayer?: { prices?: { normal?: { market?: number }; holofoil?: { market?: number }; reverseHolofoil?: { market?: number } } };
   types?: string[];
   supertype?: string;
 }
@@ -39,10 +42,14 @@ function getRarityColor(rarity?: string): string {
   return 'text-gray-500';
 }
 
-function getTCGPlayerPrice(card: PokemonCard): number | null {
+function getPriceForVariant(card: PokemonCard, variant: CardVariant): number | null {
   const prices = card.tcgplayer?.prices;
-  if (!prices) return null;
-  return prices.holofoil?.market ?? prices.normal?.market ?? null;
+  if (prices) {
+    if (variant === 'holofoil' && prices.holofoil?.market) return prices.holofoil.market;
+    if (variant === 'reverseHolofoil' && prices.reverseHolofoil?.market) return prices.reverseHolofoil.market;
+    if (variant === 'normal' && prices.normal?.market) return prices.normal.market;
+  }
+  return card.cardmarket?.prices?.averageSellPrice ?? null;
 }
 
 const POKEMON_API_KEY = import.meta.env.VITE_POKEMONTCG_API_KEY ?? '';
@@ -56,9 +63,7 @@ async function searchCards(query: string, page: number): Promise<{ cards: Pokemo
 
   for (let i = 0; i < 4; i++) {
     try {
-      const res = await fetch(url, {
-        headers: { 'X-Api-Key': POKEMON_API_KEY },
-      });
+      const res = await fetch(url, { headers: { 'X-Api-Key': POKEMON_API_KEY } });
       if (res.status === 429 || res.status === 500 || res.status === 503) {
         await new Promise(r => setTimeout(r, 1500 * (i + 1)));
         continue;
@@ -74,6 +79,50 @@ async function searchCards(query: string, page: number): Promise<{ cards: Pokemo
   return { cards: [], total: 0 };
 }
 
+function VariantSelector({
+  card,
+  onSelect,
+  onClose,
+}: {
+  card: PokemonCard;
+  onSelect: (variant: CardVariant) => void;
+  onClose: () => void;
+}) {
+  const { t } = useI18n();
+  const { formatPrice } = useCurrency();
+
+  const variants: { key: CardVariant; label: string; price: number | null }[] = [
+    { key: 'normal', label: t.variants.normal, price: card.tcgplayer?.prices?.normal?.market ?? card.cardmarket?.prices?.averageSellPrice ?? null },
+    { key: 'holofoil', label: t.variants.holofoil, price: card.tcgplayer?.prices?.holofoil?.market ?? null },
+    { key: 'reverseHolofoil', label: t.variants.reverseHolofoil, price: card.tcgplayer?.prices?.reverseHolofoil?.market ?? null },
+    { key: 'firstEdition', label: t.variants.firstEdition, price: null },
+    { key: 'promo', label: t.variants.promo, price: null },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full max-w-md bg-[#111118] border border-white/10 rounded-t-2xl p-4 space-y-3" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-bold text-white">{t.variants.select}</p>
+          <button onClick={onClose} className="text-gray-500 text-xs">{t.common.cancel}</button>
+        </div>
+        <div className="space-y-2">
+          {variants.map(v => (
+            <button
+              key={v.key}
+              onClick={() => onSelect(v.key)}
+              className="w-full flex items-center justify-between bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-left active:scale-95 transition-transform"
+            >
+              <span className="text-sm text-white">{v.label}</span>
+              {v.price && <span className="text-xs text-green-400">{formatPrice(v.price)}</span>}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ExplorerPage() {
   const [query, setQuery] = useState('');
   const [cards, setCards] = useState<PokemonCard[]>([]);
@@ -84,6 +133,7 @@ export function ExplorerPage() {
   const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState('');
   const [statusMsg, setStatusMsg] = useState('');
+  const [variantCard, setVariantCard] = useState<PokemonCard | null>(null);
   const navigate = useNavigate();
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -95,6 +145,7 @@ export function ExplorerPage() {
   const { mutate: createWishlistItem } = useCreateWishlistItem();
   const telegramUser = useUserStore((s) => s.telegramUser);
   const { formatPrice } = useCurrency();
+  const { t } = useI18n();
 
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
@@ -133,35 +184,27 @@ export function ExplorerPage() {
     }
   }, []);
 
-  useEffect(() => {
-    doSearch('', 1, false);
-  }, []);
+  useEffect(() => { doSearch('', 1, false); }, []);
 
   useEffect(() => {
     clearTimeout(searchTimeout.current);
-    searchTimeout.current = setTimeout(() => {
-      doSearch(query, 1, false);
-    }, 800);
+    searchTimeout.current = setTimeout(() => { doSearch(query, 1, false); }, 800);
     return () => clearTimeout(searchTimeout.current);
   }, [query]);
 
   useEffect(() => {
     if (!sentinelRef.current || !hasMore) return;
     const observer = new IntersectionObserver(
-      entries => {
-        if (entries[0].isIntersecting && !isLoadingMore) {
-          doSearch(query, page + 1, true);
-        }
-      },
+      entries => { if (entries[0].isIntersecting && !isLoadingMore) doSearch(query, page + 1, true); },
       { threshold: 0.1 }
     );
     observer.observe(sentinelRef.current);
     return () => observer.disconnect();
   }, [hasMore, isLoadingMore, page, query]);
 
-  const handleAdd = (card: PokemonCard) => {
+  const handleAdd = (card: PokemonCard, variant: CardVariant = 'normal') => {
     if (!telegramUser?.id) return;
-    const tcgplayerPrice = getTCGPlayerPrice(card);
+    const price = getPriceForVariant(card, variant);
     const marketPrice = card.cardmarket?.prices?.averageSellPrice ?? null;
     createItem({
       cardId: card.id,
@@ -175,13 +218,15 @@ export function ExplorerPage() {
       quantity: 1,
       favorite: false,
       setTotal: card.set.total ?? null,
-      marketPrice,
-      tcgplayerPrice,
+      marketPrice: price ?? marketPrice,
+      tcgplayerPrice: price,
       currency: 'EUR',
+      variant,
     });
     setAddedIds(prev => new Set([...prev, card.id]));
     setStatusMsg(`✅ ${card.name} añadida a tu colección`);
     setTimeout(() => setStatusMsg(''), 2500);
+    setVariantCard(null);
   };
 
   const handleWishlist = (card: PokemonCard) => {
@@ -205,10 +250,18 @@ export function ExplorerPage() {
   return (
     <div className="flex flex-col min-h-screen bg-[#0a0a0f] text-white pb-24">
 
+      {variantCard && (
+        <VariantSelector
+          card={variantCard}
+          onSelect={(variant) => handleAdd(variantCard, variant)}
+          onClose={() => setVariantCard(null)}
+        />
+      )}
+
       <div className="px-4 pt-6 pb-4">
         <p className="text-[10px] text-blue-400 font-bold uppercase tracking-[0.2em]">COLLECTIQ</p>
-        <h1 className="text-2xl font-bold">Explorador</h1>
-        <p className="text-sm text-gray-500">Descubre y añade cartas a tu colección</p>
+        <h1 className="text-2xl font-bold">{t.explorer.title}</h1>
+        <p className="text-sm text-gray-500">{t.explorer.subtitle}</p>
       </div>
 
       <div className="px-4 pb-4">
@@ -217,12 +270,10 @@ export function ExplorerPage() {
           <input
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="Buscar carta por nombre…"
+            placeholder={t.explorer.searchPlaceholder}
             className="w-full bg-white/5 border border-white/10 rounded-2xl pl-11 pr-4 py-3.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50"
           />
-          {isLoading && (
-            <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-400 animate-spin" />
-          )}
+          {isLoading && <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-400 animate-spin" />}
         </div>
       </div>
 
@@ -236,16 +287,12 @@ export function ExplorerPage() {
         <div className="px-4 pb-2 flex items-center gap-2">
           <TrendingUp className="w-3.5 h-3.5 text-gray-500" />
           <span className="text-xs text-gray-500">
-            {query.trim()
-              ? `${total.toLocaleString()} resultados para "${query.trim()}"`
-              : 'Cartas más recientes'
-            }
+            {query.trim() ? `${total.toLocaleString()} resultados para "${query.trim()}"` : t.explorer.latestCards}
           </span>
         </div>
       )}
 
       <div className="flex-1 px-4">
-
         {isLoading && (
           <div className="grid grid-cols-2 gap-3">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -264,11 +311,8 @@ export function ExplorerPage() {
         {error && !isLoading && (
           <div className="text-center py-12">
             <p className="text-red-400 text-sm">{error}</p>
-            <button
-              onClick={() => doSearch(query, 1, false)}
-              className="mt-3 text-xs text-blue-400 underline"
-            >
-              Reintentar
+            <button onClick={() => doSearch(query, 1, false)} className="mt-3 text-xs text-blue-400 underline">
+              {t.common.tryAgain}
             </button>
           </div>
         )}
@@ -276,20 +320,14 @@ export function ExplorerPage() {
         {!isLoading && !error && cards.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
             <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center">
-              {query.trim()
-                ? <SearchX size={28} className="text-gray-600" />
-                : <Compass size={28} className="text-gray-600" />
-              }
+              {query.trim() ? <SearchX size={28} className="text-gray-600" /> : <Compass size={28} className="text-gray-600" />}
             </div>
             <div>
               <p className="text-white font-semibold">
-                {query.trim() ? 'No se encontraron cartas' : 'Empieza a explorar'}
+                {query.trim() ? t.explorer.noCardsFound : t.explorer.startSearching}
               </p>
               <p className="text-sm text-gray-500 mt-1">
-                {query.trim()
-                  ? `No hay resultados para "${query.trim()}"`
-                  : 'Escribe el nombre de una carta para buscarla'
-                }
+                {query.trim() ? `No hay resultados para "${query.trim()}"` : t.explorer.startSearchingDesc}
               </p>
             </div>
           </div>
@@ -299,22 +337,11 @@ export function ExplorerPage() {
           <>
             <div className="grid grid-cols-2 gap-3">
               {cards.map(card => {
-                const cardmarketPrice = card.cardmarket?.prices?.averageSellPrice ?? null;
-                const tcgPrice = getTCGPlayerPrice(card);
-                const price = cardmarketPrice ?? tcgPrice;
-
+                const price = card.cardmarket?.prices?.averageSellPrice ?? card.tcgplayer?.prices?.holofoil?.market ?? card.tcgplayer?.prices?.normal?.market ?? null;
                 return (
                   <div key={card.id} className="bg-[#111118] border border-white/8 rounded-2xl overflow-hidden">
-                    <div
-                      onClick={() => navigate(`${RoutePaths.Explorer}/card/${card.id}`)}
-                      className="cursor-pointer"
-                    >
-                      <img
-                        src={card.images.small}
-                        alt={card.name}
-                        className="w-full aspect-[2/3] object-cover"
-                        loading="lazy"
-                      />
+                    <div onClick={() => navigate(`${RoutePaths.Explorer}/card/${card.id}`)} className="cursor-pointer">
+                      <img src={card.images.small} alt={card.name} className="w-full aspect-[2/3] object-cover" loading="lazy" />
                     </div>
                     <div className="p-2.5 space-y-1.5">
                       <p className="text-xs font-bold truncate">{card.name}</p>
@@ -334,13 +361,9 @@ export function ExplorerPage() {
                           }
                         </p>
                       )}
-                      {price && (
-                        <p className="text-[10px] text-green-400 font-medium">
-                          {formatPrice(price)}
-                        </p>
-                      )}
+                      {price && <p className="text-[10px] text-green-400 font-medium">{formatPrice(price)}</p>}
                       <button
-                        onClick={() => handleAdd(card)}
+                        onClick={() => addedIds.has(card.id) ? null : setVariantCard(card)}
                         disabled={addedIds.has(card.id)}
                         className={cx(
                           'w-full mt-1 rounded-xl py-2 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all',
@@ -378,14 +401,12 @@ export function ExplorerPage() {
             {isLoadingMore && (
               <div className="flex items-center justify-center gap-2 py-4 text-sm text-gray-500">
                 <Loader2 size={16} className="animate-spin" />
-                Cargando más cartas…
+                {t.explorer.loadingMore}
               </div>
             )}
 
             {!hasMore && cards.length > 0 && (
-              <p className="text-center text-xs text-gray-600 py-4">
-                — Fin de los resultados —
-              </p>
+              <p className="text-center text-xs text-gray-600 py-4">— {t.explorer.endOfResults} —</p>
             )}
           </>
         )}
