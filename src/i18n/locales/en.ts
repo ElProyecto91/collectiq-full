@@ -72,6 +72,24 @@ export const en: typeof es = {
     select: 'Select variant',
   },
 
+  cardLanguages: {
+    title: 'Card Language',
+    select: 'Select your card language',
+    en: 'English',
+    es: 'Spanish',
+    ja: 'Japanese',
+    de: 'German',
+    fr: 'French',
+    it: 'Italian',
+    pt: 'Portuguese',
+    ko: 'Korean',
+    'zh-hant': 'Traditional Chinese',
+    th: 'Thai',
+    id: 'Indonesian',
+    ru: 'Russian',
+    pl: 'Polish',
+  },
+
   collectionTile: {
     removeFavorite: 'Remove favorite',
     markFavorite: 'Mark as favorite',
