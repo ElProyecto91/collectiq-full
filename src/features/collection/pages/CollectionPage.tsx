@@ -1,10 +1,12 @@
-import { Heart, Layers, Minus, Plus, Trash2, Star, LayoutGrid, Package } from 'lucide-react';
+import { Heart, Layers, Minus, Plus, Trash2, Star, LayoutGrid, Package, Globe, Sparkles } from 'lucide-react';
 import { useState, useCallback } from 'react';
 import { useCollectionList, useUpdateCollectionItem, useDeleteCollectionItem } from '@/hooks/use-collection';
 import { useCreateWishlistItem, useWishlistList } from '@/hooks/use-wishlist';
 import { useUserStore } from '@/store';
 import { useCurrency } from '@/hooks/use-currency';
-import type { CollectionItem } from '@/types';
+import { useI18n } from '@/i18n';
+import type { CollectionItem, CardVariant, CardLanguage } from '@/types';
+import { CARD_LANGUAGES } from '@/types';
 
 type SortOption = 'recent' | 'name' | 'value';
 type ViewMode = 'cards' | 'sets';
@@ -16,10 +18,135 @@ interface SetCompletion {
   cards: CollectionItem[];
 }
 
+const VARIANTS: { key: CardVariant; label: string; emoji: string }[] = [
+  { key: 'normal', label: 'Normal', emoji: '🃏' },
+  { key: 'holofoil', label: 'Holofoil', emoji: '✨' },
+  { key: 'reverseHolofoil', label: 'Reverse Holo', emoji: '🌈' },
+  { key: 'firstEdition', label: '1st Edition', emoji: '⭐' },
+  { key: 'promo', label: 'Promo', emoji: '🎁' },
+];
+
+function EditCardModal({
+  card,
+  onSave,
+  onClose,
+}: {
+  card: CollectionItem;
+  onSave: (update: Partial<CollectionItem>) => void;
+  onClose: () => void;
+}) {
+  const { t } = useI18n();
+  const [variant, setVariant] = useState<CardVariant>(card.variant ?? 'normal');
+  const [language, setLanguage] = useState<CardLanguage>(card.cardLanguage ?? 'en');
+  const [step, setStep] = useState<'main' | 'variant' | 'language'>('main');
+
+  const currentVariant = VARIANTS.find(v => v.key === variant);
+  const currentLanguage = CARD_LANGUAGES.find(l => l.code === language);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full max-w-md bg-[#111118] border border-white/10 rounded-t-2xl p-4 space-y-3" onClick={e => e.stopPropagation()}>
+
+        {step === 'main' && (
+          <>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-bold text-white">Editar carta</p>
+                <p className="text-xs text-gray-500 mt-0.5">{card.cardName}</p>
+              </div>
+              <button onClick={onClose} className="text-gray-500 text-xs bg-white/5 px-3 py-1.5 rounded-lg">{t.common.cancel}</button>
+            </div>
+
+            <button
+              onClick={() => setStep('variant')}
+              className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-left"
+            >
+              <span className="text-xl">{currentVariant?.emoji}</span>
+              <div className="flex-1">
+                <p className="text-xs text-gray-500">{t.variants.title}</p>
+                <p className="text-sm text-white font-medium">{currentVariant?.label}</p>
+              </div>
+              <span className="text-gray-500 text-xs">›</span>
+            </button>
+
+            <button
+              onClick={() => setStep('language')}
+              className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-left"
+            >
+              <span className="text-xl">{currentLanguage?.flag}</span>
+              <div className="flex-1">
+                <p className="text-xs text-gray-500">{t.cardLanguages.title}</p>
+                <p className="text-sm text-white font-medium">{currentLanguage?.label}</p>
+              </div>
+              <span className="text-gray-500 text-xs">›</span>
+            </button>
+
+            <button
+              onClick={() => onSave({ variant, cardLanguage: language })}
+              className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold active:scale-95 transition-transform"
+            >
+              {t.common.saveChanges}
+            </button>
+          </>
+        )}
+
+        {step === 'variant' && (
+          <>
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-bold text-white">{t.variants.select}</p>
+              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">← Volver</button>
+            </div>
+            <div className="space-y-2">
+              {VARIANTS.map(v => (
+                <button
+                  key={v.key}
+                  onClick={() => { setVariant(v.key); setStep('main'); }}
+                  className={`w-full flex items-center gap-3 border rounded-xl px-3 py-3 text-left transition-all ${
+                    variant === v.key ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/8'
+                  }`}
+                >
+                  <span className="text-xl">{v.emoji}</span>
+                  <p className="text-sm text-white font-medium">{v.label}</p>
+                  {variant === v.key && <span className="ml-auto text-blue-400">✓</span>}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        {step === 'language' && (
+          <>
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-bold text-white">{t.cardLanguages.select}</p>
+              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">← Volver</button>
+            </div>
+            <div className="space-y-2 max-h-72 overflow-y-auto">
+              {CARD_LANGUAGES.map(lang => (
+                <button
+                  key={lang.code}
+                  onClick={() => { setLanguage(lang.code); setStep('main'); }}
+                  className={`w-full flex items-center gap-3 border rounded-xl px-3 py-3 text-left transition-all ${
+                    language === lang.code ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/8'
+                  }`}
+                >
+                  <span className="text-xl">{lang.flag}</span>
+                  <p className="text-sm text-white font-medium">{lang.label}</p>
+                  {language === lang.code && <span className="ml-auto text-blue-400">✓</span>}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function CollectionPage() {
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SortOption>('recent');
   const [view, setView] = useState<ViewMode>('cards');
+  const [editingCard, setEditingCard] = useState<CollectionItem | null>(null);
 
   const { data: cards = [], isLoading } = useCollectionList();
   const { data: wishlistItems = [] } = useWishlistList();
@@ -28,6 +155,7 @@ export function CollectionPage() {
   const { mutate: createWishlistItem } = useCreateWishlistItem();
   const telegramUser = useUserStore((s) => s.telegramUser);
   const { formatPrice } = useCurrency();
+  const { t } = useI18n();
 
   const updateEntry = useCallback((id: string, update: Partial<CollectionItem>) => {
     updateItem({ id, update });
@@ -77,17 +205,25 @@ export function CollectionPage() {
   return (
     <div className="space-y-4 pt-3 pb-24 px-4">
 
+      {editingCard && (
+        <EditCardModal
+          card={editingCard}
+          onSave={(update) => { updateEntry(editingCard.id, update); setEditingCard(null); }}
+          onClose={() => setEditingCard(null)}
+        />
+      )}
+
       <div>
-        <h1 className="text-2xl font-bold text-white">Colección</h1>
-        <p className="text-sm text-gray-500">Todas tus cartas, en un solo lugar.</p>
+        <h1 className="text-2xl font-bold text-white">{t.collection.title}</h1>
+        <p className="text-sm text-gray-500">{t.collection.subtitle}</p>
       </div>
 
       {totalCards > 0 && (
         <div className="grid grid-cols-3 gap-2">
           {[
-            { label: 'Cartas', value: totalCards, color: 'text-blue-400' },
-            { label: 'Únicas', value: uniqueCards, color: 'text-purple-400' },
-            { label: 'Favoritas', value: favorites, color: 'text-yellow-400' },
+            { label: t.stats.cards, value: totalCards, color: 'text-blue-400' },
+            { label: t.stats.unique, value: uniqueCards, color: 'text-purple-400' },
+            { label: t.stats.favorites, value: favorites, color: 'text-yellow-400' },
           ].map(({ label, value, color }) => (
             <div key={label} className="bg-[#111118] border border-white/8 rounded-2xl p-3 text-center">
               <p className={`text-xl font-bold ${color}`}>{value}</p>
@@ -106,7 +242,7 @@ export function CollectionPage() {
             }`}
           >
             <LayoutGrid size={13} />
-            Cartas
+            {t.collection.title}
           </button>
           <button
             onClick={() => setView('sets')}
@@ -115,7 +251,7 @@ export function CollectionPage() {
             }`}
           >
             <Package size={13} />
-            Sets
+            {t.stats.sets}
           </button>
         </div>
       )}
@@ -126,13 +262,13 @@ export function CollectionPage() {
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Busca en tu colección"
+              placeholder={t.collection.searchPlaceholder}
               className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50"
             />
           </div>
 
           <div className="flex items-center gap-2 overflow-x-auto pb-1">
-            <span className="shrink-0 text-xs text-gray-500">Ordenar</span>
+            <span className="shrink-0 text-xs text-gray-500">{t.collection.sort}</span>
             {(['recent', 'name', 'value'] as SortOption[]).map(opt => (
               <button
                 key={opt}
@@ -141,7 +277,7 @@ export function CollectionPage() {
                   sort === opt ? 'bg-blue-600 text-white' : 'bg-white/5 text-gray-400'
                 }`}
               >
-                {opt === 'recent' ? 'Recientes' : opt === 'name' ? 'Nombre' : 'Valor'}
+                {opt === 'recent' ? t.collection.sortRecent : opt === 'name' ? t.collection.sortName : t.collection.sortValue}
               </button>
             ))}
           </div>
@@ -152,13 +288,13 @@ export function CollectionPage() {
                 <Layers size={28} className="text-gray-600" />
               </div>
               <div>
-                <p className="text-white font-semibold">Aún no tienes cartas</p>
-                <p className="text-sm text-gray-500 mt-1">Escanea cartas para empezar tu colección.</p>
+                <p className="text-white font-semibold">{t.collection.noCardsYet}</p>
+                <p className="text-sm text-gray-500 mt-1">{t.collection.noCardsYetDesc}</p>
               </div>
             </div>
           ) : filtered.length === 0 ? (
             <div className="text-center py-12 text-gray-500 text-sm">
-              No hay cartas que coincidan con "{search}"
+              {t.collection.noMatchesDesc.replace('{search}', search)}
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3">
@@ -168,6 +304,7 @@ export function CollectionPage() {
                   card={card}
                   onUpdate={updateEntry}
                   onRemove={removeEntry}
+                  onEdit={() => setEditingCard(card)}
                   formatPrice={formatPrice}
                 />
               ))}
@@ -276,11 +413,13 @@ function CollectionCard({
   card,
   onUpdate,
   onRemove,
+  onEdit,
   formatPrice,
 }: {
   card: CollectionItem;
   onUpdate: (id: string, update: Partial<CollectionItem>) => void;
   onRemove: (id: string) => void;
+  onEdit: () => void;
   formatPrice: (price: number | null | undefined) => string;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -295,6 +434,8 @@ function CollectionCard({
   };
 
   const price = card.marketPrice ?? card.tcgplayerPrice ?? null;
+  const variantEmoji = VARIANTS.find(v => v.key === card.variant)?.emoji ?? '🃏';
+  const langFlag = CARD_LANGUAGES.find(l => l.code === card.cardLanguage)?.flag ?? '🇬🇧';
 
   return (
     <div className="bg-[#111118] border border-white/8 rounded-2xl overflow-hidden flex flex-col">
@@ -319,6 +460,11 @@ function CollectionCard({
             <Star size={12} className="fill-black text-black" />
           </div>
         )}
+        {/* Variant + Language badges */}
+        <div className="absolute bottom-1.5 left-1.5 flex gap-1">
+          <span className="text-sm bg-black/60 backdrop-blur-sm rounded-full px-1.5 py-0.5">{variantEmoji}</span>
+          <span className="text-sm bg-black/60 backdrop-blur-sm rounded-full px-1.5 py-0.5">{langFlag}</span>
+        </div>
       </div>
 
       <div className="p-2.5 flex-1 space-y-1">
@@ -347,16 +493,24 @@ function CollectionCard({
             <Plus size={13} />
           </button>
         </div>
-        <button
-          onClick={handleRemove}
-          className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-colors ${
-            confirmDelete
-              ? 'border-red-500 bg-red-500/10 text-red-400'
-              : 'border-white/10 bg-white/5 text-gray-500'
-          }`}
-        >
-          <Trash2 size={13} />
-        </button>
+        <div className="flex gap-1">
+          <button
+            onClick={onEdit}
+            className="w-7 h-7 rounded-lg border border-white/10 bg-white/5 flex items-center justify-center text-blue-400"
+          >
+            <Sparkles size={13} />
+          </button>
+          <button
+            onClick={handleRemove}
+            className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-colors ${
+              confirmDelete
+                ? 'border-red-500 bg-red-500/10 text-red-400'
+                : 'border-white/10 bg-white/5 text-gray-500'
+            }`}
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
       </div>
     </div>
   );
