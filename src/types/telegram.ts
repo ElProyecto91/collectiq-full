@@ -1,8 +1,3 @@
-/**
- * Telegram WebApp surface.
- * Mirrors the official @telegram-apps/sdk contract for the subset of fields
- * CollectIQ uses. Typed here so the rest of the app never needs `any`.
- */
 export interface TelegramUser {
   id: number;
   first_name: string;
@@ -40,6 +35,7 @@ export interface TelegramWebApp {
   initData: string;
   initDataUnsafe: {
     user?: TelegramUser;
+    start_param?: string;
   };
   version: string;
   platform: string;
@@ -52,6 +48,8 @@ export interface TelegramWebApp {
   ready: () => void;
   expand: () => void;
   close: () => void;
+  openLink?: (url: string) => void;
+  showAlert?: (message: string, callback?: () => void) => void;
   setHeaderColor: (color: string) => void;
   setBackgroundColor: (color: string) => void;
   enableClosingConfirmation: () => void;
