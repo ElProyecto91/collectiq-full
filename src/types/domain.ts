@@ -15,8 +15,7 @@ export type CardCondition =
   | 'lightly-played'
   | 'moderately-played'
   | 'heavily-played'
-  | 'damaged'
-  | 'graded';
+  | 'damaged';
 
 export type CardVariant = 'normal' | 'holofoil' | 'reverseHolofoil' | 'firstEdition' | 'promo';
 
@@ -37,6 +36,27 @@ export const CARD_LANGUAGES: { code: CardLanguage; label: string; flag: string }
   { code: 'id', label: 'Bahasa Indonesia', flag: '🇮🇩' },
   { code: 'ru', label: 'Русский', flag: '🇷🇺' },
   { code: 'pl', label: 'Polski', flag: '🇵🇱' },
+];
+
+export type GradingCompany = 'PSA' | 'BGS' | 'CGC' | 'CCC' | 'PGC' | 'other';
+
+export const GRADING_COMPANIES: { code: GradingCompany; label: string }[] = [
+  { code: 'PSA', label: 'PSA' },
+  { code: 'BGS', label: 'BGS (Beckett)' },
+  { code: 'CGC', label: 'CGC' },
+  { code: 'CCC', label: 'CCC' },
+  { code: 'PGC', label: 'PGC' },
+  { code: 'other', label: 'Otra' },
+];
+
+export type PurchaseSource = 'pack' | 'trade' | 'purchase' | 'gift' | 'other';
+
+export const PURCHASE_SOURCES: { code: PurchaseSource; label: string; emoji: string }[] = [
+  { code: 'pack', label: 'Sobre/Pack', emoji: '📦' },
+  { code: 'purchase', label: 'Compra', emoji: '🛒' },
+  { code: 'trade', label: 'Intercambio', emoji: '🔄' },
+  { code: 'gift', label: 'Regalo', emoji: '🎁' },
+  { code: 'other', label: 'Otro', emoji: '❓' },
 ];
 
 export interface CardGrade {
@@ -73,6 +93,18 @@ export interface CollectionItem extends CardRef {
   currency: string | null;
   variant: CardVariant | null;
   cardLanguage: CardLanguage | null;
+  purchasePrice: number | null;
+  purchaseSource: PurchaseSource | null;
+  gradingCompany: GradingCompany | null;
+  gradingScore: number | null;
+  gradingCertificate: string | null;
+  gradeCentering: number | null;
+  gradeCorners: number | null;
+  gradeEdges: number | null;
+  gradeSurface: number | null;
+  inSleeve: boolean;
+  inBinder: boolean;
+  customPhoto: string | null;
 }
 
 export interface CollectionItemInput {
@@ -97,6 +129,18 @@ export interface CollectionItemInput {
   currency?: string | null;
   variant?: CardVariant | null;
   cardLanguage?: CardLanguage | null;
+  purchasePrice?: number | null;
+  purchaseSource?: PurchaseSource | null;
+  gradingCompany?: GradingCompany | null;
+  gradingScore?: number | null;
+  gradingCertificate?: string | null;
+  gradeCentering?: number | null;
+  gradeCorners?: number | null;
+  gradeEdges?: number | null;
+  gradeSurface?: number | null;
+  inSleeve?: boolean;
+  inBinder?: boolean;
+  customPhoto?: string | null;
 }
 
 export type CollectionItemUpdate = Partial<CollectionItemInput>;
