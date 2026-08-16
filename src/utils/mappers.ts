@@ -1,7 +1,12 @@
+Ahora actualiza **`src/utils/mappers.ts`**:
+
+```typescript
 import type {
   CardCondition,
   CardLanguage,
   CardVariant,
+  GradingCompany,
+  PurchaseSource,
   CollectionItem,
   CollectionItemInput,
   Profile,
@@ -22,10 +27,7 @@ const toTcg = (value: string): Tcg => (isTcg(value) ? value : 'pokemon');
 
 const isCondition = (value: string | null): value is CardCondition | null =>
   value === null ||
-  ([
-    'mint', 'near-mint', 'lightly-played', 'moderately-played',
-    'heavily-played', 'damaged', 'graded',
-  ] as const).includes(value as CardCondition);
+  (['mint', 'near-mint', 'lightly-played', 'moderately-played', 'heavily-played', 'damaged'] as const).includes(value as CardCondition);
 
 const isVariant = (value: string | null): value is CardVariant | null =>
   value === null ||
@@ -34,6 +36,14 @@ const isVariant = (value: string | null): value is CardVariant | null =>
 const isLanguage = (value: string | null): value is CardLanguage | null =>
   value === null ||
   (['en', 'es', 'ja', 'de', 'fr', 'it', 'pt', 'ko', 'zh-hant', 'th', 'id', 'ru', 'pl'] as const).includes(value as CardLanguage);
+
+const isGradingCompany = (value: string | null): value is GradingCompany | null =>
+  value === null ||
+  (['PSA', 'BGS', 'CGC', 'CCC', 'PGC', 'other'] as const).includes(value as GradingCompany);
+
+const isPurchaseSource = (value: string | null): value is PurchaseSource | null =>
+  value === null ||
+  (['pack', 'trade', 'purchase', 'gift', 'other'] as const).includes(value as PurchaseSource);
 
 export function mapProfile(row: ProfileRow): Profile {
   return {
@@ -75,6 +85,18 @@ export function mapCollectionItem(row: CollectionItemRow): CollectionItem {
     currency: row.currency ?? null,
     variant: isVariant(row.variant) ? row.variant : 'normal',
     cardLanguage: isLanguage(row.card_language) ? row.card_language : 'en',
+    purchasePrice: row.purchase_price ?? null,
+    purchaseSource: isPurchaseSource(row.purchase_source) ? row.purchase_source : null,
+    gradingCompany: isGradingCompany(row.grading_company) ? row.grading_company : null,
+    gradingScore: row.grading_score ?? null,
+    gradingCertificate: row.grading_certificate ?? null,
+    gradeCentering: row.grade_centering ?? null,
+    gradeCorners: row.grade_corners ?? null,
+    gradeEdges: row.grade_edges ?? null,
+    gradeSurface: row.grade_surface ?? null,
+    inSleeve: row.in_sleeve ?? false,
+    inBinder: row.in_binder ?? false,
+    customPhoto: row.custom_photo ?? null,
   };
 }
 
@@ -120,6 +142,18 @@ export function toCollectionItemRow(input: CollectionItemInput) {
     currency: input.currency ?? 'EUR',
     variant: input.variant ?? 'normal',
     card_language: input.cardLanguage ?? 'en',
+    purchase_price: input.purchasePrice ?? null,
+    purchase_source: input.purchaseSource ?? null,
+    grading_company: input.gradingCompany ?? null,
+    grading_score: input.gradingScore ?? null,
+    grading_certificate: input.gradingCertificate ?? null,
+    grade_centering: input.gradeCentering ?? null,
+    grade_corners: input.gradeCorners ?? null,
+    grade_edges: input.gradeEdges ?? null,
+    grade_surface: input.gradeSurface ?? null,
+    in_sleeve: input.inSleeve ?? false,
+    in_binder: input.inBinder ?? false,
+    custom_photo: input.customPhoto ?? null,
   };
 }
 
@@ -139,3 +173,6 @@ export function toWishlistItemRow(input: WishlistItemInput) {
     set_total: (input as any).setTotal ?? null,
   };
 }
+```
+
+Pega en `src/utils/mappers.ts`, guarda y dime. 🚀
