@@ -58,10 +58,15 @@ export const es = {
   variants: {
     title: 'Variante',
     normal: 'Normal',
+    normalDesc: 'Carta estándar sin acabado especial',
     holofoil: 'Holofoil ✨',
+    holofoilDesc: 'La imagen del Pokémon brilla con efecto holográfico',
     reverseHolofoil: 'Reverse Holofoil 🌈',
+    reverseHolofoilDesc: 'El borde y fondo brillan, pero la imagen es mate',
     firstEdition: 'Primera Edición ⭐',
+    firstEditionDesc: 'Tiene el sello "1st Edition" — muy rara y valiosa',
     promo: 'Promo',
+    promoDesc: 'Carta especial de evento, regalo o torneo',
     select: 'Selecciona la variante',
   },
 
