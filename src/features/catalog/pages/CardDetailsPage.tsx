@@ -1,377 +1,387 @@
 import { useNavigate, useParams } from 'react-router-dom';
-import { useState, useEffect } from 'react';
-import {
-  ArrowLeft, Brush, Hash, Layers, Scale,
-  Shield, Sparkles, Type, Zap, Heart,
-  CheckCircle2, TrendingUp, ExternalLink,
-} from 'lucide-react';
-import { RoutePaths } from '@/config';
+import { useEffect, useState } from 'react';
+import { ArrowLeft, Heart, Plus, CheckCircle2, Star, Zap, Shield, Wind } from 'lucide-react';
 import { cx } from '@/utils';
+import { useCreateCollectionItem, useCollectionItem } from '@/hooks/use-collection';
+import { useUserStore } from '@/store';
+import { useCurrency } from '@/hooks/use-currency';
+import { useI18n } from '@/i18n';
 
-interface CardSet {
-  id: string;
+interface Attack {
   name: string;
-  series: string;
-  printedTotal?: number;
-  total?: number;
-  releaseDate?: string;
-  images?: { logo?: string; symbol?: string };
+  cost: string[];
+  damage: string;
+  text: string;
 }
 
-interface CardPrices {
-  averageSellPrice?: number;
-  lowPrice?: number;
-  trendPrice?: number;
-  avg1?: number;
-  avg7?: number;
-  avg30?: number;
+interface Ability {
+  name: string;
+  text: string;
+  type: string;
 }
 
-interface PokemonCard {
+interface PokemonCardDetail {
   id: string;
   name: string;
-  supertype?: string;
+  supertype: string;
   subtypes?: string[];
   hp?: string;
   types?: string[];
+  evolvesFrom?: string;
+  abilities?: Ability[];
+  attacks?: Attack[];
+  weaknesses?: { type: string; value: string }[];
+  resistances?: { type: string; value: string }[];
+  retreatCost?: string[];
   number: string;
   rarity?: string;
-  artist?: string;
   flavorText?: string;
-  evolvesFrom?: string;
-  retreatCost?: string[];
-  regulationMark?: string;
+  artist?: string;
   images: { small: string; large: string };
-  set: CardSet;
-  legalities?: Record<string, string>;
-  cardmarket?: { url?: string; prices?: CardPrices };
-  tcgplayer?: { url?: string; prices?: Record<string, { market?: number; mid?: number }> };
+  set: { id: string; name: string; series: string; total: number; releaseDate: string; images?: { symbol?: string; logo?: string } };
+  cardmarket?: { prices?: { averageSellPrice?: number; lowPrice?: number; trendPrice?: number } };
+  tcgplayer?: { prices?: { normal?: { market?: number }; holofoil?: { market?: number }; reverseHolofoil?: { market?: number } } };
+  legalities?: { standard?: string; expanded?: string; unlimited?: string };
+  nationalPokedexNumbers?: number[];
 }
 
-interface CollectionEntry {
-  card: PokemonCard;
-  quantity: number;
-  favorite: boolean;
-  addedAt: number;
+const TYPE_COLORS: Record<string, string> = {
+  Fire: 'bg-red-500/20 text-red-400 border-red-500/30',
+  Water: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+  Grass: 'bg-green-500/20 text-green-400 border-green-500/30',
+  Lightning: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+  Psychic: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+  Fighting: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+  Darkness: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
+  Metal: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
+  Dragon: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30',
+  Fairy: 'bg-pink-500/20 text-pink-400 border-pink-500/30',
+  Colorless: 'bg-white/10 text-gray-300 border-white/20',
+};
+
+function TypeBadge({ type }: { type: string }) {
+  return (
+    <span className={cx('px-2 py-0.5 rounded-full text-xs font-medium border', TYPE_COLORS[type] ?? 'bg-white/10 text-gray-300 border-white/20')}>
+      {type}
+    </span>
+  );
 }
 
-const STORAGE_KEY = 'pokemon-collection';
-
-function getCollection(): CollectionEntry[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const data = JSON.parse(raw);
-    if (!Array.isArray(data) || data.length === 0) return [];
-    if ('card' in data[0]) return data;
-    return data.map((card: PokemonCard) => ({ card, quantity: 1, favorite: false, addedAt: Date.now() }));
-  } catch { return []; }
+function EnergyCost({ cost }: { cost: string[] }) {
+  return (
+    <div className="flex gap-0.5 flex-wrap">
+      {cost.map((c, i) => (
+        <span key={i} className={cx('w-5 h-5 rounded-full text-[9px] font-bold flex items-center justify-center border', TYPE_COLORS[c] ?? 'bg-white/10 text-gray-300 border-white/20')}>
+          {c[0]}
+        </span>
+      ))}
+    </div>
+  );
 }
 
-function addToCollection(card: PokemonCard) {
-  const collection = getCollection();
-  if (!collection.find(e => e.card.id === card.id)) {
-    collection.push({ card, quantity: 1, favorite: false, addedAt: Date.now() });
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(collection));
-  }
-}
-
-function isInCollection(cardId: string): boolean {
-  return getCollection().some(e => e.card.id === cardId);
-}
-
-async function fetchCard(cardId: string): Promise<PokemonCard> {
-  for (let i = 0; i < 4; i++) {
-    try {
-      const res = await fetch(`https://api.pokemontcg.io/v2/cards/${cardId}`);
-      if (res.status === 429 || res.status === 500 || res.status === 503) {
-        await new Promise(r => setTimeout(r, 1500 * (i + 1)));
-        continue;
-      }
-      if (!res.ok) throw new Error(`Error ${res.status}`);
-      const json = await res.json();
-      return json.data as PokemonCard;
-    } catch (err) {
-      if (i === 3) throw err;
-      await new Promise(r => setTimeout(r, 1000 * (i + 1)));
-    }
-  }
-  throw new Error('No se pudo cargar la carta. Inténtalo de nuevo.');
-}
-
-function getRarityColor(rarity?: string): string {
-  if (!rarity) return 'text-gray-400';
-  const r = rarity.toLowerCase();
-  if (r.includes('secret') || r.includes('hyper')) return 'text-yellow-300';
-  if (r.includes('ultra') || r.includes('rainbow')) return 'text-purple-400';
-  if (r.includes('rare')) return 'text-blue-400';
-  return 'text-gray-400';
-}
-
-function translateRarity(rarity?: string): string {
-  if (!rarity) return '—';
-  return rarity
-    .replace('Common', 'Común')
-    .replace('Uncommon', 'Infrecuente')
-    .replace('Double Rare', 'Doble Rara')
-    .replace('Ultra Rare', 'Ultra Rara')
-    .replace('Secret Rare', 'Secreta')
-    .replace('Hyper Rare', 'Hiper Rara')
-    .replace('Illustration Rare', 'Ilustración Rara')
-    .replace('Special Illustration Rare', 'Ilustración Especial')
-    .replace('Rare', 'Rara');
-}
-
-function translateLegality(status: string): string {
-  if (status === 'Legal') return 'Legal';
-  if (status === 'Banned') return 'Prohibida';
-  if (status === 'Restricted') return 'Restringida';
-  return status;
-}
+const POKEMON_API_KEY = import.meta.env.VITE_POKEMONTCG_API_KEY ?? '';
 
 export function CardDetailsPage() {
   const { cardId } = useParams<{ cardId: string }>();
   const navigate = useNavigate();
-  const [card, setCard] = useState<PokemonCard | null>(null);
+  const [card, setCard] = useState<PokemonCardDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
-  const [inCollection, setInCollection] = useState(false);
-  const [justAdded, setJustAdded] = useState(false);
+  const [added, setAdded] = useState(false);
+
+  const { mutate: createItem } = useCreateCollectionItem();
+  const { data: existingItem } = useCollectionItem(cardId);
+  const telegramUser = useUserStore((s) => s.telegramUser);
+  const { formatPrice } = useCurrency();
+  const { t } = useI18n();
 
   useEffect(() => {
     if (!cardId) return;
     setIsLoading(true);
-    fetchCard(cardId)
-      .then(c => {
-        setCard(c);
-        setInCollection(isInCollection(cardId));
-      })
-      .catch(err => setError(err.message))
-      .finally(() => setIsLoading(false));
+    fetch(`https://api.pokemontcg.io/v2/cards/${cardId}`, {
+      headers: { 'X-Api-Key': POKEMON_API_KEY },
+    })
+      .then(r => r.json())
+      .then(json => { setCard(json.data); setIsLoading(false); })
+      .catch(() => { setError('No se pudo cargar esta carta.'); setIsLoading(false); });
   }, [cardId]);
 
   const handleAdd = () => {
-    if (!card) return;
-    addToCollection(card);
-    setInCollection(true);
-    setJustAdded(true);
-    setTimeout(() => setJustAdded(false), 2000);
+    if (!card || !telegramUser?.id) return;
+    const price = card.tcgplayer?.prices?.holofoil?.market ?? card.tcgplayer?.prices?.normal?.market ?? null;
+    createItem({
+      cardId: card.id,
+      tcg: 'pokemon',
+      telegramUserId: telegramUser.id,
+      cardName: card.name,
+      setName: card.set.name,
+      cardNumber: card.number,
+      rarity: card.rarity ?? null,
+      imageUrl: card.images.small,
+      quantity: 1,
+      favorite: false,
+      setTotal: card.set.total ?? null,
+      marketPrice: card.cardmarket?.prices?.averageSellPrice ?? null,
+      tcgplayerPrice: price,
+      currency: 'EUR',
+    });
+    setAdded(true);
   };
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (error || !card) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center gap-4 px-4">
+        <p className="text-red-400 text-sm text-center">{error}</p>
+        <button onClick={() => navigate(-1)} className="text-blue-400 text-sm underline">{t.common.tryAgain}</button>
+      </div>
+    );
+  }
+
+  const isInCollection = existingItem || added;
+  const cardmarketPrice = card.cardmarket?.prices?.averageSellPrice;
+  const tcgPrice = card.tcgplayer?.prices?.holofoil?.market ?? card.tcgplayer?.prices?.normal?.market;
+  const trendPrice = card.cardmarket?.prices?.trendPrice;
+  const lowPrice = card.cardmarket?.prices?.lowPrice;
+
   return (
-    <div className="flex flex-col min-h-screen bg-[#0a0a0f] text-white pb-24">
+    <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
 
       {/* Header */}
-      <div className="px-4 pt-6 pb-4 flex items-center gap-3">
+      <div className="relative px-4 pt-6 pb-4">
+        <div className="absolute inset-0 bg-gradient-to-b from-blue-950/30 to-transparent pointer-events-none" />
         <button
-          onClick={() => navigate(RoutePaths.Explorer)}
-          className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center"
+          onClick={() => navigate(-1)}
+          className="relative z-10 w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center"
         >
           <ArrowLeft className="w-4 h-4" />
         </button>
-        <div>
-          <p className="text-[10px] text-blue-400 font-bold uppercase tracking-[0.2em]">COLLECTIQ</p>
-          <h1 className="text-lg font-bold leading-tight">Detalle de carta</h1>
-        </div>
       </div>
 
-      {isLoading && (
-        <div className="flex-1 px-4 space-y-4">
-          <div className="mx-auto w-48 aspect-[2/3] bg-white/5 rounded-2xl animate-pulse" />
-          <div className="h-7 bg-white/5 rounded animate-pulse w-2/3" />
-          <div className="grid grid-cols-2 gap-3">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="h-20 bg-white/5 rounded-xl animate-pulse" />
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Card image */}
+      <div className="flex justify-center px-8 pb-6">
+        <img
+          src={card.images.large}
+          alt={card.name}
+          className="w-full max-w-xs rounded-2xl shadow-2xl shadow-black/50"
+        />
+      </div>
 
-      {error && (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <p className="text-red-400 text-sm">{error}</p>
-            <button
-              onClick={() => cardId && fetchCard(cardId).then(setCard).catch(() => {})}
-              className="mt-3 text-xs text-blue-400 underline"
-            >
-              Reintentar
-            </button>
-          </div>
-        </div>
-      )}
+      <div className="px-4 space-y-4">
 
-      {card && !isLoading && (
-        <div className="flex-1 px-4 space-y-5">
-
-          {/* Card image */}
-          <div className="flex justify-center">
-            <img
-              src={card.images.large}
-              alt={card.name}
-              className="w-56 rounded-2xl shadow-2xl shadow-black/50"
-            />
-          </div>
-
-          {/* Title */}
-          <div>
-            <h2 className="text-2xl font-bold">{card.name}</h2>
-            <p className="text-sm text-gray-500 mt-1">{card.set.name}</p>
-            <div className="flex flex-wrap gap-2 mt-3">
-              {card.supertype && (
-                <span className="px-2.5 py-1 rounded-full bg-blue-500/20 text-blue-400 text-xs font-medium">
-                  {card.supertype}
-                </span>
-              )}
-              {card.subtypes?.map(sub => (
-                <span key={sub} className="px-2.5 py-1 rounded-full bg-white/10 text-gray-300 text-xs font-medium">
-                  {sub}
-                </span>
-              ))}
-              {card.regulationMark && (
-                <span className="px-2.5 py-1 rounded-full bg-yellow-500/20 text-yellow-400 text-xs font-medium">
-                  Reg {card.regulationMark}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Attributes grid */}
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              { icon: <Zap size={15} />, label: 'HP', value: card.hp ?? '—' },
-              { icon: <Type size={15} />, label: 'Tipos', value: card.types?.join(' · ') || '—' },
-              { icon: <Sparkles size={15} />, label: 'Rareza', value: translateRarity(card.rarity), color: getRarityColor(card.rarity) },
-              { icon: <Layers size={15} />, label: 'Set', value: card.set.name },
-              { icon: <Brush size={15} />, label: 'Artista', value: card.artist ?? '—' },
-              { icon: <Hash size={15} />, label: 'Número', value: `${card.number} / ${card.set.printedTotal ?? '?'}` },
-              ...(card.retreatCost ? [{ icon: <Shield size={15} />, label: 'Retirada', value: String(card.retreatCost.length) }] : []),
-              ...(card.evolvesFrom ? [{ icon: <Scale size={15} />, label: 'Evoluciona de', value: card.evolvesFrom }] : []),
-            ].map(({ icon, label, value, color }) => (
-              <div key={label} className="bg-[#111118] border border-white/8 rounded-xl p-3.5">
-                <div className="flex items-center gap-1.5 text-gray-500 mb-1.5">
-                  {icon}
-                  <span className="text-[10px] font-medium uppercase tracking-wider">{label}</span>
-                </div>
-                <p className={cx('text-sm font-semibold truncate', color ?? 'text-white')} title={value}>
-                  {value}
-                </p>
-              </div>
-            ))}
-          </div>
-
-          {/* Prices */}
-          {card.cardmarket?.prices && (
-            <div className="bg-[#111118] border border-white/8 rounded-2xl p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <TrendingUp size={16} className="text-green-400" />
-                  <h3 className="text-sm font-semibold">Precios Cardmarket</h3>
-                </div>
-                {card.cardmarket.url && (
-                  <a
-                    href={card.cardmarket.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-xs text-blue-400"
-                  >
-                    Ver <ExternalLink size={11} />
-                  </a>
-                )}
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {card.cardmarket.prices.averageSellPrice != null && (
-                  <div className="bg-white/5 rounded-xl p-2.5 text-center">
-                    <p className="text-[10px] text-gray-500 uppercase tracking-wider">Precio medio</p>
-                    <p className="text-base font-bold text-green-400 mt-0.5">
-                      €{card.cardmarket.prices.averageSellPrice.toFixed(2)}
-                    </p>
-                  </div>
-                )}
-                {card.cardmarket.prices.trendPrice != null && (
-                  <div className="bg-white/5 rounded-xl p-2.5 text-center">
-                    <p className="text-[10px] text-gray-500 uppercase tracking-wider">Tendencia</p>
-                    <p className="text-base font-bold text-blue-400 mt-0.5">
-                      €{card.cardmarket.prices.trendPrice.toFixed(2)}
-                    </p>
-                  </div>
-                )}
-                {card.cardmarket.prices.lowPrice != null && (
-                  <div className="bg-white/5 rounded-xl p-2.5 text-center">
-                    <p className="text-[10px] text-gray-500 uppercase tracking-wider">Precio mínimo</p>
-                    <p className="text-base font-bold text-yellow-400 mt-0.5">
-                      €{card.cardmarket.prices.lowPrice.toFixed(2)}
-                    </p>
-                  </div>
-                )}
-                {card.cardmarket.prices.avg7 != null && (
-                  <div className="bg-white/5 rounded-xl p-2.5 text-center">
-                    <p className="text-[10px] text-gray-500 uppercase tracking-wider">Media 7 días</p>
-                    <p className="text-base font-bold text-white mt-0.5">
-                      €{card.cardmarket.prices.avg7.toFixed(2)}
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Legalities */}
-          {card.legalities && Object.keys(card.legalities).length > 0 && (
-            <div className="bg-[#111118] border border-white/8 rounded-2xl p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <Scale size={16} className="text-blue-400" />
-                <h3 className="text-sm font-semibold">Legalidades</h3>
-              </div>
-              <div className="space-y-2">
-                {Object.entries(card.legalities).map(([format, status]) => (
-                  <div key={format} className="flex items-center justify-between">
-                    <span className="text-sm text-gray-400 capitalize">{format}</span>
-                    <span className={cx(
-                      'px-2.5 py-0.5 rounded-full text-xs font-medium',
-                      status === 'Legal' && 'bg-green-500/20 text-green-400',
-                      status === 'Banned' && 'bg-red-500/20 text-red-400',
-                      status === 'Restricted' && 'bg-yellow-500/20 text-yellow-400',
-                    )}>
-                      {translateLegality(status)}
-                    </span>
-                  </div>
+        {/* Name + basic info */}
+        <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <h1 className="text-xl font-bold text-white">{card.name}</h1>
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                {card.subtypes?.map(s => (
+                  <span key={s} className="text-xs text-gray-400 bg-white/5 px-2 py-0.5 rounded-full">{s}</span>
                 ))}
+                {card.evolvesFrom && (
+                  <span className="text-xs text-gray-500">Evoluciona de <span className="text-blue-400">{card.evolvesFrom}</span></span>
+                )}
               </div>
+            </div>
+            {card.hp && (
+              <div className="shrink-0 text-right">
+                <p className="text-xs text-gray-500">PS</p>
+                <p className="text-2xl font-bold text-red-400">{card.hp}</p>
+              </div>
+            )}
+          </div>
+
+          {card.types && (
+            <div className="flex gap-2 flex-wrap">
+              {card.types.map(t => <TypeBadge key={t} type={t} />)}
             </div>
           )}
 
-          {/* Flavor text */}
           {card.flavorText && (
-            <div className="bg-[#111118] border border-white/8 rounded-2xl p-4">
-              <p className="text-sm italic text-gray-400 leading-relaxed">"{card.flavorText}"</p>
-            </div>
+            <p className="text-xs text-gray-400 italic border-t border-white/8 pt-3">
+              "{card.flavorText}"
+            </p>
           )}
+        </div>
 
-          {/* Add to collection */}
-          <div className="pb-4">
-            {justAdded ? (
-              <div className="w-full bg-green-500/20 border border-green-500/30 rounded-2xl py-4 flex items-center justify-center gap-2 text-green-400 font-semibold">
-                <CheckCircle2 className="w-5 h-5" />
-                ¡Añadida a tu colección!
+        {/* Abilities */}
+        {card.abilities && card.abilities.length > 0 && (
+          <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
+            <p className="text-xs text-purple-400 font-bold uppercase tracking-wider">Habilidad</p>
+            {card.abilities.map((ability, i) => (
+              <div key={i} className="space-y-1">
+                <p className="text-sm font-bold text-purple-300">{ability.name}</p>
+                <p className="text-xs text-gray-400 leading-relaxed">{ability.text}</p>
               </div>
-            ) : inCollection ? (
-              <div className="w-full bg-green-500/10 border border-green-500/20 rounded-2xl py-4 flex items-center justify-center gap-2 text-green-400 font-medium text-sm">
-                <CheckCircle2 className="w-4 h-4" />
-                Ya está en tu colección
+            ))}
+          </div>
+        )}
+
+        {/* Attacks */}
+        {card.attacks && card.attacks.length > 0 && (
+          <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-4">
+            <p className="text-xs text-blue-400 font-bold uppercase tracking-wider">Ataques</p>
+            {card.attacks.map((attack, i) => (
+              <div key={i} className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <EnergyCost cost={attack.cost} />
+                    <p className="text-sm font-bold text-white truncate">{attack.name}</p>
+                  </div>
+                  {attack.damage && (
+                    <span className="text-lg font-bold text-white shrink-0">{attack.damage}</span>
+                  )}
+                </div>
+                {attack.text && (
+                  <p className="text-xs text-gray-400 leading-relaxed">{attack.text}</p>
+                )}
               </div>
-            ) : (
-              <button
-                onClick={handleAdd}
-                className="w-full bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-2xl py-4 font-semibold flex items-center justify-center gap-2 shadow-lg shadow-blue-900/40 active:scale-95 transition-transform"
-              >
-                <Heart className="w-5 h-5" />
-                Añadir a Mi Colección
-              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Weakness / Resistance / Retreat */}
+        {(card.weaknesses || card.resistances || card.retreatCost) && (
+          <div className="bg-[#111118] border border-white/8 rounded-2xl p-4">
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">Debilidad</p>
+                {card.weaknesses?.map((w, i) => (
+                  <div key={i} className="flex items-center justify-center gap-1">
+                    <TypeBadge type={w.type} />
+                    <span className="text-xs text-red-400 font-bold">{w.value}</span>
+                  </div>
+                )) ?? <span className="text-gray-600 text-xs">—</span>}
+              </div>
+              <div>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">Resistencia</p>
+                {card.resistances?.map((r, i) => (
+                  <div key={i} className="flex items-center justify-center gap-1">
+                    <TypeBadge type={r.type} />
+                    <span className="text-xs text-green-400 font-bold">{r.value}</span>
+                  </div>
+                )) ?? <span className="text-gray-600 text-xs">—</span>}
+              </div>
+              <div>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">Retirada</p>
+                {card.retreatCost && card.retreatCost.length > 0 ? (
+                  <div className="flex justify-center">
+                    <EnergyCost cost={card.retreatCost} />
+                  </div>
+                ) : <span className="text-gray-600 text-xs">—</span>}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Prices */}
+        {(cardmarketPrice || tcgPrice) && (
+          <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
+            <p className="text-xs text-green-400 font-bold uppercase tracking-wider">Precios de mercado</p>
+            <div className="grid grid-cols-2 gap-3">
+              {cardmarketPrice && (
+                <div className="bg-white/5 rounded-xl p-3 text-center">
+                  <p className="text-[10px] text-gray-500 mb-1">Cardmarket</p>
+                  <p className="text-lg font-bold text-green-400">{formatPrice(cardmarketPrice)}</p>
+                </div>
+              )}
+              {tcgPrice && (
+                <div className="bg-white/5 rounded-xl p-3 text-center">
+                  <p className="text-[10px] text-gray-500 mb-1">TCGPlayer</p>
+                  <p className="text-lg font-bold text-green-400">{formatPrice(tcgPrice)}</p>
+                </div>
+              )}
+              {trendPrice && (
+                <div className="bg-white/5 rounded-xl p-3 text-center">
+                  <p className="text-[10px] text-gray-500 mb-1">Tendencia</p>
+                  <p className="text-lg font-bold text-blue-400">{formatPrice(trendPrice)}</p>
+                </div>
+              )}
+              {lowPrice && (
+                <div className="bg-white/5 rounded-xl p-3 text-center">
+                  <p className="text-[10px] text-gray-500 mb-1">Precio mínimo</p>
+                  <p className="text-lg font-bold text-yellow-400">{formatPrice(lowPrice)}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Card info */}
+        <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-2">
+          <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Información</p>
+          <div className="grid grid-cols-2 gap-y-2 gap-x-4">
+            {card.rarity && (
+              <>
+                <p className="text-xs text-gray-500">Rareza</p>
+                <p className="text-xs text-white font-medium">{card.rarity}</p>
+              </>
+            )}
+            <p className="text-xs text-gray-500">Número</p>
+            <p className="text-xs text-white font-medium">{card.number}/{card.set.total}</p>
+            <p className="text-xs text-gray-500">Set</p>
+            <p className="text-xs text-white font-medium">{card.set.name}</p>
+            <p className="text-xs text-gray-500">Serie</p>
+            <p className="text-xs text-white font-medium">{card.set.series}</p>
+            {card.artist && (
+              <>
+                <p className="text-xs text-gray-500">Ilustrador</p>
+                <p className="text-xs text-white font-medium">{card.artist}</p>
+              </>
+            )}
+            {card.nationalPokedexNumbers && card.nationalPokedexNumbers.length > 0 && (
+              <>
+                <p className="text-xs text-gray-500">Nº Pokédex</p>
+                <p className="text-xs text-white font-medium">#{card.nationalPokedexNumbers.join(', #')}</p>
+              </>
             )}
           </div>
         </div>
-      )}
+
+        {/* Legalities */}
+        {card.legalities && (
+          <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-2">
+            <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Legalidades</p>
+            <div className="flex gap-2 flex-wrap">
+              {Object.entries(card.legalities).map(([format, status]) => (
+                <div key={format} className={cx(
+                  'px-3 py-1.5 rounded-xl text-xs font-medium border',
+                  status === 'Legal' ? 'bg-green-500/10 text-green-400 border-green-500/20' :
+                  status === 'Banned' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
+                  'bg-gray-500/10 text-gray-400 border-gray-500/20'
+                )}>
+                  <span className="text-gray-500 capitalize">{format}: </span>{status}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Add to collection button */}
+        <button
+          onClick={handleAdd}
+          disabled={!!isInCollection}
+          className={cx(
+            'w-full rounded-2xl py-4 font-semibold flex items-center justify-center gap-2 transition-all',
+            isInCollection
+              ? 'bg-green-500/20 text-green-400 cursor-default'
+              : 'bg-blue-600 text-white active:scale-95'
+          )}
+        >
+          {isInCollection
+            ? <><CheckCircle2 size={20} /> En tu colección</>
+            : <><Plus size={20} /> Añadir a mi colección</>
+          }
+        </button>
+
+      </div>
     </div>
   );
 }
