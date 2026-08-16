@@ -26,14 +26,37 @@ const VARIANTS: { key: CardVariant; label: string; emoji: string }[] = [
   { key: 'promo', label: 'Promo', emoji: '🎁' },
 ];
 
-const CONDITIONS: { key: CardCondition; label: string; color: string }[] = [
-  { key: 'mint', label: 'Mint', color: 'text-green-400' },
-  { key: 'near-mint', label: 'Near Mint', color: 'text-green-300' },
-  { key: 'lightly-played', label: 'Lightly Played', color: 'text-yellow-400' },
-  { key: 'moderately-played', label: 'Moderately Played', color: 'text-orange-400' },
-  { key: 'heavily-played', label: 'Heavily Played', color: 'text-red-400' },
-  { key: 'damaged', label: 'Damaged', color: 'text-red-600' },
+const CONDITION_KEYS: { key: CardCondition; color: string }[] = [
+  { key: 'mint', color: 'text-green-400' },
+  { key: 'near-mint', color: 'text-green-300' },
+  { key: 'lightly-played', color: 'text-yellow-400' },
+  { key: 'moderately-played', color: 'text-orange-400' },
+  { key: 'heavily-played', color: 'text-red-400' },
+  { key: 'damaged', color: 'text-red-600' },
 ];
+
+function getConditionLabel(key: CardCondition, t: any): string {
+  const map: Record<CardCondition, string> = {
+    'mint': t.cardEdit.mint,
+    'near-mint': t.cardEdit.nearMint,
+    'lightly-played': t.cardEdit.lightlyPlayed,
+    'moderately-played': t.cardEdit.moderatelyPlayed,
+    'heavily-played': t.cardEdit.heavilyPlayed,
+    'damaged': t.cardEdit.damaged,
+  };
+  return map[key] ?? key;
+}
+
+function getPurchaseSourceLabel(key: PurchaseSource, t: any): string {
+  const map: Record<PurchaseSource, string> = {
+    'pack': t.purchaseSources.pack,
+    'purchase': t.purchaseSources.purchase,
+    'trade': t.purchaseSources.trade,
+    'gift': t.purchaseSources.gift,
+    'other': t.purchaseSources.other,
+  };
+  return map[key] ?? key;
+}
 
 function CardZoom({ card, onClose }: { card: CollectionItem; onClose: () => void }) {
   return (
@@ -82,7 +105,7 @@ function EditCardModal({
 
   const currentVariant = VARIANTS.find(v => v.key === variant);
   const currentLanguage = CARD_LANGUAGES.find(l => l.code === language);
-  const currentCondition = CONDITIONS.find(c => c.key === condition);
+  const conditionColor = CONDITION_KEYS.find(c => c.key === condition)?.color;
 
   const handleSave = () => {
     onSave({
@@ -113,13 +136,12 @@ function EditCardModal({
           <>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-bold text-white">Editar carta</p>
+                <p className="text-sm font-bold text-white">{t.cardEdit.title}</p>
                 <p className="text-xs text-gray-500 mt-0.5">{card.cardName}</p>
               </div>
               <button onClick={onClose} className="text-gray-500 text-xs bg-white/5 px-3 py-1.5 rounded-lg">{t.common.cancel}</button>
             </div>
 
-            {/* Variante */}
             <button onClick={() => setStep('variant')} className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-left">
               <span className="text-xl">{currentVariant?.emoji}</span>
               <div className="flex-1">
@@ -129,7 +151,6 @@ function EditCardModal({
               <span className="text-gray-500 text-xs">›</span>
             </button>
 
-            {/* Idioma */}
             <button onClick={() => setStep('language')} className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-left">
               <span className="text-xl">{currentLanguage?.flag}</span>
               <div className="flex-1">
@@ -139,81 +160,66 @@ function EditCardModal({
               <span className="text-gray-500 text-xs">›</span>
             </button>
 
-            {/* Condición */}
             <button onClick={() => setStep('condition')} className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-left">
               <span className="text-xl">🔍</span>
               <div className="flex-1">
-                <p className="text-xs text-gray-500">Condición</p>
-                <p className={`text-sm font-medium ${currentCondition?.color ?? 'text-gray-400'}`}>
-                  {currentCondition?.label ?? 'Sin especificar'}
+                <p className="text-xs text-gray-500">{t.cardEdit.condition}</p>
+                <p className={`text-sm font-medium ${conditionColor ?? 'text-gray-400'}`}>
+                  {condition ? getConditionLabel(condition, t) : t.cardEdit.conditionNone}
                 </p>
               </div>
               <span className="text-gray-500 text-xs">›</span>
             </button>
 
-            {/* Grading */}
             <button onClick={() => setStep('grading')} className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-left">
               <span className="text-xl">🏆</span>
               <div className="flex-1">
-                <p className="text-xs text-gray-500">Grading profesional</p>
+                <p className="text-xs text-gray-500">{t.cardEdit.grading}</p>
                 <p className="text-sm text-white font-medium">
-                  {gradingCompany ? `${gradingCompany} ${gradingScore ? `· ${gradingScore}` : ''}` : 'Sin grading'}
+                  {gradingCompany ? `${gradingCompany}${gradingScore ? ` · ${gradingScore}` : ''}` : t.cardEdit.gradingNone}
                 </p>
               </div>
               <span className="text-gray-500 text-xs">›</span>
             </button>
 
-            {/* Adquisición */}
             <button onClick={() => setStep('acquisition')} className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-left">
               <span className="text-xl">💰</span>
               <div className="flex-1">
-                <p className="text-xs text-gray-500">Adquisición</p>
+                <p className="text-xs text-gray-500">{t.cardEdit.acquisition}</p>
                 <p className="text-sm text-white font-medium">
-                  {purchasePrice ? `${purchasePrice}€` : ''}{purchaseSource ? ` · ${PURCHASE_SOURCES.find(s => s.code === purchaseSource)?.emoji}` : ''}{!purchasePrice && !purchaseSource ? 'Sin especificar' : ''}
+                  {purchasePrice ? `${purchasePrice}€` : ''}{purchaseSource ? ` · ${PURCHASE_SOURCES.find(s => s.code === purchaseSource)?.emoji}` : ''}{!purchasePrice && !purchaseSource ? t.cardEdit.acquisitionNone : ''}
                 </p>
               </div>
               <span className="text-gray-500 text-xs">›</span>
             </button>
 
-            {/* Funda / Álbum */}
             <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => setInSleeve(!inSleeve)}
-                className={`flex items-center gap-2 border rounded-xl px-3 py-3 transition-all ${inSleeve ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/8'}`}
-              >
+              <button onClick={() => setInSleeve(!inSleeve)}
+                className={`flex items-center gap-2 border rounded-xl px-3 py-3 transition-all ${inSleeve ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/8'}`}>
                 <span className="text-lg">🛡️</span>
                 <div className="text-left">
-                  <p className="text-xs font-medium text-white">En funda</p>
-                  <p className="text-[10px] text-gray-500">{inSleeve ? 'Sí' : 'No'}</p>
+                  <p className="text-xs font-medium text-white">{t.cardEdit.inSleeve}</p>
+                  <p className="text-[10px] text-gray-500">{inSleeve ? t.common.yes : t.common.no}</p>
                 </div>
               </button>
-              <button
-                onClick={() => setInBinder(!inBinder)}
-                className={`flex items-center gap-2 border rounded-xl px-3 py-3 transition-all ${inBinder ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/8'}`}
-              >
+              <button onClick={() => setInBinder(!inBinder)}
+                className={`flex items-center gap-2 border rounded-xl px-3 py-3 transition-all ${inBinder ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/8'}`}>
                 <span className="text-lg">📁</span>
                 <div className="text-left">
-                  <p className="text-xs font-medium text-white">En álbum</p>
-                  <p className="text-[10px] text-gray-500">{inBinder ? 'Sí' : 'No'}</p>
+                  <p className="text-xs font-medium text-white">{t.cardEdit.inBinder}</p>
+                  <p className="text-[10px] text-gray-500">{inBinder ? t.common.yes : t.common.no}</p>
                 </div>
               </button>
             </div>
 
-            {/* Notas */}
             <div>
-              <p className="text-xs text-gray-500 mb-1.5">Notas personales</p>
-              <textarea
-                value={notes}
-                onChange={e => setNotes(e.target.value)}
-                placeholder="Estado de la carta, historial, planes..."
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50 resize-none h-20"
-              />
+              <p className="text-xs text-gray-500 mb-1.5">{t.cardEdit.personalNotes}</p>
+              <textarea value={notes} onChange={e => setNotes(e.target.value)}
+                placeholder={t.cardEdit.notesPlaceholder}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50 resize-none h-20" />
             </div>
 
-            <button
-              onClick={handleSave}
-              className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold active:scale-95 transition-transform"
-            >
+            <button onClick={handleSave} className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold active:scale-95 transition-transform">
               {t.common.saveChanges}
             </button>
           </>
@@ -223,7 +229,7 @@ function EditCardModal({
           <>
             <div className="flex items-center justify-between">
               <p className="text-sm font-bold text-white">{t.variants.select}</p>
-              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">← Volver</button>
+              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">{t.cardEdit.back}</button>
             </div>
             <div className="space-y-2">
               {VARIANTS.map(v => (
@@ -242,7 +248,7 @@ function EditCardModal({
           <>
             <div className="flex items-center justify-between">
               <p className="text-sm font-bold text-white">{t.cardLanguages.select}</p>
-              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">← Volver</button>
+              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">{t.cardEdit.back}</button>
             </div>
             <div className="space-y-2 max-h-72 overflow-y-auto">
               {CARD_LANGUAGES.map(lang => (
@@ -260,21 +266,21 @@ function EditCardModal({
         {step === 'condition' && (
           <>
             <div className="flex items-center justify-between">
-              <p className="text-sm font-bold text-white">Condición de la carta</p>
-              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">← Volver</button>
+              <p className="text-sm font-bold text-white">{t.cardEdit.condition}</p>
+              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">{t.cardEdit.back}</button>
             </div>
             <div className="space-y-2">
               <button onClick={() => { setCondition(null); setStep('main'); }}
                 className={`w-full flex items-center gap-3 border rounded-xl px-3 py-3 text-left transition-all ${condition === null ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/8'}`}>
                 <span className="text-xl">❓</span>
-                <p className="text-sm text-white font-medium">Sin especificar</p>
+                <p className="text-sm text-white font-medium">{t.cardEdit.conditionNone}</p>
                 {condition === null && <span className="ml-auto text-blue-400">✓</span>}
               </button>
-              {CONDITIONS.map(c => (
+              {CONDITION_KEYS.map(c => (
                 <button key={c.key} onClick={() => { setCondition(c.key); setStep('main'); }}
                   className={`w-full flex items-center gap-3 border rounded-xl px-3 py-3 text-left transition-all ${condition === c.key ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/8'}`}>
                   <div className={`w-3 h-3 rounded-full ${c.color.replace('text-', 'bg-')}`} />
-                  <p className={`text-sm font-medium ${c.color}`}>{c.label}</p>
+                  <p className={`text-sm font-medium ${c.color}`}>{getConditionLabel(c.key, t)}</p>
                   {condition === c.key && <span className="ml-auto text-blue-400">✓</span>}
                 </button>
               ))}
@@ -285,16 +291,16 @@ function EditCardModal({
         {step === 'grading' && (
           <>
             <div className="flex items-center justify-between">
-              <p className="text-sm font-bold text-white">Grading profesional</p>
-              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">← Volver</button>
+              <p className="text-sm font-bold text-white">{t.cardEdit.grading}</p>
+              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">{t.cardEdit.back}</button>
             </div>
             <div className="space-y-3">
               <div>
-                <p className="text-xs text-gray-500 mb-1.5">Empresa de grading</p>
+                <p className="text-xs text-gray-500 mb-1.5">{t.cardEdit.gradingCompany}</p>
                 <div className="grid grid-cols-3 gap-2">
                   <button onClick={() => setGradingCompany(null)}
                     className={`py-2 rounded-xl text-xs font-medium border transition-all ${gradingCompany === null ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-white/5 border-white/8 text-gray-400'}`}>
-                    Ninguna
+                    {t.cardEdit.gradingNoneOption}
                   </button>
                   {GRADING_COMPANIES.map(g => (
                     <button key={g.code} onClick={() => setGradingCompany(g.code)}
@@ -308,53 +314,39 @@ function EditCardModal({
               {gradingCompany && (
                 <>
                   <div>
-                    <p className="text-xs text-gray-500 mb-1.5">Nota global (1-10)</p>
-                    <input
-                      type="number"
-                      min="1" max="10" step="0.5"
-                      value={gradingScore}
-                      onChange={e => setGradingScore(e.target.value)}
-                      placeholder="ej: 9.5"
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50"
-                    />
+                    <p className="text-xs text-gray-500 mb-1.5">{t.cardEdit.gradingScore}</p>
+                    <input type="number" min="1" max="10" step="0.5" value={gradingScore}
+                      onChange={e => setGradingScore(e.target.value)} placeholder="ej: 9.5"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50" />
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500 mb-1.5">Número de certificado</p>
-                    <input
-                      type="text"
-                      value={gradingCertificate}
-                      onChange={e => setGradingCertificate(e.target.value)}
+                    <p className="text-xs text-gray-500 mb-1.5">{t.cardEdit.gradingCertificate}</p>
+                    <input type="text" value={gradingCertificate} onChange={e => setGradingCertificate(e.target.value)}
                       placeholder="ej: 12345678"
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50"
-                    />
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50" />
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500 mb-1.5">Sub-notas</p>
+                    <p className="text-xs text-gray-500 mb-1.5">{t.cardEdit.subGrades}</p>
                     <div className="grid grid-cols-2 gap-2">
                       {[
-                        { label: 'Centrado', value: gradeCentering, set: setGradeCentering },
-                        { label: 'Esquinas', value: gradeCorners, set: setGradeCorners },
-                        { label: 'Bordes', value: gradeEdges, set: setGradeEdges },
-                        { label: 'Superficie', value: gradeSurface, set: setGradeSurface },
+                        { label: t.cardEdit.centering, value: gradeCentering, set: setGradeCentering },
+                        { label: t.cardEdit.corners, value: gradeCorners, set: setGradeCorners },
+                        { label: t.cardEdit.edges, value: gradeEdges, set: setGradeEdges },
+                        { label: t.cardEdit.surface, value: gradeSurface, set: setGradeSurface },
                       ].map(sub => (
                         <div key={sub.label}>
                           <p className="text-[10px] text-gray-500 mb-1">{sub.label}</p>
-                          <input
-                            type="number" min="1" max="10" step="0.5"
-                            value={sub.value}
-                            onChange={e => sub.set(e.target.value)}
-                            placeholder="1-10"
-                            className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50"
-                          />
+                          <input type="number" min="1" max="10" step="0.5" value={sub.value}
+                            onChange={e => sub.set(e.target.value)} placeholder="1-10"
+                            className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50" />
                         </div>
                       ))}
                     </div>
                   </div>
                 </>
               )}
-
               <button onClick={() => setStep('main')} className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold">
-                Guardar grading
+                {t.cardEdit.saveGrading}
               </button>
             </div>
           </>
@@ -363,48 +355,39 @@ function EditCardModal({
         {step === 'acquisition' && (
           <>
             <div className="flex items-center justify-between">
-              <p className="text-sm font-bold text-white">Datos de adquisición</p>
-              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">← Volver</button>
+              <p className="text-sm font-bold text-white">{t.cardEdit.acquisition}</p>
+              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">{t.cardEdit.back}</button>
             </div>
             <div className="space-y-3">
               <div>
-                <p className="text-xs text-gray-500 mb-1.5">Precio pagado</p>
-                <input
-                  type="number" min="0" step="0.01"
-                  value={purchasePrice}
-                  onChange={e => setPurchasePrice(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50"
-                />
+                <p className="text-xs text-gray-500 mb-1.5">{t.cardEdit.purchasePrice}</p>
+                <input type="number" min="0" step="0.01" value={purchasePrice}
+                  onChange={e => setPurchasePrice(e.target.value)} placeholder="0.00"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50" />
               </div>
               <div>
-                <p className="text-xs text-gray-500 mb-1.5">Cómo la conseguiste</p>
+                <p className="text-xs text-gray-500 mb-1.5">{t.cardEdit.howObtained}</p>
                 <div className="grid grid-cols-3 gap-2">
                   {PURCHASE_SOURCES.map(s => (
                     <button key={s.code} onClick={() => setPurchaseSource(s.code)}
                       className={`flex flex-col items-center py-2.5 rounded-xl text-xs border transition-all ${purchaseSource === s.code ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-white/5 border-white/8 text-gray-400'}`}>
                       <span className="text-lg mb-0.5">{s.emoji}</span>
-                      {s.label}
+                      {getPurchaseSourceLabel(s.code, t)}
                     </button>
                   ))}
                 </div>
               </div>
               <div>
-                <p className="text-xs text-gray-500 mb-1.5">Fecha de adquisición</p>
-                <input
-                  type="date"
-                  value={acquiredAt}
-                  onChange={e => setAcquiredAt(e.target.value)}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500/50"
-                />
+                <p className="text-xs text-gray-500 mb-1.5">{t.cardEdit.acquiredDate}</p>
+                <input type="date" value={acquiredAt} onChange={e => setAcquiredAt(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500/50" />
               </div>
               <button onClick={() => setStep('main')} className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold">
-                Guardar adquisición
+                {t.cardEdit.saveAcquisition}
               </button>
             </div>
           </>
         )}
-
       </div>
     </div>
   );
@@ -562,6 +545,7 @@ export function CollectionPage() {
                   onEdit={() => setEditingCard(card)}
                   onZoom={() => setZoomedCard(card)}
                   formatPrice={formatPrice}
+                  t={t}
                 />
               ))}
             </div>
@@ -650,7 +634,7 @@ export function CollectionPage() {
 }
 
 function CollectionCard({
-  card, onUpdate, onRemove, onEdit, onZoom, formatPrice,
+  card, onUpdate, onRemove, onEdit, onZoom, formatPrice, t,
 }: {
   card: CollectionItem;
   onUpdate: (id: string, update: Partial<CollectionItem>) => void;
@@ -658,6 +642,7 @@ function CollectionCard({
   onEdit: () => void;
   onZoom: () => void;
   formatPrice: (price: number | null | undefined) => string;
+  t: any;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -669,7 +654,7 @@ function CollectionCard({
   const price = card.marketPrice ?? card.tcgplayerPrice ?? null;
   const variantEmoji = VARIANTS.find(v => v.key === card.variant)?.emoji ?? '🃏';
   const langFlag = CARD_LANGUAGES.find(l => l.code === card.cardLanguage)?.flag ?? '🇬🇧';
-  const conditionColor = CONDITIONS.find(c => c.key === card.condition)?.color;
+  const conditionColor = CONDITION_KEYS.find(c => c.key === card.condition)?.color;
 
   return (
     <div className="bg-[#111118] border border-white/8 rounded-2xl overflow-hidden flex flex-col">
@@ -700,9 +685,9 @@ function CollectionCard({
       <div className="p-2.5 flex-1 space-y-1">
         <p className="text-xs font-bold truncate text-white">{card.cardName}</p>
         <p className="text-[10px] text-gray-500 truncate">{card.setName}</p>
-        {card.condition && <p className={`text-[10px] font-medium ${conditionColor}`}>{CONDITIONS.find(c => c.key === card.condition)?.label}</p>}
+        {card.condition && <p className={`text-[10px] font-medium ${conditionColor}`}>{getConditionLabel(card.condition, t)}</p>}
         {price && <p className="text-[10px] text-green-400 font-medium">{formatPrice(price)}</p>}
-        {card.purchasePrice && <p className="text-[10px] text-gray-500">Pagado: {formatPrice(card.purchasePrice)}</p>}
+        {card.purchasePrice && <p className="text-[10px] text-gray-500">{t.cardEdit.purchasePrice}: {formatPrice(card.purchasePrice)}</p>}
       </div>
 
       <div className="flex items-center justify-between gap-1 px-2.5 pb-2.5">
