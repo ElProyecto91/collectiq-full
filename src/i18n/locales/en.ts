@@ -57,6 +57,16 @@ export const en: typeof es = {
     favorites: 'Favorites',
   },
 
+  variants: {
+    title: 'Variant',
+    normal: 'Normal',
+    holofoil: 'Holofoil ✨',
+    reverseHolofoil: 'Reverse Holofoil 🌈',
+    firstEdition: 'First Edition ⭐',
+    promo: 'Promo',
+    select: 'Select variant',
+  },
+
   collectionTile: {
     removeFavorite: 'Remove favorite',
     markFavorite: 'Mark as favorite',
