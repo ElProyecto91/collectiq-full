@@ -18,6 +18,8 @@ export type CardCondition =
   | 'damaged'
   | 'graded';
 
+export type CardVariant = 'normal' | 'holofoil' | 'reverseHolofoil' | 'firstEdition' | 'promo';
+
 export interface CardGrade {
   authority: 'PSA' | 'BGS' | 'CGC' | string;
   score: number;
@@ -50,6 +52,7 @@ export interface CollectionItem extends CardRef {
   marketPrice: number | null;
   tcgplayerPrice: number | null;
   currency: string | null;
+  variant: CardVariant | null;
 }
 
 export interface CollectionItemInput {
@@ -72,6 +75,7 @@ export interface CollectionItemInput {
   marketPrice?: number | null;
   tcgplayerPrice?: number | null;
   currency?: string | null;
+  variant?: CardVariant | null;
 }
 
 export type CollectionItemUpdate = Partial<CollectionItemInput>;
