@@ -1,5 +1,6 @@
 import type {
   CardCondition,
+  CardLanguage,
   CardVariant,
   CollectionItem,
   CollectionItemInput,
@@ -22,18 +23,17 @@ const toTcg = (value: string): Tcg => (isTcg(value) ? value : 'pokemon');
 const isCondition = (value: string | null): value is CardCondition | null =>
   value === null ||
   ([
-    'mint',
-    'near-mint',
-    'lightly-played',
-    'moderately-played',
-    'heavily-played',
-    'damaged',
-    'graded',
+    'mint', 'near-mint', 'lightly-played', 'moderately-played',
+    'heavily-played', 'damaged', 'graded',
   ] as const).includes(value as CardCondition);
 
 const isVariant = (value: string | null): value is CardVariant | null =>
   value === null ||
   (['normal', 'holofoil', 'reverseHolofoil', 'firstEdition', 'promo'] as const).includes(value as CardVariant);
+
+const isLanguage = (value: string | null): value is CardLanguage | null =>
+  value === null ||
+  (['en', 'es', 'ja', 'de', 'fr', 'it', 'pt', 'ko', 'zh-hant', 'th', 'id', 'ru', 'pl'] as const).includes(value as CardLanguage);
 
 export function mapProfile(row: ProfileRow): Profile {
   return {
@@ -74,6 +74,7 @@ export function mapCollectionItem(row: CollectionItemRow): CollectionItem {
     tcgplayerPrice: row.tcgplayer_price ?? null,
     currency: row.currency ?? null,
     variant: isVariant(row.variant) ? row.variant : 'normal',
+    cardLanguage: isLanguage(row.card_language) ? row.card_language : 'en',
   };
 }
 
@@ -118,6 +119,7 @@ export function toCollectionItemRow(input: CollectionItemInput) {
     tcgplayer_price: input.tcgplayerPrice ?? null,
     currency: input.currency ?? 'EUR',
     variant: input.variant ?? 'normal',
+    card_language: input.cardLanguage ?? 'en',
   };
 }
 
