@@ -1,4 +1,4 @@
-import { Heart, Layers, Minus, Plus, Trash2, Star, LayoutGrid, Package, Globe, Sparkles } from 'lucide-react';
+import { Heart, Layers, Minus, Plus, Trash2, Star, LayoutGrid, Package, Sparkles, X } from 'lucide-react';
 import { useState, useCallback } from 'react';
 import { useCollectionList, useUpdateCollectionItem, useDeleteCollectionItem } from '@/hooks/use-collection';
 import { useCreateWishlistItem, useWishlistList } from '@/hooks/use-wishlist';
@@ -25,6 +25,31 @@ const VARIANTS: { key: CardVariant; label: string; emoji: string }[] = [
   { key: 'firstEdition', label: '1st Edition', emoji: '⭐' },
   { key: 'promo', label: 'Promo', emoji: '🎁' },
 ];
+
+function CardZoom({ card, onClose }: { card: CollectionItem; onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-6"
+      onClick={onClose}
+    >
+      <button
+        onClick={onClose}
+        className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 flex items-center justify-center"
+      >
+        <X size={20} className="text-white" />
+      </button>
+      <div onClick={e => e.stopPropagation()}>
+        <img
+          src={card.imageUrl ?? ''}
+          alt={card.cardName}
+          className="w-full max-w-xs rounded-2xl shadow-2xl"
+        />
+        <p className="text-white text-center font-bold mt-3">{card.cardName}</p>
+        <p className="text-gray-400 text-center text-sm">{card.setName}</p>
+      </div>
+    </div>
+  );
+}
 
 function EditCardModal({
   card,
@@ -147,6 +172,7 @@ export function CollectionPage() {
   const [sort, setSort] = useState<SortOption>('recent');
   const [view, setView] = useState<ViewMode>('cards');
   const [editingCard, setEditingCard] = useState<CollectionItem | null>(null);
+  const [zoomedCard, setZoomedCard] = useState<CollectionItem | null>(null);
 
   const { data: cards = [], isLoading } = useCollectionList();
   const { data: wishlistItems = [] } = useWishlistList();
@@ -204,6 +230,8 @@ export function CollectionPage() {
 
   return (
     <div className="space-y-4 pt-3 pb-24 px-4">
+
+      {zoomedCard && <CardZoom card={zoomedCard} onClose={() => setZoomedCard(null)} />}
 
       {editingCard && (
         <EditCardModal
@@ -305,6 +333,7 @@ export function CollectionPage() {
                   onUpdate={updateEntry}
                   onRemove={removeEntry}
                   onEdit={() => setEditingCard(card)}
+                  onZoom={() => setZoomedCard(card)}
                   formatPrice={formatPrice}
                 />
               ))}
@@ -360,7 +389,8 @@ export function CollectionPage() {
                         key={card.id}
                         src={card.imageUrl ?? ''}
                         alt={card.cardName}
-                        className="h-14 w-10 object-cover rounded-lg shrink-0"
+                        className="h-14 w-10 object-cover rounded-lg shrink-0 cursor-pointer active:scale-95 transition-transform"
+                        onClick={() => setZoomedCard(card)}
                       />
                     ))}
                     {group.cards.length > 5 && (
@@ -414,12 +444,14 @@ function CollectionCard({
   onUpdate,
   onRemove,
   onEdit,
+  onZoom,
   formatPrice,
 }: {
   card: CollectionItem;
   onUpdate: (id: string, update: Partial<CollectionItem>) => void;
   onRemove: (id: string) => void;
   onEdit: () => void;
+  onZoom: () => void;
   formatPrice: (price: number | null | undefined) => string;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -439,7 +471,7 @@ function CollectionCard({
 
   return (
     <div className="bg-[#111118] border border-white/8 rounded-2xl overflow-hidden flex flex-col">
-      <div className="relative">
+      <div className="relative cursor-pointer" onClick={onZoom}>
         <img
           src={card.imageUrl ?? ''}
           alt={card.cardName}
@@ -447,7 +479,7 @@ function CollectionCard({
           loading="lazy"
         />
         <button
-          onClick={() => onUpdate(card.id, { favorite: !card.favorite })}
+          onClick={e => { e.stopPropagation(); onUpdate(card.id, { favorite: !card.favorite }); }}
           className="absolute right-1.5 top-1.5 w-8 h-8 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center"
         >
           <Heart
@@ -460,7 +492,6 @@ function CollectionCard({
             <Star size={12} className="fill-black text-black" />
           </div>
         )}
-        {/* Variant + Language badges */}
         <div className="absolute bottom-1.5 left-1.5 flex gap-1">
           <span className="text-sm bg-black/60 backdrop-blur-sm rounded-full px-1.5 py-0.5">{variantEmoji}</span>
           <span className="text-sm bg-black/60 backdrop-blur-sm rounded-full px-1.5 py-0.5">{langFlag}</span>
