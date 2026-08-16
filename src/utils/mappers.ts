@@ -1,5 +1,6 @@
 import type {
   CardCondition,
+  CardVariant,
   CollectionItem,
   CollectionItemInput,
   Profile,
@@ -29,6 +30,10 @@ const isCondition = (value: string | null): value is CardCondition | null =>
     'damaged',
     'graded',
   ] as const).includes(value as CardCondition);
+
+const isVariant = (value: string | null): value is CardVariant | null =>
+  value === null ||
+  (['normal', 'holofoil', 'reverseHolofoil', 'firstEdition', 'promo'] as const).includes(value as CardVariant);
 
 export function mapProfile(row: ProfileRow): Profile {
   return {
@@ -68,6 +73,7 @@ export function mapCollectionItem(row: CollectionItemRow): CollectionItem {
     marketPrice: row.market_price ?? null,
     tcgplayerPrice: row.tcgplayer_price ?? null,
     currency: row.currency ?? null,
+    variant: isVariant(row.variant) ? row.variant : 'normal',
   };
 }
 
@@ -111,6 +117,7 @@ export function toCollectionItemRow(input: CollectionItemInput) {
     market_price: input.marketPrice ?? null,
     tcgplayer_price: input.tcgplayerPrice ?? null,
     currency: input.currency ?? 'EUR',
+    variant: input.variant ?? 'normal',
   };
 }
 
