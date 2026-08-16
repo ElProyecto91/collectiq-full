@@ -60,10 +60,15 @@ export const en: typeof es = {
   variants: {
     title: 'Variant',
     normal: 'Normal',
+    normalDesc: 'Standard card with no special finish',
     holofoil: 'Holofoil ✨',
+    holofoilDesc: 'The Pokémon image shines with a holographic effect',
     reverseHolofoil: 'Reverse Holofoil 🌈',
+    reverseHolofoilDesc: 'The border and background shine, but the image is matte',
     firstEdition: 'First Edition ⭐',
+    firstEditionDesc: 'Has the "1st Edition" stamp — very rare and valuable',
     promo: 'Promo',
+    promoDesc: 'Special card from an event, gift or tournament',
     select: 'Select variant',
   },
 
