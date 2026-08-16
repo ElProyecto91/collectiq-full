@@ -35,6 +35,18 @@ export interface CollectionItemRow {
   currency: string | null;
   variant: string | null;
   card_language: string | null;
+  purchase_price: number | null;
+  purchase_source: string | null;
+  grading_company: string | null;
+  grading_score: number | null;
+  grading_certificate: string | null;
+  grade_centering: number | null;
+  grade_corners: number | null;
+  grade_edges: number | null;
+  grade_surface: number | null;
+  in_sleeve: boolean;
+  in_binder: boolean;
+  custom_photo: string | null;
 }
 
 export interface WishlistItemRow {
