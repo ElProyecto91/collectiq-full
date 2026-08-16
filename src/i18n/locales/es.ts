@@ -55,6 +55,16 @@ export const es = {
     favorites: 'Favoritos',
   },
 
+  variants: {
+    title: 'Variante',
+    normal: 'Normal',
+    holofoil: 'Holofoil ✨',
+    reverseHolofoil: 'Reverse Holofoil 🌈',
+    firstEdition: 'Primera Edición ⭐',
+    promo: 'Promo',
+    select: 'Selecciona la variante',
+  },
+
   collectionTile: {
     removeFavorite: 'Quitar de favoritos',
     markFavorite: 'Marcar como favorito',
@@ -109,7 +119,7 @@ export const es = {
   scanner: {
     back: 'Volver',
     eyebrow: 'Escáner',
-    title: 'Escanea una carta',
+    title: 'Escanear carta',
     subtitle: 'Apunta tu cámara a una carta y la identificaremos al instante.',
     cameraPreview: 'La vista de la cámara aparecerá aquí',
     startScanning: 'Empezar a escanear',
