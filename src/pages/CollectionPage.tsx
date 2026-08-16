@@ -74,16 +74,13 @@ function CardZoom({ card, onClose }: { card: CollectionItem; onClose: () => void
 }
 
 function EditCardModal({
-  card,
-  onSave,
-  onClose,
+  card, onSave, onClose,
 }: {
   card: CollectionItem;
   onSave: (update: Partial<CollectionItem>) => void;
   onClose: () => void;
 }) {
   const { t } = useI18n();
-  const { formatPrice } = useCurrency();
 
   const [variant, setVariant] = useState<CardVariant>(card.variant ?? 'normal');
   const [language, setLanguage] = useState<CardLanguage>(card.cardLanguage ?? 'en');
@@ -109,16 +106,10 @@ function EditCardModal({
 
   const handleSave = () => {
     onSave({
-      variant,
-      cardLanguage: language,
-      condition,
+      variant, cardLanguage: language, condition,
       purchasePrice: purchasePrice ? parseFloat(purchasePrice) : null,
-      purchaseSource,
-      acquiredAt: acquiredAt || null,
-      notes: notes || null,
-      inSleeve,
-      inBinder,
-      gradingCompany,
+      purchaseSource, acquiredAt: acquiredAt || null, notes: notes || null,
+      inSleeve, inBinder, gradingCompany,
       gradingScore: gradingScore ? parseFloat(gradingScore) : null,
       gradingCertificate: gradingCertificate || null,
       gradeCentering: gradeCentering ? parseFloat(gradeCentering) : null,
@@ -310,7 +301,6 @@ function EditCardModal({
                   ))}
                 </div>
               </div>
-
               {gradingCompany && (
                 <>
                   <div>
