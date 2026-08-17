@@ -5,6 +5,7 @@ import { useCreateWishlistItem, useWishlistList } from '@/hooks/use-wishlist';
 import { useUserStore } from '@/store';
 import { useCurrency } from '@/hooks/use-currency';
 import { useI18n } from '@/i18n';
+import { useActiveTCG, TCG_OPTIONS } from '@/hooks/use-active-tcg';
 import type { CollectionItem, CardVariant, CardLanguage, CardCondition, GradingCompany, PurchaseSource } from '@/types';
 import { CARD_LANGUAGES, GRADING_COMPANIES, PURCHASE_SOURCES } from '@/types';
 
@@ -103,6 +104,30 @@ function exportToCSV(cards: CollectionItem[], filename: string) {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
+}
+
+function TCGSelector({ activeTCG, setActiveTCG }: { activeTCG: string; setActiveTCG: (tcg: any) => void }) {
+  return (
+    <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4">
+      {TCG_OPTIONS.map(tcg => (
+        <button
+          key={tcg.key}
+          onClick={() => tcg.available && setActiveTCG(tcg.key)}
+          className={'shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all border ' + (
+            activeTCG === tcg.key
+              ? 'bg-blue-600 text-white border-blue-600'
+              : tcg.available
+                ? 'bg-white/5 text-gray-400 border-white/10 active:scale-95'
+                : 'bg-white/3 text-gray-600 border-white/5 opacity-50'
+          )}
+        >
+          <span>{tcg.emoji}</span>
+          <span>{tcg.label}</span>
+          {!tcg.available && <span className="text-[9px] text-gray-600">pronto</span>}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function ExportModal({
@@ -504,8 +529,9 @@ export function CollectionPage() {
   const [editingCard, setEditingCard] = useState<CollectionItem | null>(null);
   const [zoomedCard, setZoomedCard] = useState<CollectionItem | null>(null);
   const [showExport, setShowExport] = useState(false);
+  const { activeTCG, setActiveTCG } = useActiveTCG();
 
-  const { data: cards = [], isLoading } = useCollectionList();
+  const { data: allCards = [], isLoading } = useCollectionList();
   const { data: wishlistItems = [] } = useWishlistList();
   const { mutate: updateItem } = useUpdateCollectionItem();
   const { mutate: deleteItem } = useDeleteCollectionItem();
@@ -513,6 +539,8 @@ export function CollectionPage() {
   const telegramUser = useUserStore((s) => s.telegramUser);
   const { formatPrice } = useCurrency();
   const { t } = useI18n();
+
+  const cards = activeTCG === 'all' ? allCards : allCards.filter(c => c.tcg === activeTCG);
 
   const updateEntry = useCallback((id: string, update: Partial<CollectionItem>) => {
     updateItem({ id, update });
@@ -593,6 +621,8 @@ export function CollectionPage() {
           </button>
         )}
       </div>
+
+      <TCGSelector activeTCG={activeTCG} setActiveTCG={setActiveTCG} />
 
       {totalCards > 0 && (
         <div className="grid grid-cols-3 gap-2">
