@@ -843,5 +843,3 @@ function CollectionCard({
   );
 }
 ```
-
-Pega en `src/features/collection/pages/CollectionPage.tsx`, guarda y commit. 🚀
