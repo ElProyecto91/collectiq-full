@@ -107,16 +107,27 @@ function EditCardModal({
 
   const handleSave = () => {
     onSave({
-      variant, cardLanguage: language, condition,
+      variant,
+      cardLanguage: language,
+      condition,
       purchasePrice: purchasePrice ? parseFloat(purchasePrice) : null,
-      purchaseSource, acquiredAt: acquiredAt || null, notes: notes || null,
-      inSleeve, inBinder, gradingCompany,
+      purchaseSource,
+      acquiredAt: acquiredAt || null,
+      notes: notes || null,
+      inSleeve,
+      inBinder,
+      gradingCompany,
       gradingScore: gradingScore ? parseFloat(gradingScore) : null,
       gradingCertificate: gradingCertificate || null,
       gradeCentering: gradeCentering ? parseFloat(gradeCentering) : null,
       gradeCorners: gradeCorners ? parseFloat(gradeCorners) : null,
       gradeEdges: gradeEdges ? parseFloat(gradeEdges) : null,
       gradeSurface: gradeSurface ? parseFloat(gradeSurface) : null,
+      imageUrl: card.imageUrl,
+      cardName: card.cardName,
+      setName: card.setName,
+      cardNumber: card.cardNumber,
+      rarity: card.rarity,
     });
   };
 
