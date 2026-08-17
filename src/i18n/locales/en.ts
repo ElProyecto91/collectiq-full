@@ -5,6 +5,7 @@ export const en: typeof es = {
     home: 'Home',
     collection: 'Collection',
     explorer: 'Explorer',
+    community: 'Community',
     wishlist: 'Wishlist',
     profile: 'Profile',
     ariaPrimary: 'Primary navigation',
@@ -61,11 +62,11 @@ export const en: typeof es = {
     title: 'Variant',
     normal: 'Normal',
     normalDesc: 'Standard card with no special finish',
-    holofoil: 'Holofoil ✨',
+    holofoil: 'Holofoil',
     holofoilDesc: 'The Pokémon image shines with a holographic effect',
-    reverseHolofoil: 'Reverse Holofoil 🌈',
+    reverseHolofoil: 'Reverse Holofoil',
     reverseHolofoilDesc: 'The border and background shine, but the image is matte',
-    firstEdition: 'First Edition ⭐',
+    firstEdition: 'First Edition',
     firstEditionDesc: 'Has the "1st Edition" stamp — very rare and valuable',
     promo: 'Promo',
     promoDesc: 'Special card from an event, gift or tournament',
@@ -193,7 +194,7 @@ export const en: typeof es = {
     startScanning: 'Start scanning',
     comingSoon: 'Scanner coming soon',
     aiRecognition: 'AI recognition',
-    aiRecognitionDesc: 'The scanner is architecturally ready and will identify cards across every supported TCG once the recognition model is connected.',
+    aiRecognitionDesc: 'The scanner will identify cards across every supported TCG.',
     scanCard: 'Scan card',
     selectOrPhoto: 'Select or photograph a card',
     captureHint: 'For best results, photograph a single card in good lighting without glare.',
@@ -209,7 +210,25 @@ export const en: typeof es = {
     subtitle: 'Cards you\'re hunting for.',
     searchPlaceholder: 'Search your wishlist',
     empty: 'Your wishlist is empty',
-    emptyDesc: 'Add cards from the Explorer once the catalog is live, and track the cards you want to trade for or buy.',
+    emptyDesc: 'Add cards from the Explorer and track the cards you want to trade for or buy.',
+  },
+
+  community: {
+    title: 'Community',
+    subtitle: 'Decks, collections and more.',
+    decks: 'Decks',
+    collections: 'Collections',
+    ranking: 'Ranking',
+    comingSoon: 'Community coming soon',
+    comingSoonDesc: 'Soon you\'ll be able to see decks, collections and connect with other collectors.',
+  },
+
+  decks: {
+    title: 'My Decks',
+    subtitle: 'Create and share your decks.',
+    empty: 'No decks yet',
+    emptyDesc: 'Create your first 60-card deck and share it with the community.',
+    create: 'Create deck',
   },
 
   profile: {
@@ -272,4 +291,11 @@ export const en: typeof es = {
     imageUnavailable: '{alt} image unavailable',
     noImage: 'No image',
   },
-}; 
+
+  onboarding: {
+    welcome: 'Welcome to CollectIQ!',
+    welcomeDesc: 'The ultimate app for TCG card collectors.',
+    chooseLanguage: 'Choose your language',
+    continue: 'Continue',
+  },
+};
