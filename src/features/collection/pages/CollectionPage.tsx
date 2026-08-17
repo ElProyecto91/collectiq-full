@@ -1,3 +1,4 @@
+```tsx
 import { Heart, Layers, Minus, Plus, Trash2, Star, LayoutGrid, Package, Sparkles, X, Download } from 'lucide-react';
 import { useState, useCallback } from 'react';
 import { useCollectionList, useUpdateCollectionItem, useDeleteCollectionItem } from '@/hooks/use-collection';
@@ -61,10 +62,10 @@ function getPurchaseSourceLabel(key: PurchaseSource, t: any): string {
 
 function exportToCSV(cards: CollectionItem[], filename: string) {
   const headers = [
-    'Nombre', 'Set', 'Número', 'Rareza', 'Variante', 'Idioma', 'Condición',
-    'Cantidad', 'Precio mercado', 'Precio pagado', 'Fuente', 'Fecha adquisición',
+    'Nombre', 'Set', 'Numero', 'Rareza', 'Variante', 'Idioma', 'Condicion',
+    'Cantidad', 'Precio mercado', 'Precio pagado', 'Fuente', 'Fecha adquisicion',
     'Grading', 'Nota grading', 'Certificado', 'Centrado', 'Esquinas', 'Bordes', 'Superficie',
-    'En funda', 'En álbum', 'Notas',
+    'En funda', 'En album', 'Notas',
   ];
 
   const rows = cards.map(card => [
@@ -87,8 +88,8 @@ function exportToCSV(cards: CollectionItem[], filename: string) {
     card.gradeCorners ?? '',
     card.gradeEdges ?? '',
     card.gradeSurface ?? '',
-    card.inSleeve ? 'Sí' : 'No',
-    card.inBinder ? 'Sí' : 'No',
+    card.inSleeve ? 'Si' : 'No',
+    card.inBinder ? 'Si' : 'No',
     card.notes ?? '',
   ]);
 
@@ -96,7 +97,7 @@ function exportToCSV(cards: CollectionItem[], filename: string) {
     .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
     .join('\n');
 
-  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -130,8 +131,8 @@ function ExportModal({
       <div className="w-full max-w-md bg-[#111118] border border-white/10 rounded-t-2xl p-4 space-y-3 max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-bold text-white">Exportar colección</p>
-            <p className="text-xs text-gray-500 mt-0.5">Formato CSV — compatible con Excel y Google Sheets</p>
+            <p className="text-sm font-bold text-white">Exportar coleccion</p>
+            <p className="text-xs text-gray-500 mt-0.5">CSV compatible con Excel y Google Sheets</p>
           </div>
           <button onClick={onClose} className="text-gray-500 text-xs bg-white/5 px-3 py-1.5 rounded-lg">Cancelar</button>
         </div>
@@ -144,7 +145,7 @@ function ExportModal({
           <Download size={18} className="text-white shrink-0" />
           <div>
             <p className="text-sm font-semibold text-white">Exportar todo</p>
-            <p className="text-xs text-blue-200">{cards.length} cartas · Pokémon TCG</p>
+            <p className="text-xs text-blue-200">{cards.length} cartas · Pokemon TCG</p>
           </div>
         </button>
 
@@ -268,7 +269,7 @@ function EditCardModal({
             <button onClick={() => setStep('condition')} className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-left">
               <span className="text-xl">🔍</span>
               <div className="flex-1">
-                <p className="text-xs text-gray-500">{t.cardEdit?.condition ?? 'Condición'}</p>
+                <p className="text-xs text-gray-500">{t.cardEdit?.condition ?? 'Condicion'}</p>
                 <p className={`text-sm font-medium ${conditionColor ?? 'text-gray-400'}`}>
                   {condition ? getConditionLabel(condition, t) : (t.cardEdit?.conditionNone ?? 'Sin especificar')}
                 </p>
@@ -290,7 +291,7 @@ function EditCardModal({
             <button onClick={() => setStep('acquisition')} className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-left">
               <span className="text-xl">💰</span>
               <div className="flex-1">
-                <p className="text-xs text-gray-500">{t.cardEdit?.acquisition ?? 'Adquisición'}</p>
+                <p className="text-xs text-gray-500">{t.cardEdit?.acquisition ?? 'Adquisicion'}</p>
                 <p className="text-sm text-white font-medium">
                   {purchasePrice ? `${purchasePrice}€` : ''}{purchaseSource ? ` · ${PURCHASE_SOURCES.find(s => s.code === purchaseSource)?.emoji}` : ''}{!purchasePrice && !purchaseSource ? (t.cardEdit?.acquisitionNone ?? 'Sin especificar') : ''}
                 </p>
@@ -304,15 +305,15 @@ function EditCardModal({
                 <span className="text-lg">🛡️</span>
                 <div className="text-left">
                   <p className="text-xs font-medium text-white">{t.cardEdit?.inSleeve ?? 'En funda'}</p>
-                  <p className="text-[10px] text-gray-500">{inSleeve ? (t.common.yes ?? 'Sí') : (t.common.no ?? 'No')}</p>
+                  <p className="text-[10px] text-gray-500">{inSleeve ? (t.common.yes ?? 'Si') : (t.common.no ?? 'No')}</p>
                 </div>
               </button>
               <button onClick={() => setInBinder(!inBinder)}
                 className={`flex items-center gap-2 border rounded-xl px-3 py-3 transition-all ${inBinder ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/8'}`}>
                 <span className="text-lg">📁</span>
                 <div className="text-left">
-                  <p className="text-xs font-medium text-white">{t.cardEdit?.inBinder ?? 'En álbum'}</p>
-                  <p className="text-[10px] text-gray-500">{inBinder ? (t.common.yes ?? 'Sí') : (t.common.no ?? 'No')}</p>
+                  <p className="text-xs font-medium text-white">{t.cardEdit?.inBinder ?? 'En album'}</p>
+                  <p className="text-[10px] text-gray-500">{inBinder ? (t.common.yes ?? 'Si') : (t.common.no ?? 'No')}</p>
                 </div>
               </button>
             </div>
@@ -371,7 +372,7 @@ function EditCardModal({
         {step === 'condition' && (
           <>
             <div className="flex items-center justify-between">
-              <p className="text-sm font-bold text-white">{t.cardEdit?.condition ?? 'Condición'}</p>
+              <p className="text-sm font-bold text-white">{t.cardEdit?.condition ?? 'Condicion'}</p>
               <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">{t.cardEdit?.back ?? '← Volver'}</button>
             </div>
             <div className="space-y-2">
@@ -424,7 +425,7 @@ function EditCardModal({
                       className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50" />
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500 mb-1.5">{t.cardEdit?.gradingCertificate ?? 'Número de certificado'}</p>
+                    <p className="text-xs text-gray-500 mb-1.5">{t.cardEdit?.gradingCertificate ?? 'Numero de certificado'}</p>
                     <input type="text" value={gradingCertificate} onChange={e => setGradingCertificate(e.target.value)}
                       placeholder="ej: 12345678"
                       className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50" />
@@ -459,7 +460,7 @@ function EditCardModal({
         {step === 'acquisition' && (
           <>
             <div className="flex items-center justify-between">
-              <p className="text-sm font-bold text-white">{t.cardEdit?.acquisition ?? 'Adquisición'}</p>
+              <p className="text-sm font-bold text-white">{t.cardEdit?.acquisition ?? 'Adquisicion'}</p>
               <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">{t.cardEdit?.back ?? '← Volver'}</button>
             </div>
             <div className="space-y-3">
@@ -470,7 +471,7 @@ function EditCardModal({
                   className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50" />
               </div>
               <div>
-                <p className="text-xs text-gray-500 mb-1.5">{t.cardEdit?.howObtained ?? 'Cómo la conseguiste'}</p>
+                <p className="text-xs text-gray-500 mb-1.5">{t.cardEdit?.howObtained ?? 'Como la conseguiste'}</p>
                 <div className="grid grid-cols-3 gap-2">
                   {PURCHASE_SOURCES.map(s => (
                     <button key={s.code} onClick={() => setPurchaseSource(s.code)}
@@ -482,12 +483,12 @@ function EditCardModal({
                 </div>
               </div>
               <div>
-                <p className="text-xs text-gray-500 mb-1.5">{t.cardEdit?.acquiredDate ?? 'Fecha de adquisición'}</p>
+                <p className="text-xs text-gray-500 mb-1.5">{t.cardEdit?.acquiredDate ?? 'Fecha de adquisicion'}</p>
                 <input type="date" value={acquiredAt} onChange={e => setAcquiredAt(e.target.value)}
                   className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500/50" />
               </div>
               <button onClick={() => setStep('main')} className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold">
-                {t.cardEdit?.saveAcquisition ?? 'Guardar adquisición'}
+                {t.cardEdit?.saveAcquisition ?? 'Guardar adquisicion'}
               </button>
             </div>
           </>
@@ -555,7 +556,7 @@ export function CollectionPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-32">
-        <p className="text-gray-500 text-sm">Cargando colección...</p>
+        <p className="text-gray-500 text-sm">Cargando coleccion...</p>
       </div>
     );
   }
@@ -682,7 +683,7 @@ export function CollectionPage() {
               <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center">
                 <Package size={28} className="text-gray-600" />
               </div>
-              <p className="text-white font-semibold">Sin sets todavía</p>
+              <p className="text-white font-semibold">Sin sets todavia</p>
             </div>
           ) : (
             setGroups.map(group => {
@@ -702,7 +703,7 @@ export function CollectionPage() {
                     </div>
                     <div className="text-right shrink-0">
                       {pct === 100 && (
-                        <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-medium block mb-1">✓ Completo</span>
+                        <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-medium block mb-1">Completo</span>
                       )}
                       {group.totalValue > 0 && (
                         <span className="text-xs text-green-400 font-bold">{formatPrice(group.totalValue)}</span>
@@ -747,7 +748,7 @@ export function CollectionPage() {
                       className="w-full py-2 rounded-xl bg-pink-500/10 border border-pink-500/20 text-pink-400 text-xs font-medium flex items-center justify-center gap-1.5"
                     >
                       <Heart size={12} />
-                      Añadir {missing} que faltan a Wishlist
+                      Anadir {missing} que faltan a Wishlist
                     </button>
                   )}
                 </div>
@@ -842,3 +843,6 @@ function CollectionCard({
     </div>
   );
 }
+```
+
+Pega en `src/features/collection/pages/CollectionPage.tsx`, guarda y commit. 🚀
