@@ -109,23 +109,31 @@ function exportToCSV(cards: CollectionItem[], filename: string) {
 function TCGSelector({ activeTCG, setActiveTCG }: { activeTCG: string; setActiveTCG: (tcg: any) => void }) {
   return (
     <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4">
-      {TCG_OPTIONS.map(tcg => (
-        <button
-          key={tcg.key}
-          onClick={() => tcg.available && setActiveTCG(tcg.key)}
-          className={'shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all border ' + (
-            activeTCG === tcg.key
-              ? 'bg-blue-600 text-white border-blue-600'
-              : tcg.available
-                ? 'bg-white/5 text-gray-400 border-white/10 active:scale-95'
-                : 'bg-white/3 text-gray-600 border-white/5 opacity-50'
-          )}
-        >
-          <span>{tcg.emoji}</span>
-          <span>{tcg.label}</span>
-          {!tcg.available && <span className="text-[9px] text-gray-600">pronto</span>}
-        </button>
-      ))}
+      {TCG_OPTIONS.map(tcg => {
+        const isActive = activeTCG === tcg.key;
+        return (
+          <button
+            key={tcg.key}
+            onClick={() => tcg.available && setActiveTCG(tcg.key)}
+            className={'shrink-0 flex flex-col items-center gap-1 px-3 py-2 rounded-xl text-[10px] font-medium transition-all border ' + (
+              isActive
+                ? 'border-opacity-100 text-white'
+                : tcg.available
+                  ? 'bg-white/5 text-gray-400 border-white/10 active:scale-95'
+                  : 'bg-white/3 text-gray-600 border-white/5 opacity-40'
+            )}
+            style={isActive ? { backgroundColor: tcg.color + '22', borderColor: tcg.color, color: tcg.color } : {}}
+          >
+            <span
+              className="w-6 h-6"
+              style={{ color: isActive ? tcg.color : tcg.available ? '#9ca3af' : '#4b5563' }}
+              dangerouslySetInnerHTML={{ __html: tcg.icon }}
+            />
+            <span className="whitespace-nowrap">{tcg.label}</span>
+            {!tcg.available && <span className="text-[8px] text-gray-600 -mt-0.5">pronto</span>}
+          </button>
+        );
+      })}
     </div>
   );
 }
