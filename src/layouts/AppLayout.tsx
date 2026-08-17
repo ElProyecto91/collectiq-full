@@ -61,4 +61,4 @@ export function AppLayout() {
       <BottomNav />
     </div>
   );
-}
+} 
