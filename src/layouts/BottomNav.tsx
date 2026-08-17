@@ -1,30 +1,19 @@
 import { NavLink } from 'react-router-dom';
-import { Compass, Heart, Home, LayoutGrid, User, type LucideIcon } from 'lucide-react';
+import { Compass, Users, Home, LayoutGrid, User, type LucideIcon } from 'lucide-react';
 
 import { NAV_ITEMS, RoutePaths } from '@/config';
 import type { NavItem } from '@/config';
 import { cx } from '@/utils';
 import { useI18n } from '@/i18n';
 
-/**
- * Icon registry — maps the string ids from NAV_ITEMS to lucide components.
- * Keeping the mapping here avoids importing every icon at the config layer.
- */
 const ICONS: Record<NavItem['icon'], LucideIcon> = {
   Home,
   LayoutGrid,
   Compass,
-  Heart,
+  Users,
   User,
 };
 
-/**
- * BottomNav — the primary navigation, fixed to the viewport bottom.
- *
- * Five items with large touch targets, an active indicator, and Telegram haptic
- * feedback on selection. The glass surface floats over content; safe-area
- * padding keeps it clear of the iOS home indicator / Telegram gesture bar.
- */
 export function BottomNav() {
   const { t } = useI18n();
 
@@ -74,7 +63,6 @@ export function BottomNav() {
   );
 }
 
-/** Resolve a dot-path nav label key against the translation object. */
 function resolveNavLabel(
   t: ReturnType<typeof useI18n>['t'],
   key: string
