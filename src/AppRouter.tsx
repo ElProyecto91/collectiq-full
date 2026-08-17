@@ -12,6 +12,9 @@ import {
 import { LoginPage } from '@/pages/LoginPage';
 import ScannerPage from '@/features/scanner/ScannerPage';
 import { CardDetailsPage } from '@/features/catalog/pages/CardDetailsPage';
+import { CommunityPage } from '@/pages/CommunityPage';
+import { DecksPage } from '@/pages/DecksPage';
+import { DeckDetailPage } from '@/pages/DeckDetailPage';
 
 const router = createBrowserRouter([
   {
@@ -23,6 +26,9 @@ const router = createBrowserRouter([
       { path: RoutePaths.CardDetails, element: <CardDetailsPage /> },
       { path: RoutePaths.Wishlist, element: <WishlistPage /> },
       { path: RoutePaths.Profile, element: <ProfilePage /> },
+      { path: RoutePaths.Community, element: <CommunityPage /> },
+      { path: RoutePaths.Decks, element: <DecksPage /> },
+      { path: RoutePaths.DeckDetail, element: <DeckDetailPage /> },
     ],
   },
   {
