@@ -842,4 +842,22 @@ function CollectionCard({
     </div>
   );
 }
-```
+<button
+  onClick={async () => {
+    const res = await fetch(`https://api.pokemontcg.io/v2/cards?q=set.name:"${encodeURIComponent(group.setName)}"&pageSize=250`);
+    const json = await res.json();
+    const ownedIds = new Set(group.cards.map(c => c.cardId));
+    const missingCards = (json.data ?? []).filter((c: any) => !ownedIds.has(c.id) && !wishlistCardIds.has(c.id));
+    missingCards.forEach((c: any) => {
+      createWishlistItem({
+        cardId: c.id, tcg: 'pokemon', telegramUserId: telegramUser.id,
+        cardName: c.name, setName: c.set.name, cardNumber: c.number,
+        rarity: c.rarity ?? null, imageUrl: c.images?.small ?? null, setTotal: c.set?.total ?? null,
+      } as any);
+    });
+  }}
+  className="w-full py-2 rounded-xl bg-pink-500/10 border border-pink-500/20 text-pink-400 text-xs font-medium flex items-center justify-center gap-1.5"
+>
+  <Heart size={12} />
+  Anadir {missing} que faltan a Wishlist
+</button>
