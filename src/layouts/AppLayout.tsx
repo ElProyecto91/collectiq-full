@@ -4,7 +4,7 @@ import { BottomNav } from './BottomNav';
 import { useUserStore } from '@/store';
 import { isInsideTelegram } from '@/lib/telegram';
 
-const ROOT_PATHS = ['/', '/collection', '/explorer', '/wishlist', '/profile'];
+const ROOT_PATHS = ['/', '/collection', '/explorer', '/community', '/profile'];
 
 export function AppLayout() {
   const navigate = useNavigate();
