@@ -96,13 +96,13 @@ function exportToCSV(cards: CollectionItem[], filename: string) {
     row.map(cell => '"' + String(cell).replace(/"/g, '""') + '"').join(',')
   ).join('\n');
 
-  const blob = new Blob([csvRows], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
+  const dataUri = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csvRows);
   const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
+  a.setAttribute('href', dataUri);
+  a.setAttribute('download', filename);
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  document.body.removeChild(a);
 }
 
 function ExportModal({
