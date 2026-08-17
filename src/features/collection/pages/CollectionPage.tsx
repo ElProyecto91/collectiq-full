@@ -1,4 +1,4 @@
-import { Heart, Layers, Minus, Plus, Trash2, Star, LayoutGrid, Package, Sparkles, X } from 'lucide-react';
+import { Heart, Layers, Minus, Plus, Trash2, Star, LayoutGrid, Package, Sparkles, X, Download } from 'lucide-react';
 import { useState, useCallback } from 'react';
 import { useCollectionList, useUpdateCollectionItem, useDeleteCollectionItem } from '@/hooks/use-collection';
 import { useCreateWishlistItem, useWishlistList } from '@/hooks/use-wishlist';
@@ -59,6 +59,119 @@ function getPurchaseSourceLabel(key: PurchaseSource, t: any): string {
   return map[key] ?? key;
 }
 
+function exportToCSV(cards: CollectionItem[], filename: string) {
+  const headers = [
+    'Nombre', 'Set', 'Número', 'Rareza', 'Variante', 'Idioma', 'Condición',
+    'Cantidad', 'Precio mercado', 'Precio pagado', 'Fuente', 'Fecha adquisición',
+    'Grading', 'Nota grading', 'Certificado', 'Centrado', 'Esquinas', 'Bordes', 'Superficie',
+    'En funda', 'En álbum', 'Notas',
+  ];
+
+  const rows = cards.map(card => [
+    card.cardName,
+    card.setName,
+    card.cardNumber,
+    card.rarity ?? '',
+    card.variant ?? 'normal',
+    CARD_LANGUAGES.find(l => l.code === card.cardLanguage)?.label ?? card.cardLanguage ?? 'en',
+    card.condition ?? '',
+    card.quantity,
+    card.marketPrice ?? card.tcgplayerPrice ?? '',
+    card.purchasePrice ?? '',
+    card.purchaseSource ?? '',
+    card.acquiredAt ? card.acquiredAt.split('T')[0] : '',
+    card.gradingCompany ?? '',
+    card.gradingScore ?? '',
+    card.gradingCertificate ?? '',
+    card.gradeCentering ?? '',
+    card.gradeCorners ?? '',
+    card.gradeEdges ?? '',
+    card.gradeSurface ?? '',
+    card.inSleeve ? 'Sí' : 'No',
+    card.inBinder ? 'Sí' : 'No',
+    card.notes ?? '',
+  ]);
+
+  const csv = [headers, ...rows]
+    .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    .join('\n');
+
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function ExportModal({
+  cards,
+  setGroups,
+  onClose,
+}: {
+  cards: CollectionItem[];
+  setGroups: SetCompletion[];
+  onClose: () => void;
+}) {
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = (subset: CollectionItem[], filename: string) => {
+    setExporting(true);
+    setTimeout(() => {
+      exportToCSV(subset, filename);
+      setExporting(false);
+      onClose();
+    }, 300);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full max-w-md bg-[#111118] border border-white/10 rounded-t-2xl p-4 space-y-3 max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-bold text-white">Exportar colección</p>
+            <p className="text-xs text-gray-500 mt-0.5">Formato CSV — compatible con Excel y Google Sheets</p>
+          </div>
+          <button onClick={onClose} className="text-gray-500 text-xs bg-white/5 px-3 py-1.5 rounded-lg">Cancelar</button>
+        </div>
+
+        <button
+          onClick={() => handleExport(cards, `collectiq-completo-${new Date().toISOString().split('T')[0]}.csv`)}
+          disabled={exporting}
+          className="w-full flex items-center gap-3 bg-blue-600 rounded-xl px-4 py-3 text-left active:scale-95 transition-transform"
+        >
+          <Download size={18} className="text-white shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-white">Exportar todo</p>
+            <p className="text-xs text-blue-200">{cards.length} cartas · Pokémon TCG</p>
+          </div>
+        </button>
+
+        {setGroups.length > 0 && (
+          <>
+            <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">Por set</p>
+            {setGroups.map(group => (
+              <button
+                key={group.setName}
+                onClick={() => handleExport(group.cards, `collectiq-${group.setName.replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().split('T')[0]}.csv`)}
+                disabled={exporting}
+                className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-left active:scale-95 transition-transform"
+              >
+                <Download size={16} className="text-gray-400 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-white truncate">{group.setName}</p>
+                  <p className="text-xs text-gray-500">{group.cards.length} cartas</p>
+                </div>
+              </button>
+            ))}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function CardZoom({ card, onClose }: { card: CollectionItem; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-6" onClick={onClose}>
@@ -107,27 +220,16 @@ function EditCardModal({
 
   const handleSave = () => {
     onSave({
-      variant,
-      cardLanguage: language,
-      condition,
+      variant, cardLanguage: language, condition,
       purchasePrice: purchasePrice ? parseFloat(purchasePrice) : null,
-      purchaseSource,
-      acquiredAt: acquiredAt || null,
-      notes: notes || null,
-      inSleeve,
-      inBinder,
-      gradingCompany,
+      purchaseSource, acquiredAt: acquiredAt || null, notes: notes || null,
+      inSleeve, inBinder, gradingCompany,
       gradingScore: gradingScore ? parseFloat(gradingScore) : null,
       gradingCertificate: gradingCertificate || null,
       gradeCentering: gradeCentering ? parseFloat(gradeCentering) : null,
       gradeCorners: gradeCorners ? parseFloat(gradeCorners) : null,
       gradeEdges: gradeEdges ? parseFloat(gradeEdges) : null,
       gradeSurface: gradeSurface ? parseFloat(gradeSurface) : null,
-      imageUrl: card.imageUrl,
-      cardName: card.cardName,
-      setName: card.setName,
-      cardNumber: card.cardNumber,
-      rarity: card.rarity,
     });
   };
 
@@ -401,6 +503,7 @@ export function CollectionPage() {
   const [view, setView] = useState<ViewMode>('cards');
   const [editingCard, setEditingCard] = useState<CollectionItem | null>(null);
   const [zoomedCard, setZoomedCard] = useState<CollectionItem | null>(null);
+  const [showExport, setShowExport] = useState(false);
 
   const { data: cards = [], isLoading } = useCollectionList();
   const { data: wishlistItems = [] } = useWishlistList();
@@ -461,7 +564,6 @@ export function CollectionPage() {
     <div className="space-y-4 pt-3 pb-24 px-4">
 
       {zoomedCard && <CardZoom card={zoomedCard} onClose={() => setZoomedCard(null)} />}
-
       {editingCard && (
         <EditCardModal
           card={editingCard}
@@ -469,10 +571,27 @@ export function CollectionPage() {
           onClose={() => setEditingCard(null)}
         />
       )}
+      {showExport && (
+        <ExportModal
+          cards={cards}
+          setGroups={setGroups}
+          onClose={() => setShowExport(false)}
+        />
+      )}
 
-      <div>
-        <h1 className="text-2xl font-bold text-white">{t.collection.title}</h1>
-        <p className="text-sm text-gray-500">{t.collection.subtitle}</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">{t.collection.title}</h1>
+          <p className="text-sm text-gray-500">{t.collection.subtitle}</p>
+        </div>
+        {cards.length > 0 && (
+          <button
+            onClick={() => setShowExport(true)}
+            className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 active:scale-95 transition-transform"
+          >
+            <Download size={16} />
+          </button>
+        )}
       </div>
 
       {totalCards > 0 && (
