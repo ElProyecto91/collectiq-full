@@ -92,11 +92,11 @@ function exportToCSV(cards: CollectionItem[], filename: string) {
     card.notes ?? '',
   ]);
 
-  const csv = [headers, ...rows]
-    .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-    .join('\n');
+  const csvRows = [headers, ...rows].map(row =>
+    row.map(cell => '"' + String(cell).replace(/"/g, '""') + '"').join(',')
+  ).join('\n');
 
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const blob = new Blob([csvRows], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -137,14 +137,14 @@ function ExportModal({
         </div>
 
         <button
-          onClick={() => handleExport(cards, `collectiq-completo-${new Date().toISOString().split('T')[0]}.csv`)}
+          onClick={() => handleExport(cards, 'collectiq-completo.csv')}
           disabled={exporting}
           className="w-full flex items-center gap-3 bg-blue-600 rounded-xl px-4 py-3 text-left active:scale-95 transition-transform"
         >
           <Download size={18} className="text-white shrink-0" />
           <div>
             <p className="text-sm font-semibold text-white">Exportar todo</p>
-            <p className="text-xs text-blue-200">{cards.length} cartas · Pokemon TCG</p>
+            <p className="text-xs text-blue-200">{cards.length} cartas</p>
           </div>
         </button>
 
@@ -154,7 +154,7 @@ function ExportModal({
             {setGroups.map(group => (
               <button
                 key={group.setName}
-                onClick={() => handleExport(group.cards, `collectiq-${group.setName.replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().split('T')[0]}.csv`)}
+                onClick={() => handleExport(group.cards, 'collectiq-' + group.setName.replace(/\s+/g, '-').toLowerCase() + '.csv')}
                 disabled={exporting}
                 className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-left active:scale-95 transition-transform"
               >
@@ -269,7 +269,7 @@ function EditCardModal({
               <span className="text-xl">🔍</span>
               <div className="flex-1">
                 <p className="text-xs text-gray-500">{t.cardEdit?.condition ?? 'Condicion'}</p>
-                <p className={`text-sm font-medium ${conditionColor ?? 'text-gray-400'}`}>
+                <p className={'text-sm font-medium ' + (conditionColor ?? 'text-gray-400')}>
                   {condition ? getConditionLabel(condition, t) : (t.cardEdit?.conditionNone ?? 'Sin especificar')}
                 </p>
               </div>
@@ -281,7 +281,7 @@ function EditCardModal({
               <div className="flex-1">
                 <p className="text-xs text-gray-500">{t.cardEdit?.grading ?? 'Grading profesional'}</p>
                 <p className="text-sm text-white font-medium">
-                  {gradingCompany ? `${gradingCompany}${gradingScore ? ` · ${gradingScore}` : ''}` : (t.cardEdit?.gradingNone ?? 'Sin grading')}
+                  {gradingCompany ? (gradingCompany + (gradingScore ? ' · ' + gradingScore : '')) : (t.cardEdit?.gradingNone ?? 'Sin grading')}
                 </p>
               </div>
               <span className="text-gray-500 text-xs">›</span>
@@ -292,7 +292,7 @@ function EditCardModal({
               <div className="flex-1">
                 <p className="text-xs text-gray-500">{t.cardEdit?.acquisition ?? 'Adquisicion'}</p>
                 <p className="text-sm text-white font-medium">
-                  {purchasePrice ? `${purchasePrice}€` : ''}{purchaseSource ? ` · ${PURCHASE_SOURCES.find(s => s.code === purchaseSource)?.emoji}` : ''}{!purchasePrice && !purchaseSource ? (t.cardEdit?.acquisitionNone ?? 'Sin especificar') : ''}
+                  {!purchasePrice && !purchaseSource ? (t.cardEdit?.acquisitionNone ?? 'Sin especificar') : (purchasePrice ? purchasePrice + 'EUR' : '') + (purchaseSource ? ' · ' + (PURCHASE_SOURCES.find(s => s.code === purchaseSource)?.emoji ?? '') : '')}
                 </p>
               </div>
               <span className="text-gray-500 text-xs">›</span>
@@ -300,7 +300,7 @@ function EditCardModal({
 
             <div className="grid grid-cols-2 gap-2">
               <button onClick={() => setInSleeve(!inSleeve)}
-                className={`flex items-center gap-2 border rounded-xl px-3 py-3 transition-all ${inSleeve ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/8'}`}>
+                className={'flex items-center gap-2 border rounded-xl px-3 py-3 transition-all ' + (inSleeve ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/8')}>
                 <span className="text-lg">🛡️</span>
                 <div className="text-left">
                   <p className="text-xs font-medium text-white">{t.cardEdit?.inSleeve ?? 'En funda'}</p>
@@ -308,7 +308,7 @@ function EditCardModal({
                 </div>
               </button>
               <button onClick={() => setInBinder(!inBinder)}
-                className={`flex items-center gap-2 border rounded-xl px-3 py-3 transition-all ${inBinder ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/8'}`}>
+                className={'flex items-center gap-2 border rounded-xl px-3 py-3 transition-all ' + (inBinder ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/8')}>
                 <span className="text-lg">📁</span>
                 <div className="text-left">
                   <p className="text-xs font-medium text-white">{t.cardEdit?.inBinder ?? 'En album'}</p>
@@ -334,12 +334,12 @@ function EditCardModal({
           <>
             <div className="flex items-center justify-between">
               <p className="text-sm font-bold text-white">{t.variants.select}</p>
-              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">{t.cardEdit?.back ?? '← Volver'}</button>
+              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">{t.cardEdit?.back ?? 'Volver'}</button>
             </div>
             <div className="space-y-2">
               {VARIANTS.map(v => (
                 <button key={v.key} onClick={() => { setVariant(v.key); setStep('main'); }}
-                  className={`w-full flex items-center gap-3 border rounded-xl px-3 py-3 text-left transition-all ${variant === v.key ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/8'}`}>
+                  className={'w-full flex items-center gap-3 border rounded-xl px-3 py-3 text-left transition-all ' + (variant === v.key ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/8')}>
                   <span className="text-xl">{v.emoji}</span>
                   <p className="text-sm text-white font-medium">{v.label}</p>
                   {variant === v.key && <span className="ml-auto text-blue-400">✓</span>}
@@ -353,12 +353,12 @@ function EditCardModal({
           <>
             <div className="flex items-center justify-between">
               <p className="text-sm font-bold text-white">{t.cardLanguages.select}</p>
-              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">{t.cardEdit?.back ?? '← Volver'}</button>
+              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">{t.cardEdit?.back ?? 'Volver'}</button>
             </div>
             <div className="space-y-2 max-h-72 overflow-y-auto">
               {CARD_LANGUAGES.map(lang => (
                 <button key={lang.code} onClick={() => { setLanguage(lang.code); setStep('main'); }}
-                  className={`w-full flex items-center gap-3 border rounded-xl px-3 py-3 text-left transition-all ${language === lang.code ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/8'}`}>
+                  className={'w-full flex items-center gap-3 border rounded-xl px-3 py-3 text-left transition-all ' + (language === lang.code ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/8')}>
                   <span className="text-xl">{lang.flag}</span>
                   <p className="text-sm text-white font-medium">{lang.label}</p>
                   {language === lang.code && <span className="ml-auto text-blue-400">✓</span>}
@@ -372,20 +372,20 @@ function EditCardModal({
           <>
             <div className="flex items-center justify-between">
               <p className="text-sm font-bold text-white">{t.cardEdit?.condition ?? 'Condicion'}</p>
-              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">{t.cardEdit?.back ?? '← Volver'}</button>
+              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">{t.cardEdit?.back ?? 'Volver'}</button>
             </div>
             <div className="space-y-2">
               <button onClick={() => { setCondition(null); setStep('main'); }}
-                className={`w-full flex items-center gap-3 border rounded-xl px-3 py-3 text-left transition-all ${condition === null ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/8'}`}>
+                className={'w-full flex items-center gap-3 border rounded-xl px-3 py-3 text-left transition-all ' + (condition === null ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/8')}>
                 <span className="text-xl">❓</span>
                 <p className="text-sm text-white font-medium">{t.cardEdit?.conditionNone ?? 'Sin especificar'}</p>
                 {condition === null && <span className="ml-auto text-blue-400">✓</span>}
               </button>
               {CONDITION_KEYS.map(c => (
                 <button key={c.key} onClick={() => { setCondition(c.key); setStep('main'); }}
-                  className={`w-full flex items-center gap-3 border rounded-xl px-3 py-3 text-left transition-all ${condition === c.key ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/8'}`}>
-                  <div className={`w-3 h-3 rounded-full ${c.color.replace('text-', 'bg-')}`} />
-                  <p className={`text-sm font-medium ${c.color}`}>{getConditionLabel(c.key, t)}</p>
+                  className={'w-full flex items-center gap-3 border rounded-xl px-3 py-3 text-left transition-all ' + (condition === c.key ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/8')}>
+                  <div className={'w-3 h-3 rounded-full ' + c.color.replace('text-', 'bg-')} />
+                  <p className={'text-sm font-medium ' + c.color}>{getConditionLabel(c.key, t)}</p>
                   {condition === c.key && <span className="ml-auto text-blue-400">✓</span>}
                 </button>
               ))}
@@ -397,19 +397,19 @@ function EditCardModal({
           <>
             <div className="flex items-center justify-between">
               <p className="text-sm font-bold text-white">{t.cardEdit?.grading ?? 'Grading profesional'}</p>
-              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">{t.cardEdit?.back ?? '← Volver'}</button>
+              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">{t.cardEdit?.back ?? 'Volver'}</button>
             </div>
             <div className="space-y-3">
               <div>
                 <p className="text-xs text-gray-500 mb-1.5">{t.cardEdit?.gradingCompany ?? 'Empresa de grading'}</p>
                 <div className="grid grid-cols-3 gap-2">
                   <button onClick={() => setGradingCompany(null)}
-                    className={`py-2 rounded-xl text-xs font-medium border transition-all ${gradingCompany === null ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-white/5 border-white/8 text-gray-400'}`}>
+                    className={'py-2 rounded-xl text-xs font-medium border transition-all ' + (gradingCompany === null ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-white/5 border-white/8 text-gray-400')}>
                     {t.cardEdit?.gradingNoneOption ?? 'Ninguna'}
                   </button>
                   {GRADING_COMPANIES.map(g => (
                     <button key={g.code} onClick={() => setGradingCompany(g.code)}
-                      className={`py-2 rounded-xl text-xs font-medium border transition-all ${gradingCompany === g.code ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-white/5 border-white/8 text-gray-400'}`}>
+                      className={'py-2 rounded-xl text-xs font-medium border transition-all ' + (gradingCompany === g.code ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-white/5 border-white/8 text-gray-400')}>
                       {g.label}
                     </button>
                   ))}
@@ -460,7 +460,7 @@ function EditCardModal({
           <>
             <div className="flex items-center justify-between">
               <p className="text-sm font-bold text-white">{t.cardEdit?.acquisition ?? 'Adquisicion'}</p>
-              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">{t.cardEdit?.back ?? '← Volver'}</button>
+              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">{t.cardEdit?.back ?? 'Volver'}</button>
             </div>
             <div className="space-y-3">
               <div>
@@ -474,7 +474,7 @@ function EditCardModal({
                 <div className="grid grid-cols-3 gap-2">
                   {PURCHASE_SOURCES.map(s => (
                     <button key={s.code} onClick={() => setPurchaseSource(s.code)}
-                      className={`flex flex-col items-center py-2.5 rounded-xl text-xs border transition-all ${purchaseSource === s.code ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-white/5 border-white/8 text-gray-400'}`}>
+                      className={'flex flex-col items-center py-2.5 rounded-xl text-xs border transition-all ' + (purchaseSource === s.code ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-white/5 border-white/8 text-gray-400')}>
                       <span className="text-lg mb-0.5">{s.emoji}</span>
                       {getPurchaseSourceLabel(s.code, t)}
                     </button>
@@ -602,7 +602,7 @@ export function CollectionPage() {
             { label: t.stats.favorites, value: favorites, color: 'text-yellow-400' },
           ].map(({ label, value, color }) => (
             <div key={label} className="bg-[#111118] border border-white/8 rounded-2xl p-3 text-center">
-              <p className={`text-xl font-bold ${color}`}>{value}</p>
+              <p className={'text-xl font-bold ' + color}>{value}</p>
               <p className="text-[10px] text-gray-500 uppercase tracking-wider">{label}</p>
             </div>
           ))}
@@ -612,12 +612,12 @@ export function CollectionPage() {
       {cards.length > 0 && (
         <div className="flex gap-2 bg-white/5 rounded-xl p-1">
           <button onClick={() => setView('cards')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors ${view === 'cards' ? 'bg-blue-600 text-white' : 'text-gray-400'}`}>
+            className={'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors ' + (view === 'cards' ? 'bg-blue-600 text-white' : 'text-gray-400')}>
             <LayoutGrid size={13} />
             {t.collection.title}
           </button>
           <button onClick={() => setView('sets')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors ${view === 'sets' ? 'bg-blue-600 text-white' : 'text-gray-400'}`}>
+            className={'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors ' + (view === 'sets' ? 'bg-blue-600 text-white' : 'text-gray-400')}>
             <Package size={13} />
             {t.stats.sets}
           </button>
@@ -636,7 +636,7 @@ export function CollectionPage() {
             <span className="shrink-0 text-xs text-gray-500">{t.collection.sort}</span>
             {(['recent', 'name', 'value'] as SortOption[]).map(opt => (
               <button key={opt} onClick={() => setSort(opt)}
-                className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${sort === opt ? 'bg-blue-600 text-white' : 'bg-white/5 text-gray-400'}`}>
+                className={'shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ' + (sort === opt ? 'bg-blue-600 text-white' : 'bg-white/5 text-gray-400')}>
                 {opt === 'recent' ? t.collection.sortRecent : opt === 'name' ? t.collection.sortName : t.collection.sortValue}
               </button>
             ))}
@@ -697,7 +697,7 @@ export function CollectionPage() {
                       <p className="text-sm font-bold text-white truncate">{group.setName}</p>
                       <p className="text-xs text-gray-500 mt-0.5">
                         {group.cards.length}/{total > 0 ? total : '?'} cartas
-                        {pct > 0 && <span className="text-blue-400 ml-1">· {pct}%</span>}
+                        {pct > 0 && <span className="text-blue-400 ml-1">{'· ' + pct + '%'}</span>}
                       </p>
                     </div>
                     <div className="text-right shrink-0">
@@ -712,7 +712,7 @@ export function CollectionPage() {
 
                   {total > 0 && (
                     <div className="w-full bg-white/10 rounded-full h-1.5">
-                      <div className="bg-gradient-to-r from-blue-600 to-blue-400 h-1.5 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                      <div className="bg-gradient-to-r from-blue-600 to-blue-400 h-1.5 rounded-full transition-all" style={{ width: pct + '%' }} />
                     </div>
                   )}
 
@@ -732,7 +732,9 @@ export function CollectionPage() {
                   {missing > 0 && total > 0 && telegramUser?.id && (
                     <button
                       onClick={async () => {
-                        const res = await fetch(`https://api.pokemontcg.io/v2/cards?q=set.name:"${encodeURIComponent(group.setName)}"&pageSize=250`);
+                        const setName = encodeURIComponent(group.setName);
+                        const url = 'https://api.pokemontcg.io/v2/cards?q=set.name:"' + setName + '"&pageSize=250';
+                        const res = await fetch(url);
                         const json = await res.json();
                         const ownedIds = new Set(group.cards.map(c => c.cardId));
                         const missingCards = (json.data ?? []).filter((c: any) => !ownedIds.has(c.id) && !wishlistCardIds.has(c.id));
@@ -747,7 +749,7 @@ export function CollectionPage() {
                       className="w-full py-2 rounded-xl bg-pink-500/10 border border-pink-500/20 text-pink-400 text-xs font-medium flex items-center justify-center gap-1.5"
                     >
                       <Heart size={12} />
-                      Anadir {missing} que faltan a Wishlist
+                      {'Anadir ' + missing + ' que faltan a Wishlist'}
                     </button>
                   )}
                 </div>
@@ -798,7 +800,7 @@ function CollectionCard({
         )}
         {card.gradingCompany && (
           <div className="absolute top-1.5 left-1.5 bg-yellow-400/90 rounded-full px-1.5 py-0.5">
-            <span className="text-[9px] font-bold text-black">{card.gradingCompany} {card.gradingScore}</span>
+            <span className="text-[9px] font-bold text-black">{card.gradingCompany + ' ' + card.gradingScore}</span>
           </div>
         )}
         <div className="absolute bottom-1.5 left-1.5 flex gap-1">
@@ -812,9 +814,9 @@ function CollectionCard({
       <div className="p-2.5 flex-1 space-y-1">
         <p className="text-xs font-bold truncate text-white">{card.cardName}</p>
         <p className="text-[10px] text-gray-500 truncate">{card.setName}</p>
-        {card.condition && <p className={`text-[10px] font-medium ${conditionColor}`}>{getConditionLabel(card.condition, t)}</p>}
+        {card.condition && <p className={'text-[10px] font-medium ' + conditionColor}>{getConditionLabel(card.condition, t)}</p>}
         {price && <p className="text-[10px] text-green-400 font-medium">{formatPrice(price)}</p>}
-        {card.purchasePrice && <p className="text-[10px] text-gray-500">{t.cardEdit?.purchasePrice ?? 'Pagado'}: {formatPrice(card.purchasePrice)}</p>}
+        {card.purchasePrice && <p className="text-[10px] text-gray-500">{(t.cardEdit?.purchasePrice ?? 'Pagado') + ': ' + formatPrice(card.purchasePrice)}</p>}
       </div>
 
       <div className="flex items-center justify-between gap-1 px-2.5 pb-2.5">
@@ -834,7 +836,7 @@ function CollectionCard({
             <Sparkles size={13} />
           </button>
           <button onClick={handleRemove}
-            className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-colors ${confirmDelete ? 'border-red-500 bg-red-500/10 text-red-400' : 'border-white/10 bg-white/5 text-gray-500'}`}>
+            className={'w-7 h-7 rounded-lg border flex items-center justify-center transition-colors ' + (confirmDelete ? 'border-red-500 bg-red-500/10 text-red-400' : 'border-white/10 bg-white/5 text-gray-500')}>
             <Trash2 size={13} />
           </button>
         </div>
@@ -842,22 +844,3 @@ function CollectionCard({
     </div>
   );
 }
-<button
-  onClick={async () => {
-    const res = await fetch(`https://api.pokemontcg.io/v2/cards?q=set.name:"${encodeURIComponent(group.setName)}"&pageSize=250`);
-    const json = await res.json();
-    const ownedIds = new Set(group.cards.map(c => c.cardId));
-    const missingCards = (json.data ?? []).filter((c: any) => !ownedIds.has(c.id) && !wishlistCardIds.has(c.id));
-    missingCards.forEach((c: any) => {
-      createWishlistItem({
-        cardId: c.id, tcg: 'pokemon', telegramUserId: telegramUser.id,
-        cardName: c.name, setName: c.set.name, cardNumber: c.number,
-        rarity: c.rarity ?? null, imageUrl: c.images?.small ?? null, setTotal: c.set?.total ?? null,
-      } as any);
-    });
-  }}
-  className="w-full py-2 rounded-xl bg-pink-500/10 border border-pink-500/20 text-pink-400 text-xs font-medium flex items-center justify-center gap-1.5"
->
-  <Heart size={12} />
-  Anadir {missing} que faltan a Wishlist
-</button>
