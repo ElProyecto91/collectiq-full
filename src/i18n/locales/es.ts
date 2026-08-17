@@ -3,6 +3,7 @@ export const es = {
     home: 'Inicio',
     collection: 'Colección',
     explorer: 'Explorador',
+    community: 'Comunidad',
     wishlist: 'Wishlist',
     profile: 'Perfil',
     ariaPrimary: 'Navegación principal',
@@ -59,11 +60,11 @@ export const es = {
     title: 'Variante',
     normal: 'Normal',
     normalDesc: 'Carta estándar sin acabado especial',
-    holofoil: 'Holofoil ✨',
+    holofoil: 'Holofoil',
     holofoilDesc: 'La imagen del Pokémon brilla con efecto holográfico',
-    reverseHolofoil: 'Reverse Holofoil 🌈',
+    reverseHolofoil: 'Reverse Holofoil',
     reverseHolofoilDesc: 'El borde y fondo brillan, pero la imagen es mate',
-    firstEdition: 'Primera Edición ⭐',
+    firstEdition: 'Primera Edición',
     firstEditionDesc: 'Tiene el sello "1st Edition" — muy rara y valiosa',
     promo: 'Promo',
     promoDesc: 'Carta especial de evento, regalo o torneo',
@@ -191,7 +192,7 @@ export const es = {
     startScanning: 'Empezar a escanear',
     comingSoon: 'Escáner próximamente',
     aiRecognition: 'Reconocimiento IA',
-    aiRecognitionDesc: 'El escáner está preparado arquitectónicamente e identificará cartas de todos los TCG soportados una vez que se conecte el modelo de reconocimiento.',
+    aiRecognitionDesc: 'El escáner identificará cartas de todos los TCG soportados.',
     scanCard: 'Escanear carta',
     selectOrPhoto: 'Selecciona o fotografía una carta',
     captureHint: 'Para obtener mejores resultados, fotografía una sola carta con buena luz y sin reflejos.',
@@ -207,7 +208,25 @@ export const es = {
     subtitle: 'Cartas que estás buscando.',
     searchPlaceholder: 'Busca en tu wishlist',
     empty: 'Tu wishlist está vacía',
-    emptyDesc: 'Añade cartas desde el Explorador cuando el catálogo esté disponible y sigue las cartas que quieres intercambiar o comprar.',
+    emptyDesc: 'Añade cartas desde el Explorador y sigue las cartas que quieres intercambiar o comprar.',
+  },
+
+  community: {
+    title: 'Comunidad',
+    subtitle: 'Mazos, colecciones y más.',
+    decks: 'Mazos',
+    collections: 'Colecciones',
+    ranking: 'Ranking',
+    comingSoon: 'Comunidad próximamente',
+    comingSoonDesc: 'Pronto podrás ver mazos, colecciones y conectar con otros coleccionistas.',
+  },
+
+  decks: {
+    title: 'Mis Mazos',
+    subtitle: 'Crea y comparte tus mazos.',
+    empty: 'Aún no tienes mazos',
+    emptyDesc: 'Crea tu primer mazo de 60 cartas y compártelo con la comunidad.',
+    create: 'Crear mazo',
   },
 
   profile: {
@@ -269,5 +288,12 @@ export const es = {
   cardImage: {
     imageUnavailable: 'Imagen de {alt} no disponible',
     noImage: 'Sin imagen',
+  },
+
+  onboarding: {
+    welcome: '¡Bienvenido a CollectIQ!',
+    welcomeDesc: 'La app definitiva para coleccionistas de cartas TCG.',
+    chooseLanguage: 'Elige tu idioma',
+    continue: 'Continuar',
   },
 };
