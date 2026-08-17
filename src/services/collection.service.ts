@@ -1,32 +1,17 @@
 import { BaseSupabaseService } from './base.service';
-import type {
-  CollectionItem,
-  CollectionItemInput,
-  CollectionItemUpdate,
-  CollectionStats,
-  Tcg,
-} from '@/types';
+import type { CollectionItem, CollectionItemInput, CollectionItemUpdate, CollectionStats, Tcg } from '@/types';
 import type { CollectionItemRow } from '@/types/database';
 import { Tables } from '@/types';
-import { mapCollectionItem, toCollectionItemRow } from '@/utils/mappers';
+import { mapCollectionItem, toCollectionItemRow, toCollectionItemUpdateRow } from '@/utils/mappers';
 
-/** Query options shared by list endpoints. */
 export interface CollectionQueryOptions {
   telegramUserId: number;
-  tcg?: Tcg;
   search?: string;
-  /** Column to order by (snake_case). */
   orderBy?: string;
   ascending?: boolean;
+  limit?: number;
 }
 
-/**
- * Collection service — CRUD for a collector's owned cards.
- *
- * Every read/write is scoped by `telegramUserId` — the Telegram user is the
- * row owner. RLS allows anon+authenticated access; the service enforces the
- * per-user filter in the query so each collector only sees their own cards.
- */
 class CollectionService extends BaseSupabaseService {
   async list(opts: CollectionQueryOptions): Promise<CollectionItem[]> {
     let query = this.client
@@ -34,30 +19,23 @@ class CollectionService extends BaseSupabaseService {
       .select('*')
       .eq('telegram_user_id', opts.telegramUserId);
 
-    if (opts.tcg) query = query.eq('tcg', opts.tcg);
-    if (opts.search) {
-      const term = `%${opts.search}%`;
-      query = query.or(`card_name.ilike.${term},set_name.ilike.${term},card_id.ilike.${term}`);
-    }
-    query = query.order(opts.orderBy ?? 'created_at', {
-      ascending: opts.ascending ?? false,
-    });
+    if (opts.search) query = query.ilike('card_name', `%${opts.search}%`);
+    query = query.order(opts.orderBy ?? 'created_at', { ascending: opts.ascending ?? false });
+    if (opts.limit) query = query.limit(opts.limit);
 
     const rows = await this.unwrap(query, 'collection.list');
     return (rows as CollectionItemRow[]).map(mapCollectionItem);
   }
 
-  /** Check if a card is already in the collection (by card_id). */
   async findByCardId(telegramUserId: number, cardId: string): Promise<CollectionItem | null> {
-    const data = await this.unwrapMaybe(
-      this.client
-        .from(Tables.CollectionItems)
-        .select('*')
-        .eq('telegram_user_id', telegramUserId)
-        .eq('card_id', cardId)
-        .maybeSingle(),
-      'collection.findByCardId'
-    );
+    const { data, error } = await this.client
+      .from(Tables.CollectionItems)
+      .select('*')
+      .eq('telegram_user_id', telegramUserId)
+      .eq('card_id', cardId)
+      .maybeSingle();
+
+    if (error) return null;
     return data ? mapCollectionItem(data as CollectionItemRow) : null;
   }
 
@@ -78,7 +56,7 @@ class CollectionService extends BaseSupabaseService {
     const data = await this.unwrapMaybe(
       this.client
         .from(Tables.CollectionItems)
-        .update({ ...toCollectionItemRow(update as CollectionItemInput), updated_at: new Date().toISOString() })
+        .update({ ...toCollectionItemUpdateRow(update), updated_at: new Date().toISOString() })
         .eq('id', id)
         .select('*')
         .single(),
@@ -95,32 +73,29 @@ class CollectionService extends BaseSupabaseService {
     );
   }
 
-  /** Aggregate counts for stats surfaces. */
   async stats(telegramUserId: number): Promise<CollectionStats> {
     const rows = await this.unwrap(
       this.client
         .from(Tables.CollectionItems)
-        .select('tcg, quantity, favorite')
+        .select('quantity, tcg, card_id')
         .eq('telegram_user_id', telegramUserId),
       'collection.stats'
     );
 
-    const typed = rows as Pick<CollectionItemRow, 'tcg' | 'quantity' | 'favorite'>[];
+    const items = rows as { quantity: number; tcg: string; card_id: string }[];
+    const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
+    const uniqueCards = new Set(items.map(i => i.card_id)).size;
     const byTcg: Partial<Record<Tcg, number>> = {};
-    let totalItems = 0;
-    let favoriteCount = 0;
 
-    for (const row of typed) {
-      const tcg = row.tcg as Tcg;
-      byTcg[tcg] = (byTcg[tcg] ?? 0) + row.quantity;
-      totalItems += row.quantity;
-      if (row.favorite) favoriteCount += 1;
+    for (const item of items) {
+      const tcg = item.tcg as Tcg;
+      byTcg[tcg] = (byTcg[tcg] ?? 0) + item.quantity;
     }
 
     return {
       totalItems,
-      uniqueCards: typed.length,
-      favoriteCount,
+      uniqueCards,
+      favoriteCount: 0,
       byTcg,
     };
   }
