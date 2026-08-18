@@ -18,8 +18,11 @@ import { useUserStore } from '@/store';
 import { useCurrency } from '@/hooks/use-currency';
 import { useI18n } from '@/i18n';
 import { useActiveTCG, TCG_OPTIONS } from '@/hooks/use-active-tcg';
+import { useXP } from '@/hooks/use-xp';
+import { AchievementToast } from '@/components/AchievementToast';
 import type { CardVariant, CardLanguage } from '@/types';
 import { CARD_LANGUAGES } from '@/types';
+import { supabase } from '@/lib/supabase';
 
 interface PokemonCard {
   id: string;
@@ -86,23 +89,13 @@ function TCGSelector({ activeTCG, setActiveTCG }: { activeTCG: string; setActive
       {TCG_OPTIONS.map(tcg => {
         const isActive = activeTCG === tcg.key;
         return (
-          <button
-            key={tcg.key}
-            onClick={() => setActiveTCG(tcg.key)}
+          <button key={tcg.key} onClick={() => setActiveTCG(tcg.key)}
             className={'shrink-0 flex flex-col items-center gap-1 px-3 py-2 rounded-xl text-[10px] font-medium transition-all border ' + (
-              isActive
-                ? 'border-opacity-100 text-white'
-                : tcg.available
-                  ? 'bg-white/5 text-gray-400 border-white/10 active:scale-95'
-                  : 'bg-white/5 text-gray-600 border-white/8 active:scale-95'
+              isActive ? 'border-opacity-100 text-white' : tcg.available ? 'bg-white/5 text-gray-400 border-white/10 active:scale-95' : 'bg-white/5 text-gray-600 border-white/8 active:scale-95'
             )}
-            style={isActive ? { backgroundColor: tcg.color + '22', borderColor: tcg.color, color: tcg.color } : {}}
-          >
-            <span
-              className="w-6 h-6"
-              style={{ color: isActive ? tcg.color : tcg.available ? '#9ca3af' : '#4b5563' }}
-              dangerouslySetInnerHTML={{ __html: tcg.icon }}
-            />
+            style={isActive ? { backgroundColor: tcg.color + '22', borderColor: tcg.color, color: tcg.color } : {}}>
+            <span className="w-6 h-6" style={{ color: isActive ? tcg.color : tcg.available ? '#9ca3af' : '#4b5563' }}
+              dangerouslySetInnerHTML={{ __html: tcg.icon }} />
             <span className="whitespace-nowrap">{tcg.label}</span>
             {!tcg.available && <span className="text-[8px] text-gray-600 -mt-0.5">pronto</span>}
           </button>
@@ -112,9 +105,7 @@ function TCGSelector({ activeTCG, setActiveTCG }: { activeTCG: string; setActive
   );
 }
 
-function AddCardSelector({
-  card, onAdd, onClose,
-}: {
+function AddCardSelector({ card, onAdd, onClose }: {
   card: PokemonCard;
   onAdd: (variant: CardVariant, language: CardLanguage) => void;
   onClose: () => void;
@@ -135,7 +126,6 @@ function AddCardSelector({
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div className="w-full max-w-md bg-[#111118] border border-white/10 rounded-t-2xl p-4 space-y-3" onClick={e => e.stopPropagation()}>
-
         {step === 'variant' && (
           <>
             <div className="flex items-center justify-between">
@@ -148,7 +138,7 @@ function AddCardSelector({
             <div className="space-y-2 max-h-72 overflow-y-auto">
               {variants.map(v => (
                 <button key={v.key} onClick={() => { setSelectedVariant(v.key); setStep('language'); }}
-                  className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-3 py-3 text-left active:scale-95 transition-transform hover:border-blue-500/30">
+                  className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-3 py-3 text-left active:scale-95 transition-transform">
                   <span className="text-2xl shrink-0">{v.emoji}</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-white">{v.label}</p>
@@ -160,7 +150,6 @@ function AddCardSelector({
             </div>
           </>
         )}
-
         {step === 'language' && (
           <>
             <div className="flex items-center justify-between">
@@ -168,12 +157,12 @@ function AddCardSelector({
                 <p className="text-sm font-bold text-white">{t.cardLanguages.select}</p>
                 <p className="text-xs text-gray-500 mt-0.5">{card.name}</p>
               </div>
-              <button onClick={() => setStep('variant')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">{t.cardEdit?.back ?? 'Volver'}</button>
+              <button onClick={() => setStep('variant')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">Volver</button>
             </div>
             <div className="space-y-2 max-h-72 overflow-y-auto">
               {CARD_LANGUAGES.map(lang => (
                 <button key={lang.code} onClick={() => onAdd(selectedVariant, lang.code)}
-                  className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-3 py-3 text-left active:scale-95 transition-transform hover:border-blue-500/30">
+                  className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-3 py-3 text-left active:scale-95 transition-transform">
                   <span className="text-2xl shrink-0">{lang.flag}</span>
                   <p className="text-sm font-semibold text-white">{lang.label}</p>
                 </button>
@@ -210,6 +199,7 @@ export function ExplorerPage() {
   const { formatPrice } = useCurrency();
   const { t } = useI18n();
   const { activeTCG, setActiveTCG } = useActiveTCG();
+  const { checkAchievements, newAchievement } = useXP();
 
   const addedIds = new Set(collectionCards.map(c => c.cardId));
   const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
@@ -262,7 +252,7 @@ export function ExplorerPage() {
     return () => observer.disconnect();
   }, [hasMore, isLoadingMore, page, query]);
 
-  const handleAdd = (card: PokemonCard, variant: CardVariant, language: CardLanguage) => {
+  const handleAdd = async (card: PokemonCard, variant: CardVariant, language: CardLanguage) => {
     if (!telegramUser?.id) return;
     const price = getPriceForVariant(card, variant);
     const marketPrice = card.cardmarket?.prices?.averageSellPrice ?? null;
@@ -274,9 +264,26 @@ export function ExplorerPage() {
       marketPrice: price ?? marketPrice, tcgplayerPrice: price, currency: 'EUR',
       variant, cardLanguage: language,
     });
+
     setStatusMsg('✅ ' + card.name + ' añadida a tu coleccion');
     setTimeout(() => setStatusMsg(''), 2500);
     setSelectorCard(null);
+
+    const { count: totalDecks } = await supabase
+      .from('decks').select('*', { count: 'exact', head: true })
+      .eq('telegram_user_id', telegramUser.id);
+
+    const newTotal = collectionCards.reduce((s, c) => s + c.quantity, 0) + 1;
+    const newUnique = addedIds.has(card.id) ? collectionCards.length : collectionCards.length + 1;
+
+    checkAchievements({
+      totalCards: newTotal,
+      uniqueCards: newUnique,
+      totalDecks: totalDecks ?? 0,
+      completedSets: 0,
+      totalVotes: 0,
+      totalFavorites: collectionCards.filter(c => c.favorite).length,
+    });
   };
 
   const handleWishlist = (card: PokemonCard) => {
@@ -296,6 +303,8 @@ export function ExplorerPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-[#0a0a0f] text-white pb-24">
+
+      <AchievementToast achievement={newAchievement} onDone={() => {}} />
 
       {selectorCard && (
         <AddCardSelector
@@ -327,7 +336,7 @@ export function ExplorerPage() {
             <p className="text-sm text-gray-500 mt-1">El catalogo de {currentTCG?.label} estara disponible proximamente.</p>
           </div>
           <button onClick={() => setActiveTCG('pokemon')}
-            className="bg-blue-600 text-white rounded-xl px-5 py-2.5 text-sm font-medium active:scale-95 transition-transform">
+            className="bg-blue-600 text-white rounded-xl px-5 py-2.5 text-sm font-medium">
             Ver Pokemon TCG
           </button>
         </div>
