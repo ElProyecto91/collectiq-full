@@ -17,6 +17,7 @@ import ScannerPage from '@/features/scanner/ScannerPage';
 import { CardDetailsPage } from '@/features/catalog/pages/CardDetailsPage';
 import { PublicProfilePage } from '@/pages/PublicProfilePage';
 import { OnboardingPage } from '@/pages/OnboardingPage';
+import { CreateDeckPage } from '@/pages/CreateDeckPage';
 
 const router = createBrowserRouter([
   {
@@ -31,6 +32,7 @@ const router = createBrowserRouter([
       { path: RoutePaths.Community, element: <CommunityPage /> },
       { path: RoutePaths.Decks, element: <DecksPage /> },
       { path: RoutePaths.DeckDetail, element: <DeckDetailPage /> },
+      { path: '/decks/new', element: <CreateDeckPage /> },
     ],
   },
   {
