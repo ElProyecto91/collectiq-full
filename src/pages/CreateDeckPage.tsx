@@ -141,7 +141,7 @@ export function CreateDeckPage() {
 
       if (!queryStr) {
         if (all || supertype || type || subtype || format) {
-          queryStr = 'name:a OR name:e OR name:i OR name:o';
+          queryStr = 'set.series:Scarlet*';
         } else {
           setSearchResults([]);
           setIsSearching(false);
