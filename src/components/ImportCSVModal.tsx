@@ -298,7 +298,7 @@ export function ImportCSVModal({ onClose, onSuccess }: { onClose: () => void; on
                 <p className="text-xs text-gray-500 mt-1">Exportado de CollectIQ, Collectr, pkmn.gg u otras apps</p>
               </div>
             </button>
-            <input ref={fileInputRef} type="file" accept=".csv" className="hidden"
+            <input ref={fileInputRef} type="file" accept=".csv,.txt,text/csv,text/plain,application/csv" className="hidden"
               onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
 
             <div className="bg-white/5 rounded-xl p-3 space-y-2">
