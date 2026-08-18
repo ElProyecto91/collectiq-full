@@ -8,13 +8,14 @@ import {
   HomePage,
   ProfilePage,
   WishlistPage,
+  CommunityPage,
+  DecksPage,
+  DeckDetailPage,
 } from '@/pages';
 import { LoginPage } from '@/pages/LoginPage';
 import ScannerPage from '@/features/scanner/ScannerPage';
 import { CardDetailsPage } from '@/features/catalog/pages/CardDetailsPage';
-import { CommunityPage } from '@/pages/CommunityPage';
-import { DecksPage } from '@/pages/DecksPage';
-import { DeckDetailPage } from '@/pages/DeckDetailPage';
+import { PublicProfilePage } from '@/pages/PublicProfilePage';
 
 const router = createBrowserRouter([
   {
@@ -38,6 +39,10 @@ const router = createBrowserRouter([
   {
     path: '/login',
     element: <LoginPage />,
+  },
+  {
+    path: '/u/:telegramId',
+    element: <PublicProfilePage />,
   },
 ]);
 
