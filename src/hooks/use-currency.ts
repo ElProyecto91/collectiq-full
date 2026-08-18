@@ -15,7 +15,6 @@ export const CURRENCY_SYMBOLS: Record<Currency, string> = {
   PLN: 'zł',
 };
 
-// Tasas de cambio aproximadas respecto al EUR
 const EXCHANGE_RATES: Record<Currency, number> = {
   EUR: 1,
   USD: 1.08,
@@ -42,13 +41,18 @@ export function useCurrency() {
     return () => window.removeEventListener('storage', handler);
   }, []);
 
+  const setCurrency = (c: string) => {
+    localStorage.setItem('collectiq-currency', c);
+    setCurrencyState(c as Currency);
+  };
+
   const symbol = CURRENCY_SYMBOLS[currency];
 
   const formatPrice = (priceInEur: number | null | undefined): string => {
     if (!priceInEur) return 'Sin precio';
     const converted = priceInEur * EXCHANGE_RATES[currency];
-    return `${symbol}${converted.toFixed(2)}`;
+    return symbol + converted.toFixed(2);
   };
 
-  return { currency, symbol, formatPrice };
+  return { currency, symbol, formatPrice, setCurrency };
 }
