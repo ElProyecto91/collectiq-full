@@ -14,6 +14,7 @@ interface DeckCard {
   image_url: string;
   quantity: number;
   supertype?: string;
+  market_price?: number | null;
 }
 
 interface Deck {
@@ -138,29 +139,20 @@ export function DecksPage() {
         <div className="space-y-4">
           {decks.map(deck => {
             const totalCards = deck.cards.reduce((s, c) => s + c.quantity, 0);
-            const pokemonCards = deck.cards.filter(c => c.supertype === 'Pokémon');
-            const trainerCards = deck.cards.filter(c => c.supertype === 'Trainer');
-            const energyCards = deck.cards.filter(c => c.supertype === 'Energy');
-            const pokemonCount = pokemonCards.reduce((s, c) => s + c.quantity, 0);
-            const trainerCount = trainerCards.reduce((s, c) => s + c.quantity, 0);
-            const energyCount = energyCards.reduce((s, c) => s + c.quantity, 0);
+            const pokemonCount = deck.cards.filter(c => c.supertype === 'Pokémon').reduce((s, c) => s + c.quantity, 0);
+            const trainerCount = deck.cards.filter(c => c.supertype === 'Trainer').reduce((s, c) => s + c.quantity, 0);
+            const energyCount = deck.cards.filter(c => c.supertype === 'Energy').reduce((s, c) => s + c.quantity, 0);
 
             const ownedCards = deck.cards.filter(c => collectionIds.has(c.card_id));
             const ownedPct = deck.cards.length > 0 ? Math.round(ownedCards.length / deck.cards.length * 100) : 0;
 
-            const deckValue = collectionCards
-              .filter(c => deck.cards.some(dc => dc.card_id === c.cardId))
-              .reduce((s, c) => {
-                const deckCard = deck.cards.find(dc => dc.card_id === c.cardId);
-                return s + ((c.marketPrice ?? c.tcgplayerPrice ?? 0) * (deckCard?.quantity ?? 1));
-              }, 0);
+            const deckValue = deck.cards.reduce((s, c) => s + ((c.market_price ?? 0) * c.quantity), 0);
 
             const coverImages = deck.cards.slice(0, 4).map(c => c.image_url).filter(Boolean);
 
             return (
               <div key={deck.id} className="bg-[#111118] border border-white/8 rounded-2xl overflow-hidden">
 
-                {/* Header con portada */}
                 <div className="relative h-24 bg-gradient-to-r from-blue-950/50 to-purple-950/50 overflow-hidden">
                   <div className="absolute inset-0 flex items-center justify-end pr-2 gap-1 opacity-60">
                     {coverImages.map((img, i) => (
@@ -186,7 +178,6 @@ export function DecksPage() {
 
                 <div className="p-4 space-y-3">
 
-                  {/* Composicion */}
                   <div className="grid grid-cols-3 gap-2">
                     {[
                       { label: 'Pokemon', value: pokemonCount, color: 'text-blue-400', emoji: '🎴' },
@@ -201,7 +192,6 @@ export function DecksPage() {
                     ))}
                   </div>
 
-                  {/* Barra progreso cartas */}
                   <div className="space-y-1">
                     <div className="flex justify-between text-xs">
                       <span className="text-gray-500">{totalCards}/60 cartas</span>
@@ -214,7 +204,6 @@ export function DecksPage() {
                     </div>
                   </div>
 
-                  {/* Stats valor y coleccion */}
                   <div className="grid grid-cols-2 gap-2">
                     <div className="bg-white/5 rounded-xl p-3">
                       <p className="text-[10px] text-gray-500 mb-0.5">Valor estimado</p>
@@ -231,7 +220,6 @@ export function DecksPage() {
                     </div>
                   </div>
 
-                  {/* Votos si es publico */}
                   {deck.is_public && (
                     <div className="flex items-center gap-1.5 text-xs text-gray-500">
                       <Heart size={12} className="text-pink-400" />
@@ -239,7 +227,6 @@ export function DecksPage() {
                     </div>
                   )}
 
-                  {/* Acciones */}
                   <div className="flex gap-2 pt-1">
                     <button onClick={() => togglePublic(deck)}
                       className={'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-medium border transition-all ' + (
