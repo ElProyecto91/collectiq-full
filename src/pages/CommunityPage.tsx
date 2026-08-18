@@ -14,7 +14,7 @@ export function CommunityPage() {
         <div>
           <p className="text-[10px] text-blue-400 font-bold uppercase tracking-[0.2em]">COLLECTIQ</p>
           <h1 className="text-2xl font-bold">Comunidad</h1>
-          <p className="text-sm text-gray-500">Mazos, colecciones y más.</p>
+          <p className="text-sm text-gray-500">Mazos, colecciones y mas.</p>
         </div>
         {activeTab === 'decks' && (
           <button onClick={() => navigate('/decks/new')}
@@ -41,20 +41,35 @@ export function CommunityPage() {
         </div>
 
         {activeTab === 'decks' && (
-          <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center">
-              <Layers size={28} className="text-gray-600" />
-            </div>
-            <div>
-              <p className="text-white font-semibold">Sin mazos todavia</p>
-              <p className="text-sm text-gray-500 mt-1">Se el primero en publicar un mazo.</p>
-            </div>
-            <button onClick={() => navigate('/decks/new')}
-              className="bg-blue-600 text-white rounded-2xl px-6 py-3 font-semibold flex items-center gap-2 active:scale-95 transition-transform">
-              <Plus size={18} />
-              Crear mi primer mazo
+          <>
+            {/* Acceso rapido a mis mazos */}
+            <button onClick={() => navigate('/decks')}
+              className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3 active:scale-95 transition-transform">
+              <div className="w-8 h-8 rounded-lg bg-blue-600/20 flex items-center justify-center">
+                <Layers size={16} className="text-blue-400" />
+              </div>
+              <div className="text-left flex-1">
+                <p className="text-sm font-medium text-white">Mis mazos</p>
+                <p className="text-xs text-gray-500">Ver y gestionar tus mazos</p>
+              </div>
+              <span className="text-gray-500 text-xs">›</span>
             </button>
-          </div>
+
+            <div className="flex flex-col items-center justify-center py-12 gap-4 text-center">
+              <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center">
+                <Flame size={28} className="text-gray-600" />
+              </div>
+              <div>
+                <p className="text-white font-semibold">Sin mazos publicos todavia</p>
+                <p className="text-sm text-gray-500 mt-1">Se el primero en publicar un mazo.</p>
+              </div>
+              <button onClick={() => navigate('/decks/new')}
+                className="bg-blue-600 text-white rounded-2xl px-6 py-3 font-semibold flex items-center gap-2 active:scale-95 transition-transform">
+                <Plus size={18} />
+                Crear mi primer mazo
+              </button>
+            </div>
+          </>
         )}
 
         {activeTab === 'collections' && (
