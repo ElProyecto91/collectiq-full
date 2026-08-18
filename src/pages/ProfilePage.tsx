@@ -1,251 +1,143 @@
-import { useState } from 'react';
-import { Bell, Check, ChevronRight, Globe, LogOut, Settings, Shield, DollarSign } from 'lucide-react';
-
-import { Avatar, Button, Card, StatTile } from '@/components/ui';
-import { PageHeader } from '@/layouts';
-import { useCollectionStats, useDisplayName, useTelegram } from '@/hooks';
 import { useUserStore } from '@/store';
-import { formatNumber } from '@/utils';
-import { useI18n, type Locale } from '@/i18n';
-import type { ReactNode } from 'react';
+import { useI18n } from '@/i18n';
+import { useCurrency } from '@/hooks/use-currency';
+import { useCollectionList } from '@/hooks/use-collection';
+import { Share2, LogOut, Globe, Coins } from 'lucide-react';
 
-const CURRENCIES = [
-  { value: 'EUR', label: 'Euro', symbol: '€', flag: '🇪🇺' },
-  { value: 'USD', label: 'US Dollar', symbol: '$', flag: '🇺🇸' },
-  { value: 'GBP', label: 'British Pound', symbol: '£', flag: '🇬🇧' },
-  { value: 'JPY', label: 'Japanese Yen', symbol: '¥', flag: '🇯🇵' },
-  { value: 'CAD', label: 'Canadian Dollar', symbol: 'C$', flag: '🇨🇦' },
-  { value: 'AUD', label: 'Australian Dollar', symbol: 'A$', flag: '🇦🇺' },
-  { value: 'CHF', label: 'Swiss Franc', symbol: 'CHF', flag: '🇨🇭' },
-  { value: 'BRL', label: 'Real Brasileño', symbol: 'R$', flag: '🇧🇷' },
-  { value: 'MXN', label: 'Peso Mexicano', symbol: 'MX$', flag: '🇲🇽' },
-  { value: 'PLN', label: 'Polish Złoty', symbol: 'zł', flag: '🇵🇱' },
-] as const;
+const CURRENCIES = ['EUR', 'USD', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'BRL', 'MXN', 'PLN'];
 
-export type Currency = (typeof CURRENCIES)[number]['value'];
-
-function useCurrencyStore() {
-  const [currency, setCurrencyState] = useState<Currency>(() => {
-    return (localStorage.getItem('collectiq-currency') as Currency) ?? 'EUR';
-  });
-
-  const setCurrency = (c: Currency) => {
-    localStorage.setItem('collectiq-currency', c);
-    setCurrencyState(c);
-  };
-
-  return { currency, setCurrency };
-}
+const LANGUAGES = [
+  { code: 'es', label: 'Español', flag: '🇪🇸' },
+  { code: 'en', label: 'English', flag: '🇬🇧' },
+];
 
 export function ProfilePage() {
-  const { isTelegram } = useTelegram();
-  const name = useDisplayName();
   const telegramUser = useUserStore((s) => s.telegramUser);
-  const { data: stats, isLoading } = useCollectionStats();
+  const setTelegramUser = useUserStore((s) => s.setTelegramUser);
   const { t } = useI18n();
+  const { currency, setCurrency } = useCurrency();
+  const { data: cards = [] } = useCollectionList();
 
-  const handle = telegramUser?.username ? `@${telegramUser.username}` : t.profile.noUsername;
+  const totalCards = cards.reduce((s, c) => s + c.quantity, 0);
+  const uniqueCards = cards.length;
+  const totalValue = cards.reduce((s, c) => s + ((c.marketPrice ?? c.tcgplayerPrice ?? 0) * c.quantity), 0);
+
+  const displayName = telegramUser?.first_name ?? telegramUser?.username ?? 'Coleccionista';
+  const username = telegramUser?.username ? '@' + telegramUser.username : null;
+
+  const handleShare = () => {
+    if (!telegramUser?.id) return;
+    const url = 'https://collectiq-full.vercel.app/u/' + telegramUser.id;
+    if (navigator.share) {
+      navigator.share({ title: 'Mi coleccion en CollectIQ', url });
+    } else {
+      navigator.clipboard.writeText(url);
+      alert('Enlace copiado: ' + url);
+    }
+  };
 
   const handleSignOut = () => {
     localStorage.removeItem('collectiq-session-token');
-    document.cookie = 'collectiq_session=; Path=/; Max-Age=0';
+    setTelegramUser(null);
     window.location.href = '/login';
   };
 
+  const savedLang = localStorage.getItem('i18n-locale') ?? 'es';
+
   return (
-    <div className="space-y-5 pt-3 animate-fade-in">
-      <PageHeader title={t.profile.title} />
+    <div className="space-y-4 pt-3 pb-24 px-4">
 
-      <Card variant="glass" padding="lg" className="flex items-center gap-4">
-        <Avatar src={telegramUser?.photo_url} name={name} size={72} />
-        <div className="min-w-0">
-          <h2 className="truncate font-display text-xl font-bold text-ink">{name}</h2>
-          <p className="truncate text-sm text-ink-soft">{handle}</p>
-          {isTelegram && (
-            <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-xs font-medium text-primary-soft">
-              {t.profile.telegram}
-            </span>
-          )}
+      <div>
+        <h1 className="text-2xl font-bold text-white">{t.profile.title}</h1>
+      </div>
+
+      <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 flex items-center gap-4">
+        <div className="w-14 h-14 rounded-full bg-blue-600/20 border border-blue-500/30 flex items-center justify-center shrink-0">
+          <span className="text-xl font-bold text-blue-400">
+            {displayName[0].toUpperCase()}
+          </span>
         </div>
-      </Card>
-
-      <section>
-        <h3 className="mb-3 font-display text-base font-semibold text-ink">{t.profile.statistics}</h3>
-        <div className="grid grid-cols-3 gap-3">
-          {isLoading || !stats ? (
-            <>
-              <StatTile label={t.stats.cards} value="—" />
-              <StatTile label={t.stats.unique} value="—" />
-              <StatTile label={t.stats.sets} value="—" />
-            </>
-          ) : (
-            <>
-              <StatTile label={t.stats.cards} value={formatNumber(stats.totalItems)} accent="primary" />
-              <StatTile label={t.stats.unique} value={formatNumber(stats.uniqueCards)} accent="gold" />
-              <StatTile label={t.stats.sets} value={Object.keys(stats.byTcg).length} />
-            </>
-          )}
+        <div className="flex-1 min-w-0">
+          <p className="text-white font-bold truncate">{displayName}</p>
+          {username && <p className="text-xs text-gray-500 mt-0.5">{username}</p>}
+          <p className="text-xs text-blue-400 mt-0.5">Telegram</p>
         </div>
-      </section>
+        <button onClick={handleShare}
+          className="w-10 h-10 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center shrink-0 active:scale-95 transition-transform">
+          <Share2 size={18} className="text-blue-400" />
+        </button>
+      </div>
 
-      <section>
-        <h3 className="mb-3 font-display text-base font-semibold text-ink">{t.profile.settings}</h3>
-        <Card padding="none" className="divide-y divide-line-soft">
-          <SettingsRow icon={<Settings size={18} />} label={t.profile.preferences} />
-          <SettingsRow icon={<Bell size={18} />} label={t.profile.notifications} />
-          <LanguageRow />
-          <CurrencyRow />
-          <SettingsRow icon={<Shield size={18} />} label={t.profile.privacy} />
-        </Card>
-      </section>
+      <div className="grid grid-cols-3 gap-2">
+        {[
+          { label: t.stats.cards, value: totalCards, color: 'text-blue-400' },
+          { label: t.stats.unique, value: uniqueCards, color: 'text-purple-400' },
+          { label: t.stats.estValue, value: totalValue > 0 ? totalValue.toFixed(2) + currency : '—', color: 'text-green-400' },
+        ].map(({ label, value, color }) => (
+          <div key={label} className="bg-[#111118] border border-white/8 rounded-2xl p-3 text-center">
+            <p className={'text-lg font-bold ' + color}>{value}</p>
+            <p className="text-[10px] text-gray-500 uppercase tracking-wider">{label}</p>
+          </div>
+        ))}
+      </div>
 
-      <Button
-        variant="ghost"
-        size="md"
-        fullWidth
-        leftIcon={<LogOut size={18} />}
-        className="text-ink-soft"
-        onClick={handleSignOut}
-      >
+      <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
+        <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Compartir</p>
+        <button onClick={handleShare}
+          className="w-full flex items-center gap-3 bg-blue-600/10 border border-blue-500/20 rounded-xl px-4 py-3 active:scale-95 transition-transform">
+          <Share2 size={18} className="text-blue-400 shrink-0" />
+          <div className="text-left">
+            <p className="text-sm font-medium text-white">Compartir mi coleccion</p>
+            <p className="text-xs text-gray-500 mt-0.5">{'collectiq-full.vercel.app/u/' + (telegramUser?.id ?? '...')}</p>
+          </div>
+        </button>
+      </div>
+
+      <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
+        <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Preferencias</p>
+
+        <div>
+          <p className="text-xs text-gray-500 mb-2 flex items-center gap-1.5">
+            <Globe size={12} /> Idioma
+          </p>
+          <div className="flex gap-2">
+            {LANGUAGES.map(lang => (
+              <button key={lang.code}
+                onClick={() => { localStorage.setItem('i18n-locale', lang.code); window.location.reload(); }}
+                className={'flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-sm border transition-all ' + (
+                  savedLang === lang.code ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-white/5 border-white/8 text-gray-400'
+                )}>
+                <span>{lang.flag}</span>
+                <span>{lang.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="text-xs text-gray-500 mb-2 flex items-center gap-1.5">
+            <Coins size={12} /> Moneda
+          </p>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {CURRENCIES.map(c => (
+              <button key={c} onClick={() => setCurrency(c)}
+                className={'shrink-0 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ' + (
+                  currency === c ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-white/5 border-white/8 text-gray-400'
+                )}>
+                {c}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <button onClick={handleSignOut}
+        className="w-full flex items-center justify-center gap-2 bg-red-500/10 border border-red-500/20 text-red-400 rounded-2xl py-3.5 font-medium active:scale-95 transition-transform">
+        <LogOut size={18} />
         {t.profile.signOut}
-      </Button>
-
-      <p className="pb-2 text-center text-xs text-ink-faint">{t.profile.version}</p>
-    </div>
-  );
-}
-
-function SettingsRow({
-  icon,
-  label,
-  hint,
-}: {
-  icon: ReactNode;
-  label: string;
-  hint?: string;
-}) {
-  return (
-    <button
-      type="button"
-      className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-surface-3"
-    >
-      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface-3 text-ink-soft">
-        {icon}
-      </span>
-      <span className="flex-1 text-sm font-medium text-ink">{label}</span>
-      {hint && <span className="text-xs text-ink-muted">{hint}</span>}
-      <ChevronRight size={18} className="text-ink-faint" />
-    </button>
-  );
-}
-
-function LanguageRow() {
-  const { t, locale, setLocale } = useI18n();
-  const [open, setOpen] = useState(false);
-
-  const options: { value: Locale; label: string }[] = [
-    { value: 'es', label: t.profile.spanish },
-    { value: 'en', label: t.profile.english },
-  ];
-
-  return (
-    <div>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-surface-3"
-      >
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface-3 text-ink-soft">
-          <Globe size={18} />
-        </span>
-        <span className="flex-1 text-sm font-medium text-ink">{t.profile.language}</span>
-        <span className="text-xs text-ink-muted">{locale === 'es' ? t.profile.spanish : t.profile.english}</span>
-        <ChevronRight
-          size={18}
-          className={`text-ink-faint transition-transform ${open ? 'rotate-90' : ''}`}
-        />
       </button>
 
-      {open && (
-        <div className="space-y-1 bg-surface-2 px-4 py-2">
-          <p className="mb-2 text-xs text-ink-muted">{t.profile.languageSettingsDesc}</p>
-          {options.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => {
-                setLocale(opt.value);
-                setOpen(false);
-              }}
-              className={`flex w-full items-center justify-between rounded-xl px-3 py-3 text-sm font-medium transition-colors ${
-                locale === opt.value
-                  ? 'bg-primary/10 text-primary-soft'
-                  : 'text-ink-soft hover:bg-surface-3'
-              }`}
-            >
-              <span className="flex items-center gap-2">
-                <span className="text-base">{opt.value === 'es' ? '🇪🇸' : '🇬🇧'}</span>
-                {opt.label}
-              </span>
-              {locale === opt.value && <Check size={16} />}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function CurrencyRow() {
-  const [open, setOpen] = useState(false);
-  const { currency, setCurrency } = useCurrencyStore();
-  const current = CURRENCIES.find(c => c.value === currency) ?? CURRENCIES[0];
-
-  return (
-    <div>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-surface-3"
-      >
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface-3 text-ink-soft">
-          <DollarSign size={18} />
-        </span>
-        <span className="flex-1 text-sm font-medium text-ink">Moneda</span>
-        <span className="text-xs text-ink-muted">{current.flag} {current.value}</span>
-        <ChevronRight
-          size={18}
-          className={`text-ink-faint transition-transform ${open ? 'rotate-90' : ''}`}
-        />
-      </button>
-
-      {open && (
-        <div className="space-y-1 bg-surface-2 px-4 py-2 max-h-64 overflow-y-auto">
-          <p className="mb-2 text-xs text-ink-muted">Elige tu moneda preferida</p>
-          {CURRENCIES.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => {
-                setCurrency(opt.value);
-                setOpen(false);
-              }}
-              className={`flex w-full items-center justify-between rounded-xl px-3 py-3 text-sm font-medium transition-colors ${
-                currency === opt.value
-                  ? 'bg-primary/10 text-primary-soft'
-                  : 'text-ink-soft hover:bg-surface-3'
-              }`}
-            >
-              <span className="flex items-center gap-2">
-                <span className="text-base">{opt.flag}</span>
-                <span>{opt.label}</span>
-                <span className="text-xs text-ink-muted">{opt.symbol}</span>
-              </span>
-              {currency === opt.value && <Check size={16} />}
-            </button>
-          ))}
-        </div>
-      )}
+      <p className="text-center text-xs text-gray-600">{t.profile.version}</p>
     </div>
   );
 }
