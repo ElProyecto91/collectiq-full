@@ -33,6 +33,7 @@ interface ParsedCard {
   inSleeve: boolean;
   inBinder: boolean;
   notes: string | null;
+  imageUrl: string | null;
 }
 
 const VARIANT_MAP: Record<string, string> = {
@@ -65,6 +66,8 @@ const CONDITION_MAP: Record<string, string> = {
   'muy jugada': 'heavily-played',
   'danada': 'damaged',
 };
+
+const POKEMON_API_KEY = import.meta.env.VITE_POKEMONTCG_API_KEY ?? '';
 
 function parseCSV(text: string): string[][] {
   const rows: string[][] = [];
@@ -115,6 +118,7 @@ function detectColumns(headers: string[]): Record<string, number> {
     inSleeve: ['enfunda', 'insleeve', 'sleeve', 'funda'],
     inBinder: ['enalbum', 'inbinder', 'binder', 'album'],
     notes: ['notas', 'notes', 'comentarios'],
+    imageUrl: ['imagen', 'image', 'imageurl', 'img', 'foto', 'url'],
   };
 
   for (const [key, aliases] of Object.entries(mappings)) {
@@ -161,30 +165,34 @@ function parseRow(cols: string[], colMap: Record<string, number>): ParsedCard | 
   const acquiredRaw = get('acquiredAt');
   const acquiredAt = acquiredRaw ? acquiredRaw : null;
 
+  const imageUrlRaw = get('imageUrl');
+  const imageUrl = imageUrlRaw && imageUrlRaw.startsWith('http') ? imageUrlRaw : null;
+
   return {
-    cardName,
-    setName: get('setName'),
-    cardNumber: get('cardNumber'),
-    rarity: get('rarity') || null,
-    variant,
-    cardLanguage,
-    condition,
-    quantity: qty,
-    marketPrice,
-    purchasePrice,
-    purchaseSource: get('purchaseSource') || null,
-    acquiredAt,
-    gradingCompany: get('gradingCompany') || null,
-    gradingScore,
+    cardName, setName: get('setName'), cardNumber: get('cardNumber'),
+    rarity: get('rarity') || null, variant, cardLanguage, condition,
+    quantity: qty, marketPrice, purchasePrice,
+    purchaseSource: get('purchaseSource') || null, acquiredAt,
+    gradingCompany: get('gradingCompany') || null, gradingScore,
     gradingCertificate: get('gradingCertificate') || null,
-    gradeCentering,
-    gradeCorners,
-    gradeEdges,
-    gradeSurface,
-    inSleeve,
-    inBinder,
-    notes: get('notes') || null,
+    gradeCentering, gradeCorners, gradeEdges, gradeSurface,
+    inSleeve, inBinder, notes: get('notes') || null, imageUrl,
   };
+}
+
+async function fetchImageFromPokemonTCG(cardName: string, setName: string, cardNumber: string): Promise<string | null> {
+  try {
+    let q = 'name:"' + cardName + '"';
+    if (cardNumber) q += ' number:' + cardNumber;
+    const res = await fetch(
+      'https://api.pokemontcg.io/v2/cards?q=' + encodeURIComponent(q) + '&pageSize=1',
+      { headers: { 'X-Api-Key': POKEMON_API_KEY } }
+    );
+    const json = await res.json();
+    return json.data?.[0]?.images?.small ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export function ImportCSVModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
@@ -194,6 +202,7 @@ export function ImportCSVModal({ onClose, onSuccess }: { onClose: () => void; on
   const [parsedCards, setParsedCards] = useState<ParsedCard[]>([]);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [fileName, setFileName] = useState('');
+  const [importProgress, setImportProgress] = useState(0);
 
   const handleFile = (file: File) => {
     setFileName(file.name);
@@ -221,51 +230,62 @@ export function ImportCSVModal({ onClose, onSuccess }: { onClose: () => void; on
   const handleImport = async () => {
     if (!telegramUser?.id || parsedCards.length === 0) return;
     setPhase('importing');
+    setImportProgress(0);
 
     const errors: string[] = [];
     let imported = 0;
     let skipped = 0;
 
-    const BATCH_SIZE = 20;
+    const BATCH_SIZE = 10;
     for (let i = 0; i < parsedCards.length; i += BATCH_SIZE) {
       const batch = parsedCards.slice(i, i + BATCH_SIZE);
-      const rows = batch.map(card => ({
-        telegram_user_id: telegramUser.id,
-        tcg: 'pokemon',
-        card_id: 'imported-' + Date.now() + '-' + Math.random().toString(36).slice(2),
-        card_name: card.cardName,
-        set_name: card.setName,
-        card_number: card.cardNumber,
-        rarity: card.rarity,
-        quantity: card.quantity,
-        variant: card.variant,
-        card_language: card.cardLanguage,
-        condition: card.condition,
-        market_price: card.marketPrice,
-        purchase_price: card.purchasePrice,
-        purchase_source: card.purchaseSource,
-        acquired_at: card.acquiredAt,
-        grading_company: card.gradingCompany,
-        grading_score: card.gradingScore,
-        grading_certificate: card.gradingCertificate,
-        grade_centering: card.gradeCentering,
-        grade_corners: card.gradeCorners,
-        grade_edges: card.gradeEdges,
-        grade_surface: card.gradeSurface,
-        in_sleeve: card.inSleeve,
-        in_binder: card.inBinder,
-        notes: card.notes,
-        favorite: false,
-        metadata: {},
+
+      const rowsWithImages = await Promise.all(batch.map(async card => {
+        let imageUrl = card.imageUrl;
+        if (!imageUrl && card.cardName) {
+          imageUrl = await fetchImageFromPokemonTCG(card.cardName, card.setName, card.cardNumber);
+        }
+        return {
+          telegram_user_id: telegramUser.id,
+          tcg: 'pokemon',
+          card_id: 'imported-' + Date.now() + '-' + Math.random().toString(36).slice(2),
+          card_name: card.cardName,
+          set_name: card.setName,
+          card_number: card.cardNumber,
+          rarity: card.rarity,
+          quantity: card.quantity,
+          variant: card.variant,
+          card_language: card.cardLanguage,
+          condition: card.condition,
+          market_price: card.marketPrice,
+          purchase_price: card.purchasePrice,
+          purchase_source: card.purchaseSource,
+          acquired_at: card.acquiredAt,
+          grading_company: card.gradingCompany,
+          grading_score: card.gradingScore,
+          grading_certificate: card.gradingCertificate,
+          grade_centering: card.gradeCentering,
+          grade_corners: card.gradeCorners,
+          grade_edges: card.gradeEdges,
+          grade_surface: card.gradeSurface,
+          in_sleeve: card.inSleeve,
+          in_binder: card.inBinder,
+          notes: card.notes,
+          image_url: imageUrl,
+          favorite: false,
+          metadata: {},
+        };
       }));
 
-      const { error } = await supabase.from('collection_items').insert(rows);
+      const { error } = await supabase.from('collection_items').insert(rowsWithImages);
       if (error) {
         skipped += batch.length;
         errors.push('Error en fila ' + (i + 1) + ': ' + error.message);
       } else {
         imported += batch.length;
       }
+
+      setImportProgress(Math.round(((i + BATCH_SIZE) / parsedCards.length) * 100));
     }
 
     setResult({ total: parsedCards.length, imported, skipped, errors });
@@ -311,7 +331,7 @@ export function ImportCSVModal({ onClose, onSuccess }: { onClose: () => void; on
                 ))}
               </div>
               <p className="text-[10px] text-gray-600 mt-1">
-                El importador detecta automaticamente las columnas del CSV.
+                El importador detecta automaticamente las columnas y recupera las imagenes de las cartas.
               </p>
             </div>
           </>
@@ -327,6 +347,12 @@ export function ImportCSVModal({ onClose, onSuccess }: { onClose: () => void; on
               </div>
             </div>
 
+            <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3">
+              <p className="text-xs text-blue-300">
+                Las imagenes se recuperaran automaticamente de la base de datos oficial de Pokemon TCG. Esto puede tardar unos segundos.
+              </p>
+            </div>
+
             <div className="space-y-2 max-h-48 overflow-y-auto">
               <p className="text-xs text-gray-500 font-medium">Vista previa:</p>
               {parsedCards.slice(0, 5).map((card, i) => (
@@ -335,7 +361,7 @@ export function ImportCSVModal({ onClose, onSuccess }: { onClose: () => void; on
                     <p className="text-xs font-medium text-white truncate">{card.cardName}</p>
                     <p className="text-[10px] text-gray-500 truncate">{card.setName} · x{card.quantity}</p>
                   </div>
-                  <span className="text-[10px] text-gray-600">{card.variant}</span>
+                  {card.imageUrl && <span className="text-[10px] text-green-400">✓ imagen</span>}
                 </div>
               ))}
               {parsedCards.length > 5 && (
@@ -359,7 +385,13 @@ export function ImportCSVModal({ onClose, onSuccess }: { onClose: () => void; on
         {phase === 'importing' && (
           <div className="flex flex-col items-center gap-4 py-8">
             <Loader2 size={32} className="text-blue-400 animate-spin" />
-            <p className="text-sm text-gray-400">Importando cartas...</p>
+            <div className="w-full space-y-2">
+              <p className="text-sm text-gray-400 text-center">Importando cartas y recuperando imagenes...</p>
+              <div className="w-full bg-white/10 rounded-full h-2">
+                <div className="bg-blue-500 h-2 rounded-full transition-all" style={{ width: importProgress + '%' }} />
+              </div>
+              <p className="text-xs text-gray-600 text-center">{importProgress}%</p>
+            </div>
           </div>
         )}
 
