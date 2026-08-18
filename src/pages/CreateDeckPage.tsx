@@ -16,6 +16,8 @@ interface PokemonCard {
   images: { small: string };
   set: { name: string; id: string };
   legalities?: { standard?: string; expanded?: string };
+  cardmarket?: { prices?: { averageSellPrice?: number } };
+  tcgplayer?: { prices?: { normal?: { market?: number }; holofoil?: { market?: number } } };
 }
 
 const POKEMON_API_KEY = import.meta.env.VITE_POKEMONTCG_API_KEY ?? '';
@@ -80,6 +82,13 @@ function getSupertypeLabel(supertype: string): string {
   return supertype;
 }
 
+function getCardPrice(card: PokemonCard): number | null {
+  return card.cardmarket?.prices?.averageSellPrice ??
+    card.tcgplayer?.prices?.holofoil?.market ??
+    card.tcgplayer?.prices?.normal?.market ??
+    null;
+}
+
 export function CreateDeckPage() {
   const navigate = useNavigate();
   const telegramUser = useUserStore((s) => s.telegramUser);
@@ -114,6 +123,11 @@ export function CreateDeckPage() {
   const pokemonCount = Array.from(deckCards.values()).filter(c => c.card.supertype === 'Pokémon').reduce((s, c) => s + c.quantity, 0);
   const trainerCount = Array.from(deckCards.values()).filter(c => c.card.supertype === 'Trainer').reduce((s, c) => s + c.quantity, 0);
   const energyCount = Array.from(deckCards.values()).filter(c => c.card.supertype === 'Energy').reduce((s, c) => s + c.quantity, 0);
+
+  const deckTotalValue = Array.from(deckCards.values()).reduce((s, { card, quantity }) => {
+    const price = getCardPrice(card);
+    return s + (price ?? 0) * quantity;
+  }, 0);
 
   const typeDistribution = Array.from(deckCards.values())
     .filter(c => c.card.supertype === 'Pokémon' && c.card.types)
@@ -241,6 +255,7 @@ export function CreateDeckPage() {
         image_url: card.images.small,
         quantity,
         supertype: card.supertype,
+        market_price: getCardPrice(card),
       }));
 
       await supabase.from('deck_cards').insert(cardRows);
@@ -327,9 +342,16 @@ export function CreateDeckPage() {
               <div className="bg-yellow-500 h-2 transition-all" style={{ width: (trainerCount / 60 * 100) + '%' }} />
               <div className="bg-red-500 h-2 transition-all" style={{ width: (energyCount / 60 * 100) + '%' }} />
             </div>
-            <p className="text-center text-xs text-gray-500">
-              {totalCards === 60 ? '✅ Mazo completo' : (60 - totalCards) + ' cartas restantes'}
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-gray-500">
+                {totalCards === 60 ? '✅ Mazo completo' : (60 - totalCards) + ' cartas restantes'}
+              </p>
+              {deckTotalValue > 0 && (
+                <p className="text-xs text-green-400 font-bold">
+                  {'~' + deckTotalValue.toFixed(2) + ' EUR'}
+                </p>
+              )}
+            </div>
           </div>
 
           <div className="flex gap-2">
@@ -497,6 +519,7 @@ export function CreateDeckPage() {
               {searchResults.map(card => {
                 const qty = deckCards.get(card.id)?.quantity ?? 0;
                 const inCollection = collectionIds.has(card.id);
+                const price = getCardPrice(card);
                 return (
                   <div key={card.id} className={'bg-[#111118] border rounded-xl overflow-hidden ' + (inCollection ? 'border-blue-500/30' : 'border-white/8')}>
                     <div className="relative">
@@ -509,6 +532,11 @@ export function CreateDeckPage() {
                       {qty > 0 && (
                         <div className="absolute top-1 left-1 bg-black/70 rounded-full w-5 h-5 flex items-center justify-center">
                           <span className="text-[10px] text-white font-bold">{qty}</span>
+                        </div>
+                      )}
+                      {price && (
+                        <div className="absolute bottom-1 right-1 bg-black/70 rounded-full px-1.5 py-0.5">
+                          <span className="text-[8px] text-green-400 font-bold">{price.toFixed(2)}€</span>
                         </div>
                       )}
                     </div>
@@ -536,6 +564,7 @@ export function CreateDeckPage() {
               {searchResults.map(card => {
                 const qty = deckCards.get(card.id)?.quantity ?? 0;
                 const inCollection = collectionIds.has(card.id);
+                const price = getCardPrice(card);
                 return (
                   <div key={card.id} className={'flex items-center gap-3 bg-[#111118] border rounded-xl px-3 py-2 ' + (inCollection ? 'border-blue-500/20' : 'border-white/8')}>
                     <img src={card.images.small} alt={card.name} className="w-10 h-14 object-cover rounded" />
@@ -553,9 +582,7 @@ export function CreateDeckPage() {
                         {card.types && card.types[0] && (
                           <span className="text-[9px] text-gray-500">{TYPE_EMOJIS[card.types[0]]} {TYPE_LABELS[card.types[0]] ?? card.types[0]}</span>
                         )}
-                        {card.subtypes && card.subtypes[0] && (
-                          <span className="text-[9px] text-purple-400">{card.subtypes[0]}</span>
-                        )}
+                        {price && <span className="text-[9px] text-green-400">{price.toFixed(2)}EUR</span>}
                         {inCollection && <span className="text-[9px] text-blue-400">✓ Tengo</span>}
                       </div>
                     </div>
@@ -601,7 +628,12 @@ export function CreateDeckPage() {
 
           {deckCards.size > 0 && (
             <div className="space-y-2 mt-2">
-              <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">En el mazo ({totalCards}/60)</p>
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">En el mazo ({totalCards}/60)</p>
+                {deckTotalValue > 0 && (
+                  <p className="text-xs text-green-400 font-bold">{'~' + deckTotalValue.toFixed(2) + ' EUR'}</p>
+                )}
+              </div>
               {['Pokémon', 'Trainer', 'Energy'].map(supertype => {
                 const group = Array.from(deckCards.values()).filter(c => c.card.supertype === supertype);
                 if (group.length === 0) return null;
@@ -611,22 +643,26 @@ export function CreateDeckPage() {
                     <p className="text-[10px] text-gray-600 mb-1">
                       {supertype === 'Pokémon' ? '🎴 Pokemon' : supertype === 'Trainer' ? '🎓 Entrenadores' : '⚡ Energias'} ({groupTotal})
                     </p>
-                    {group.map(({ card, quantity }) => (
-                      <div key={card.id} className="flex items-center gap-2 py-1 border-b border-white/5">
-                        <span className="text-xs text-gray-400 w-5 text-center font-bold">{quantity}x</span>
-                        <p className="flex-1 text-xs truncate">{card.name}</p>
-                        <div className="flex gap-1">
-                          <button onClick={() => removeCard(card.id)}
-                            className="w-5 h-5 rounded bg-white/5 flex items-center justify-center text-gray-500">
-                            <Minus size={9} />
-                          </button>
-                          <button onClick={() => addCard(card)} disabled={quantity >= 4}
-                            className="w-5 h-5 rounded bg-blue-600/50 flex items-center justify-center text-white disabled:opacity-30">
-                            <Plus size={9} />
-                          </button>
+                    {group.map(({ card, quantity }) => {
+                      const price = getCardPrice(card);
+                      return (
+                        <div key={card.id} className="flex items-center gap-2 py-1 border-b border-white/5">
+                          <span className="text-xs text-gray-400 w-5 text-center font-bold">{quantity}x</span>
+                          <p className="flex-1 text-xs truncate">{card.name}</p>
+                          {price && <span className="text-[10px] text-green-400">{(price * quantity).toFixed(2)}EUR</span>}
+                          <div className="flex gap-1">
+                            <button onClick={() => removeCard(card.id)}
+                              className="w-5 h-5 rounded bg-white/5 flex items-center justify-center text-gray-500">
+                              <Minus size={9} />
+                            </button>
+                            <button onClick={() => addCard(card)} disabled={quantity >= 4}
+                              className="w-5 h-5 rounded bg-blue-600/50 flex items-center justify-center text-white disabled:opacity-30">
+                              <Plus size={9} />
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 );
               })}
@@ -659,6 +695,12 @@ export function CreateDeckPage() {
                 </div>
               ))}
             </div>
+            {deckTotalValue > 0 && (
+              <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-3 text-center">
+                <p className="text-xs text-gray-500">Valor estimado del mazo</p>
+                <p className="text-xl font-bold text-green-400 mt-0.5">{'~' + deckTotalValue.toFixed(2) + ' EUR'}</p>
+              </div>
+            )}
           </div>
 
           {Object.keys(typeDistribution).length > 0 && (
