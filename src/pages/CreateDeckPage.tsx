@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, Minus, Search, Loader2, LayoutGrid, List, BarChart2, Zap, Shield, Sword } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -11,48 +11,34 @@ interface PokemonCard {
   number: string;
   supertype: string;
   types?: string[];
-  subtypes?: string[];
   images: { small: string };
   set: { name: string };
-  attacks?: { cost: string[] }[];
-  abilities?: { name: string }[];
 }
 
 const POKEMON_API_KEY = import.meta.env.VITE_POKEMONTCG_API_KEY ?? '';
 
 const TYPE_COLORS: Record<string, string> = {
-  Fire: '#FF6B35',
-  Water: '#3B9EE6',
-  Grass: '#4CAF50',
-  Lightning: '#FFD700',
-  Psychic: '#9C27B0',
-  Fighting: '#FF8C00',
-  Darkness: '#424242',
-  Metal: '#9E9E9E',
-  Dragon: '#4A148C',
-  Fairy: '#E91E8C',
-  Colorless: '#BDBDBD',
+  Fire: '#FF6B35', Water: '#3B9EE6', Grass: '#4CAF50', Lightning: '#FFD700',
+  Psychic: '#9C27B0', Fighting: '#FF8C00', Darkness: '#424242', Metal: '#9E9E9E',
+  Dragon: '#4A148C', Fairy: '#E91E8C', Colorless: '#BDBDBD',
 };
 
 const TYPE_EMOJIS: Record<string, string> = {
-  Fire: '🔥',
-  Water: '💧',
-  Grass: '🌿',
-  Lightning: '⚡',
-  Psychic: '🔮',
-  Fighting: '👊',
-  Darkness: '🌑',
-  Metal: '⚙️',
-  Dragon: '🐉',
-  Fairy: '✨',
-  Colorless: '⭐',
+  Fire: '🔥', Water: '💧', Grass: '🌿', Lightning: '⚡', Psychic: '🔮',
+  Fighting: '👊', Darkness: '🌑', Metal: '⚙️', Dragon: '🐉', Fairy: '✨', Colorless: '⭐',
+};
+
+const TYPE_LABELS: Record<string, string> = {
+  Fire: 'Fuego', Water: 'Agua', Grass: 'Planta', Lightning: 'Electrico',
+  Psychic: 'Psiquico', Fighting: 'Lucha', Darkness: 'Oscuridad', Metal: 'Metal',
+  Dragon: 'Dragon', Fairy: 'Hada', Colorless: 'Incoloro',
 };
 
 const SUPERTYPES = [
   { key: '', label: 'Todos' },
-  { key: 'Pokémon', label: 'Pokémon' },
+  { key: 'Pokémon', label: 'Pokemon' },
   { key: 'Trainer', label: 'Entrenador' },
-  { key: 'Energy', label: 'Energía' },
+  { key: 'Energy', label: 'Energia' },
 ];
 
 const TYPES = ['Fire', 'Water', 'Grass', 'Lightning', 'Psychic', 'Fighting', 'Darkness', 'Metal', 'Dragon', 'Colorless'];
@@ -60,6 +46,13 @@ const TYPES = ['Fire', 'Water', 'Grass', 'Lightning', 'Psychic', 'Fighting', 'Da
 interface DeckCard {
   card: PokemonCard;
   quantity: number;
+}
+
+function getSupertypeLabel(supertype: string): string {
+  if (supertype === 'Pokémon') return 'Pokemon';
+  if (supertype === 'Trainer') return 'Entrenador';
+  if (supertype === 'Energy') return 'Energia';
+  return supertype;
 }
 
 export function CreateDeckPage() {
@@ -80,6 +73,7 @@ export function CreateDeckPage() {
   const [deckCards, setDeckCards] = useState<Map<string, DeckCard>>(new Map());
   const [isSaving, setIsSaving] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [showAll, setShowAll] = useState(false);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const totalCards = Array.from(deckCards.values()).reduce((s, c) => s + c.quantity, 0);
@@ -90,23 +84,30 @@ export function CreateDeckPage() {
   const typeDistribution = Array.from(deckCards.values())
     .filter(c => c.card.supertype === 'Pokémon' && c.card.types)
     .reduce((acc, { card, quantity }) => {
-      (card.types ?? []).forEach(type => {
-        acc[type] = (acc[type] ?? 0) + quantity;
-      });
+      (card.types ?? []).forEach(type => { acc[type] = (acc[type] ?? 0) + quantity; });
       return acc;
     }, {} as Record<string, number>);
 
-  const doSearch = useCallback(async (q: string, supertype: string, type: string) => {
+  const doSearch = useCallback(async (q: string, supertype: string, type: string, all: boolean) => {
     setIsSearching(true);
     try {
       let queryStr = '';
       if (q.trim()) queryStr += 'name:"*' + q.trim() + '*"';
       if (supertype) queryStr += (queryStr ? ' ' : '') + 'supertype:' + supertype;
       if (type) queryStr += (queryStr ? ' ' : '') + 'types:' + type;
-      if (!queryStr) queryStr = 'name:Charizard OR name:Pikachu';
+
+      if (!queryStr) {
+        if (all) {
+          queryStr = 'name:a OR name:e OR name:i OR name:o';
+        } else {
+          setSearchResults([]);
+          setIsSearching(false);
+          return;
+        }
+      }
 
       const res = await fetch(
-        'https://api.pokemontcg.io/v2/cards?q=' + encodeURIComponent(queryStr) + '&pageSize=12&orderBy=-set.releaseDate',
+        'https://api.pokemontcg.io/v2/cards?q=' + encodeURIComponent(queryStr) + '&pageSize=20&orderBy=-set.releaseDate',
         { headers: { 'X-Api-Key': POKEMON_API_KEY } }
       );
       const json = await res.json();
@@ -118,16 +119,22 @@ export function CreateDeckPage() {
     }
   }, []);
 
+  useEffect(() => {
+    if (step === 'cards') {
+      doSearch(query, selectedSupertype, selectedType, showAll);
+    }
+  }, [showAll, step]);
+
   const handleSearchChange = (q: string) => {
     setQuery(q);
     clearTimeout(searchTimeout.current);
-    searchTimeout.current = setTimeout(() => doSearch(q, selectedSupertype, selectedType), 600);
+    searchTimeout.current = setTimeout(() => doSearch(q, selectedSupertype, selectedType, showAll || q.trim().length > 0), 600);
   };
 
   const handleFilterChange = (supertype: string, type: string) => {
     setSelectedSupertype(supertype);
     setSelectedType(type);
-    doSearch(query, supertype, type);
+    doSearch(query, supertype, type, showAll);
   };
 
   const addCard = (card: PokemonCard) => {
@@ -189,7 +196,6 @@ export function CreateDeckPage() {
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white pb-8">
 
-      {/* Header */}
       <div className="px-4 pt-6 pb-4 flex items-center gap-3">
         <button onClick={() => step === 'cards' ? setStep('info') : step === 'stats' ? setStep('cards') : navigate(-1)}
           className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center">
@@ -207,16 +213,13 @@ export function CreateDeckPage() {
               className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
               <BarChart2 size={16} className="text-gray-400" />
             </button>
-            <div className="text-right">
-              <p className={'text-sm font-bold ' + (totalCards === 60 ? 'text-green-400' : totalCards > 60 ? 'text-red-400' : 'text-white')}>
-                {totalCards}/60
-              </p>
-            </div>
+            <p className={'text-sm font-bold ' + (totalCards === 60 ? 'text-green-400' : totalCards > 60 ? 'text-red-400' : 'text-white')}>
+              {totalCards}/60
+            </p>
           </div>
         )}
       </div>
 
-      {/* Step: Info */}
       {step === 'info' && (
         <div className="px-4 space-y-4">
           <div>
@@ -241,7 +244,7 @@ export function CreateDeckPage() {
               {isPublic && <span className="text-[10px] text-white font-bold">✓</span>}
             </div>
           </button>
-          <button onClick={() => { if (name.trim()) setStep('cards'); doSearch('', '', ''); }}
+          <button onClick={() => { if (name.trim()) { setStep('cards'); } }}
             disabled={!name.trim()}
             className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold disabled:opacity-40 active:scale-95 transition-transform">
             Siguiente — Añadir cartas →
@@ -249,7 +252,6 @@ export function CreateDeckPage() {
         </div>
       )}
 
-      {/* Step: Cards */}
       {step === 'cards' && (
         <div className="px-4 space-y-3">
 
@@ -269,6 +271,18 @@ export function CreateDeckPage() {
               {totalCards === 60 ? '✅ Mazo completo' : (60 - totalCards) + ' cartas restantes'}
             </p>
           </div>
+
+          {/* Toggle mostrar todas */}
+          <button onClick={() => setShowAll(!showAll)}
+            className={'w-full flex items-center justify-between px-4 py-2.5 rounded-xl border transition-all ' + (showAll ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/8')}>
+            <div className="flex items-center gap-2">
+              <LayoutGrid size={14} className={showAll ? 'text-blue-400' : 'text-gray-500'} />
+              <p className="text-sm font-medium text-white">Mostrar todas las cartas</p>
+            </div>
+            <div className={'w-10 h-5 rounded-full transition-all flex items-center px-0.5 ' + (showAll ? 'bg-blue-500 justify-end' : 'bg-white/10 justify-start')}>
+              <div className="w-4 h-4 rounded-full bg-white shadow" />
+            </div>
+          </button>
 
           {/* Busqueda */}
           <div className="relative">
@@ -306,14 +320,16 @@ export function CreateDeckPage() {
                 )}
                 style={selectedType === type ? { backgroundColor: TYPE_COLORS[type] + '33', borderColor: TYPE_COLORS[type] } : {}}>
                 <span>{TYPE_EMOJIS[type]}</span>
-                <span>{type}</span>
+                <span>{TYPE_LABELS[type]}</span>
               </button>
             ))}
           </div>
 
-          {/* Vista grid/list toggle + cartas en mazo */}
+          {/* Vista toggle */}
           <div className="flex items-center justify-between">
-            <p className="text-xs text-gray-500">Resultados</p>
+            <p className="text-xs text-gray-500">
+              {searchResults.length > 0 ? searchResults.length + ' resultados' : showAll ? 'Cargando...' : 'Busca o activa "Mostrar todas"'}
+            </p>
             <div className="flex gap-1 bg-white/5 rounded-lg p-0.5">
               <button onClick={() => setViewMode('grid')}
                 className={'p-1.5 rounded ' + (viewMode === 'grid' ? 'bg-white/10 text-white' : 'text-gray-500')}>
@@ -326,8 +342,8 @@ export function CreateDeckPage() {
             </div>
           </div>
 
-          {/* Resultados */}
-          {viewMode === 'grid' ? (
+          {/* Resultados grid */}
+          {viewMode === 'grid' && searchResults.length > 0 && (
             <div className="grid grid-cols-3 gap-2">
               {searchResults.map(card => {
                 const qty = deckCards.get(card.id)?.quantity ?? 0;
@@ -364,7 +380,10 @@ export function CreateDeckPage() {
                 );
               })}
             </div>
-          ) : (
+          )}
+
+          {/* Resultados lista */}
+          {viewMode === 'list' && searchResults.length > 0 && (
             <div className="space-y-2">
               {searchResults.map(card => {
                 const qty = deckCards.get(card.id)?.quantity ?? 0;
@@ -381,8 +400,11 @@ export function CreateDeckPage() {
                           card.supertype === 'Trainer' ? 'bg-yellow-500/20 text-yellow-400' :
                           'bg-red-500/20 text-red-400'
                         )}>
-                          {card.supertype === 'Pokémon' ? 'Pokemon' : card.supertype === 'Trainer' ? 'Entrenador' : 'Energia'}
+                          {getSupertypeLabel(card.supertype)}
                         </span>
+                        {card.types && card.types[0] && (
+                          <span className="text-[9px] text-gray-500">{TYPE_EMOJIS[card.types[0]]} {TYPE_LABELS[card.types[0]] ?? card.types[0]}</span>
+                        )}
                         {inCollection && <span className="text-[9px] text-blue-400">✓ Tengo</span>}
                       </div>
                     </div>
@@ -403,10 +425,17 @@ export function CreateDeckPage() {
             </div>
           )}
 
+          {/* Sin resultados */}
+          {!isSearching && searchResults.length === 0 && (
+            <div className="text-center py-8 text-gray-500">
+              <p className="text-sm">{showAll ? 'Cargando cartas...' : 'Busca una carta o activa "Mostrar todas"'}</p>
+            </div>
+          )}
+
           {/* Cartas en el mazo */}
           {deckCards.size > 0 && (
-            <div className="space-y-2 mt-4">
-              <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">En el mazo</p>
+            <div className="space-y-2 mt-2">
+              <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">En el mazo ({totalCards}/60)</p>
               {['Pokémon', 'Trainer', 'Energy'].map(supertype => {
                 const group = Array.from(deckCards.values()).filter(c => c.card.supertype === supertype);
                 if (group.length === 0) return null;
@@ -439,13 +468,12 @@ export function CreateDeckPage() {
           )}
 
           <button onClick={handleSave} disabled={isSaving || totalCards === 0}
-            className={'w-full rounded-xl py-3 font-semibold active:scale-95 transition-transform disabled:opacity-40 mt-4 ' + (totalCards === 60 ? 'bg-green-600 text-white' : 'bg-blue-600 text-white')}>
+            className={'w-full rounded-xl py-3 font-semibold active:scale-95 transition-transform disabled:opacity-40 mt-2 ' + (totalCards === 60 ? 'bg-green-600 text-white' : 'bg-blue-600 text-white')}>
             {isSaving ? 'Guardando...' : totalCards === 60 ? '✅ Guardar mazo completo' : 'Guardar mazo (' + totalCards + '/60)'}
           </button>
         </div>
       )}
 
-      {/* Step: Stats */}
       {step === 'stats' && (
         <div className="px-4 space-y-4">
           <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
@@ -475,7 +503,7 @@ export function CreateDeckPage() {
                   <span className="text-base">{TYPE_EMOJIS[type] ?? '⭐'}</span>
                   <div className="flex-1">
                     <div className="flex justify-between text-xs mb-1">
-                      <span className="text-gray-400">{type}</span>
+                      <span className="text-gray-400">{TYPE_LABELS[type] ?? type}</span>
                       <span className="text-white font-bold">{count}</span>
                     </div>
                     <div className="w-full bg-white/10 rounded-full h-1.5">
