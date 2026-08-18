@@ -91,7 +91,6 @@ export function CreateDeckPage() {
   const [description, setDescription] = useState('');
   const [isPublic, setIsPublic] = useState(true);
 
-  // Filtros
   const [query, setQuery] = useState('');
   const [selectedSupertype, setSelectedSupertype] = useState('');
   const [selectedType, setSelectedType] = useState('');
@@ -241,6 +240,7 @@ export function CreateDeckPage() {
         set_name: card.set.name,
         image_url: card.images.small,
         quantity,
+        supertype: card.supertype,
       }));
 
       await supabase.from('deck_cards').insert(cardRows);
@@ -316,7 +316,6 @@ export function CreateDeckPage() {
       {step === 'cards' && (
         <div className="px-4 space-y-3">
 
-          {/* Barra progreso */}
           <div className="bg-[#111118] border border-white/8 rounded-xl p-3 space-y-2">
             <div className="flex justify-between text-xs text-gray-500">
               <span>{'🎴 ' + pokemonCount + ' Pokemon'}</span>
@@ -333,7 +332,6 @@ export function CreateDeckPage() {
             </p>
           </div>
 
-          {/* Formato */}
           <div className="flex gap-2">
             {FORMATS.map(f => (
               <button key={f.key}
@@ -347,7 +345,6 @@ export function CreateDeckPage() {
             ))}
           </div>
 
-          {/* Busqueda + filtros */}
           <div className="flex gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
@@ -368,20 +365,17 @@ export function CreateDeckPage() {
             </button>
           </div>
 
-          {/* Panel de filtros */}
           {showFilters && (
             <div className="bg-[#111118] border border-white/8 rounded-xl p-3 space-y-3">
 
-              {/* Mostrar todas */}
               <div className="flex items-center justify-between">
                 <p className="text-xs text-white font-medium">Mostrar todas las cartas</p>
-                <button onClick={() => { setShowAll(!showAll); }}
+                <button onClick={() => setShowAll(!showAll)}
                   className={'w-10 h-5 rounded-full transition-all flex items-center px-0.5 ' + (showAll ? 'bg-blue-500 justify-end' : 'bg-white/10 justify-start')}>
                   <div className="w-4 h-4 rounded-full bg-white shadow" />
                 </button>
               </div>
 
-              {/* Solo mi coleccion */}
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs text-white font-medium">Solo mi coleccion</p>
@@ -393,7 +387,6 @@ export function CreateDeckPage() {
                 </button>
               </div>
 
-              {/* Supertipo */}
               <div>
                 <p className="text-[10px] text-gray-500 mb-1.5">Tipo de carta</p>
                 <div className="flex gap-1.5 flex-wrap">
@@ -409,7 +402,6 @@ export function CreateDeckPage() {
                 </div>
               </div>
 
-              {/* Tipo elemental */}
               <div>
                 <p className="text-[10px] text-gray-500 mb-1.5">Tipo elemental</p>
                 <div className="flex gap-1.5 overflow-x-auto pb-1">
@@ -433,7 +425,6 @@ export function CreateDeckPage() {
                 </div>
               </div>
 
-              {/* Subtipo */}
               <div>
                 <p className="text-[10px] text-gray-500 mb-1.5">Subtipo</p>
                 <div className="flex gap-1.5 overflow-x-auto pb-1">
@@ -455,13 +446,11 @@ export function CreateDeckPage() {
                 </div>
               </div>
 
-              {/* Resultados por pagina */}
               <div>
                 <p className="text-[10px] text-gray-500 mb-1.5">Resultados por pagina</p>
                 <div className="flex gap-2">
                   {PAGE_SIZES.map(ps => (
-                    <button key={ps}
-                      onClick={() => setPageSize(ps)}
+                    <button key={ps} onClick={() => setPageSize(ps)}
                       className={'flex-1 py-1.5 rounded-xl text-xs font-medium border transition-all ' + (
                         pageSize === ps ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-white/5 border-white/10 text-gray-400'
                       )}>
@@ -471,7 +460,6 @@ export function CreateDeckPage() {
                 </div>
               </div>
 
-              {/* Limpiar filtros */}
               {activeFilterCount > 0 && (
                 <button onClick={() => {
                   setSelectedSupertype(''); setSelectedType(''); setSelectedSubtype('');
@@ -486,7 +474,6 @@ export function CreateDeckPage() {
             </div>
           )}
 
-          {/* Vista toggle + info */}
           <div className="flex items-center justify-between">
             <p className="text-xs text-gray-500">
               {searchResults.length > 0
@@ -505,7 +492,6 @@ export function CreateDeckPage() {
             </div>
           </div>
 
-          {/* Resultados grid */}
           {viewMode === 'grid' && searchResults.length > 0 && (
             <div className="grid grid-cols-3 gap-2">
               {searchResults.map(card => {
@@ -545,7 +531,6 @@ export function CreateDeckPage() {
             </div>
           )}
 
-          {/* Resultados lista */}
           {viewMode === 'list' && searchResults.length > 0 && (
             <div className="space-y-2">
               {searchResults.map(card => {
@@ -591,24 +576,22 @@ export function CreateDeckPage() {
             </div>
           )}
 
-          {/* Paginacion */}
           {totalPages > 1 && searchResults.length > 0 && (
             <div className="flex items-center justify-between gap-2">
               <button onClick={() => { const p = Math.max(1, page - 1); setPage(p); doSearch(query, selectedSupertype, selectedType, selectedSubtype, selectedFormat, showAll, p, pageSize, onlyMyCollection); }}
                 disabled={page === 1}
                 className="flex-1 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-gray-400 disabled:opacity-30 active:scale-95 transition-transform">
-                ← Anterior
+                Anterior
               </button>
               <span className="text-xs text-gray-500 shrink-0">{page}/{totalPages}</span>
               <button onClick={() => { const p = Math.min(totalPages, page + 1); setPage(p); doSearch(query, selectedSupertype, selectedType, selectedSubtype, selectedFormat, showAll, p, pageSize, onlyMyCollection); }}
                 disabled={page >= totalPages}
                 className="flex-1 py-2.5 rounded-xl bg-blue-600 text-sm text-white disabled:opacity-30 active:scale-95 transition-transform">
-                Siguiente →
+                Siguiente
               </button>
             </div>
           )}
 
-          {/* Sin resultados */}
           {!isSearching && searchResults.length === 0 && (
             <div className="text-center py-8 text-gray-500">
               <p className="text-sm">Busca una carta o ajusta los filtros</p>
@@ -616,7 +599,6 @@ export function CreateDeckPage() {
             </div>
           )}
 
-          {/* Cartas en el mazo */}
           {deckCards.size > 0 && (
             <div className="space-y-2 mt-2">
               <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">En el mazo ({totalCards}/60)</p>
