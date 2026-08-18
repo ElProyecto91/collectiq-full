@@ -1,39 +1,271 @@
-import { Plus, Layers } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Plus, Layers, Trash2, Share2, Globe, Lock, Heart } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { useUserStore } from '@/store';
+import { useCollectionList } from '@/hooks/use-collection';
+import { useCurrency } from '@/hooks/use-currency';
+
+interface DeckCard {
+  id: string;
+  card_id: string;
+  card_name: string;
+  set_name: string;
+  image_url: string;
+  quantity: number;
+  supertype?: string;
+}
+
+interface Deck {
+  id: string;
+  name: string;
+  description: string | null;
+  is_public: boolean;
+  cover_card_image: string | null;
+  created_at: string;
+  cards: DeckCard[];
+  votes: number;
+}
 
 export function DecksPage() {
   const navigate = useNavigate();
+  const telegramUser = useUserStore((s) => s.telegramUser);
+  const { data: collectionCards = [] } = useCollectionList();
+  const { formatPrice } = useCurrency();
+  const collectionIds = new Set(collectionCards.map(c => c.cardId));
+
+  const [decks, setDecks] = useState<Deck[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!telegramUser?.id) return;
+    loadDecks();
+  }, [telegramUser?.id]);
+
+  const loadDecks = async () => {
+    if (!telegramUser?.id) return;
+    setIsLoading(true);
+    try {
+      const { data: decksData } = await supabase
+        .from('decks')
+        .select('*')
+        .eq('telegram_user_id', telegramUser.id)
+        .order('created_at', { ascending: false });
+
+      if (!decksData) { setDecks([]); return; }
+
+      const decksWithCards = await Promise.all(decksData.map(async deck => {
+        const { data: cards } = await supabase
+          .from('deck_cards')
+          .select('*')
+          .eq('deck_id', deck.id);
+
+        const { count: votes } = await supabase
+          .from('deck_votes')
+          .select('*', { count: 'exact', head: true })
+          .eq('deck_id', deck.id);
+
+        return { ...deck, cards: cards ?? [], votes: votes ?? 0 };
+      }));
+
+      setDecks(decksWithCards);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDelete = async (deckId: string) => {
+    if (deletingId !== deckId) { setDeletingId(deckId); return; }
+    await supabase.from('decks').delete().eq('id', deckId);
+    setDecks(prev => prev.filter(d => d.id !== deckId));
+    setDeletingId(null);
+  };
+
+  const handleShare = (deck: Deck) => {
+    const url = 'https://collectiq-full.vercel.app/decks/public/' + deck.id;
+    if (navigator.share) {
+      navigator.share({ title: deck.name + ' — CollectIQ', url });
+    } else {
+      navigator.clipboard.writeText(url);
+      alert('Enlace copiado');
+    }
+  };
+
+  const togglePublic = async (deck: Deck) => {
+    await supabase.from('decks').update({ is_public: !deck.is_public }).eq('id', deck.id);
+    setDecks(prev => prev.map(d => d.id === deck.id ? { ...d, is_public: !d.is_public } : d));
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-32">
+        <p className="text-gray-500 text-sm">Cargando mazos...</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#0a0a0f] text-white pb-24">
-      <div className="px-4 pt-6 pb-4 flex items-center justify-between">
+    <div className="space-y-4 pt-3 pb-24 px-4">
+
+      <div className="flex items-center justify-between">
         <div>
-          <p className="text-[10px] text-blue-400 font-bold uppercase tracking-[0.2em]">COLLECTIQ</p>
-          <h1 className="text-2xl font-bold">Mis Mazos</h1>
+          <h1 className="text-2xl font-bold text-white">Mis Mazos</h1>
           <p className="text-sm text-gray-500">Crea y comparte tus mazos.</p>
         </div>
-        <button
-          onClick={() => navigate('/decks/new')}
+        <button onClick={() => navigate('/decks/new')}
           className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center active:scale-95 transition-transform">
           <Plus size={18} className="text-white" />
         </button>
       </div>
 
-      <div className="flex-1 px-4 flex flex-col items-center justify-center gap-4 text-center">
-        <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center">
-          <Layers size={28} className="text-gray-600" />
+      {decks.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
+          <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center">
+            <Layers size={28} className="text-gray-600" />
+          </div>
+          <div>
+            <p className="text-white font-semibold">Aun no tienes mazos</p>
+            <p className="text-sm text-gray-500 mt-1">Crea tu primer mazo de 60 cartas.</p>
+          </div>
+          <button onClick={() => navigate('/decks/new')}
+            className="bg-blue-600 text-white rounded-2xl px-6 py-3 font-semibold flex items-center gap-2 active:scale-95 transition-transform">
+            <Plus size={18} />
+            Crear mazo
+          </button>
         </div>
-        <div>
-          <p className="text-white font-semibold">Aun no tienes mazos</p>
-          <p className="text-sm text-gray-500 mt-1">Crea tu primer mazo de 60 cartas y compartelo con la comunidad.</p>
+      ) : (
+        <div className="space-y-4">
+          {decks.map(deck => {
+            const totalCards = deck.cards.reduce((s, c) => s + c.quantity, 0);
+            const pokemonCards = deck.cards.filter(c => c.supertype === 'Pokémon');
+            const trainerCards = deck.cards.filter(c => c.supertype === 'Trainer');
+            const energyCards = deck.cards.filter(c => c.supertype === 'Energy');
+            const pokemonCount = pokemonCards.reduce((s, c) => s + c.quantity, 0);
+            const trainerCount = trainerCards.reduce((s, c) => s + c.quantity, 0);
+            const energyCount = energyCards.reduce((s, c) => s + c.quantity, 0);
+
+            const ownedCards = deck.cards.filter(c => collectionIds.has(c.card_id));
+            const ownedPct = deck.cards.length > 0 ? Math.round(ownedCards.length / deck.cards.length * 100) : 0;
+
+            const deckValue = collectionCards
+              .filter(c => deck.cards.some(dc => dc.card_id === c.cardId))
+              .reduce((s, c) => {
+                const deckCard = deck.cards.find(dc => dc.card_id === c.cardId);
+                return s + ((c.marketPrice ?? c.tcgplayerPrice ?? 0) * (deckCard?.quantity ?? 1));
+              }, 0);
+
+            const coverImages = deck.cards.slice(0, 4).map(c => c.image_url).filter(Boolean);
+
+            return (
+              <div key={deck.id} className="bg-[#111118] border border-white/8 rounded-2xl overflow-hidden">
+
+                {/* Header con portada */}
+                <div className="relative h-24 bg-gradient-to-r from-blue-950/50 to-purple-950/50 overflow-hidden">
+                  <div className="absolute inset-0 flex items-center justify-end pr-2 gap-1 opacity-60">
+                    {coverImages.map((img, i) => (
+                      <img key={i} src={img} alt=""
+                        className="h-20 w-14 object-cover rounded-lg"
+                        style={{ transform: 'rotate(' + (i % 2 === 0 ? -3 : 3) + 'deg)' }} />
+                    ))}
+                  </div>
+                  <div className="absolute inset-0 bg-gradient-to-r from-[#111118] via-[#111118]/80 to-transparent" />
+                  <div className="absolute bottom-3 left-4">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-bold text-white">{deck.name}</h3>
+                      {deck.is_public
+                        ? <Globe size={12} className="text-blue-400" />
+                        : <Lock size={12} className="text-gray-500" />
+                      }
+                    </div>
+                    {deck.description && (
+                      <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{deck.description}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="p-4 space-y-3">
+
+                  {/* Composicion */}
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { label: 'Pokemon', value: pokemonCount, color: 'text-blue-400', emoji: '🎴' },
+                      { label: 'Entrenadores', value: trainerCount, color: 'text-yellow-400', emoji: '🎓' },
+                      { label: 'Energias', value: energyCount, color: 'text-red-400', emoji: '⚡' },
+                    ].map(item => (
+                      <div key={item.label} className="bg-white/5 rounded-xl p-2 text-center">
+                        <p className="text-xs">{item.emoji}</p>
+                        <p className={'text-lg font-bold ' + item.color}>{item.value}</p>
+                        <p className="text-[9px] text-gray-500">{item.label}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Barra progreso cartas */}
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-500">{totalCards}/60 cartas</span>
+                      {totalCards === 60 && <span className="text-green-400 font-medium">✅ Completo</span>}
+                    </div>
+                    <div className="w-full bg-white/10 rounded-full h-1.5 flex overflow-hidden">
+                      <div className="bg-blue-500 h-1.5" style={{ width: (pokemonCount / 60 * 100) + '%' }} />
+                      <div className="bg-yellow-500 h-1.5" style={{ width: (trainerCount / 60 * 100) + '%' }} />
+                      <div className="bg-red-500 h-1.5" style={{ width: (energyCount / 60 * 100) + '%' }} />
+                    </div>
+                  </div>
+
+                  {/* Stats valor y coleccion */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="bg-white/5 rounded-xl p-3">
+                      <p className="text-[10px] text-gray-500 mb-0.5">Valor estimado</p>
+                      <p className="text-sm font-bold text-green-400">
+                        {deckValue > 0 ? formatPrice(deckValue) : '—'}
+                      </p>
+                    </div>
+                    <div className="bg-white/5 rounded-xl p-3">
+                      <p className="text-[10px] text-gray-500 mb-0.5">En tu coleccion</p>
+                      <p className="text-sm font-bold text-blue-400">{ownedPct}%</p>
+                      <div className="w-full bg-white/10 rounded-full h-1 mt-1">
+                        <div className="bg-blue-500 h-1 rounded-full" style={{ width: ownedPct + '%' }} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Votos si es publico */}
+                  {deck.is_public && (
+                    <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                      <Heart size={12} className="text-pink-400" />
+                      <span>{deck.votes} votos</span>
+                    </div>
+                  )}
+
+                  {/* Acciones */}
+                  <div className="flex gap-2 pt-1">
+                    <button onClick={() => togglePublic(deck)}
+                      className={'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-medium border transition-all ' + (
+                        deck.is_public ? 'bg-blue-500/10 border-blue-500/20 text-blue-400' : 'bg-white/5 border-white/10 text-gray-400'
+                      )}>
+                      {deck.is_public ? <Globe size={13} /> : <Lock size={13} />}
+                      {deck.is_public ? 'Publico' : 'Privado'}
+                    </button>
+                    <button onClick={() => handleShare(deck)}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-medium border border-white/10 bg-white/5 text-gray-400 active:scale-95 transition-transform">
+                      <Share2 size={13} />
+                      Compartir
+                    </button>
+                    <button onClick={() => handleDelete(deck.id)}
+                      className={'w-9 h-9 rounded-xl border flex items-center justify-center transition-all ' + (
+                        deletingId === deck.id ? 'bg-red-500/10 border-red-500/30 text-red-400' : 'bg-white/5 border-white/10 text-gray-500'
+                      )}>
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
-        <button
-          onClick={() => navigate('/decks/new')}
-          className="bg-blue-600 text-white rounded-2xl px-6 py-3 font-semibold flex items-center gap-2 active:scale-95 transition-transform">
-          <Plus size={18} />
-          Crear mazo
-        </button>
-      </div>
+      )}
     </div>
   );
 }
