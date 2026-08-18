@@ -66,7 +66,7 @@ function exportToCSV(cards: CollectionItem[], filename: string) {
     'Nombre', 'Set', 'Numero', 'Rareza', 'Variante', 'Idioma', 'Condicion',
     'Cantidad', 'Precio mercado', 'Precio pagado', 'Fuente', 'Fecha adquisicion',
     'Grading', 'Nota grading', 'Certificado', 'Centrado', 'Esquinas', 'Bordes', 'Superficie',
-    'En funda', 'En album', 'Notas',
+    'En funda', 'En album', 'Notas', 'Imagen',
   ];
 
   const rows = cards.map(card => [
@@ -80,6 +80,7 @@ function exportToCSV(cards: CollectionItem[], filename: string) {
     card.gradingCompany ?? '', card.gradingScore ?? '', card.gradingCertificate ?? '',
     card.gradeCentering ?? '', card.gradeCorners ?? '', card.gradeEdges ?? '', card.gradeSurface ?? '',
     card.inSleeve ? 'Si' : 'No', card.inBinder ? 'Si' : 'No', card.notes ?? '',
+    card.imageUrl ?? '',
   ]);
 
   const csvRows = [headers, ...rows].map(row =>
