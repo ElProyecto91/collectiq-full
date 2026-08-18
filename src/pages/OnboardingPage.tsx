@@ -1,17 +1,20 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-const LANGUAGES = [
+const LANGUAGES_AVAILABLE = [
   { code: 'es', label: 'Español', flag: '🇪🇸', native: 'Español' },
   { code: 'en', label: 'English', flag: '🇬🇧', native: 'English' },
-  { code: 'fr', label: 'Français', flag: '🇫🇷', native: 'Français' },
-  { code: 'de', label: 'Deutsch', flag: '🇩🇪', native: 'Deutsch' },
-  { code: 'it', label: 'Italiano', flag: '🇮🇹', native: 'Italiano' },
-  { code: 'pt', label: 'Português', flag: '🇧🇷', native: 'Português' },
-  { code: 'ja', label: 'Japanese', flag: '🇯🇵', native: '日本語' },
-  { code: 'zh', label: 'Chinese', flag: '🇨🇳', native: '中文' },
-  { code: 'ar', label: 'Arabic', flag: '🇸🇦', native: 'العربية' },
-  { code: 'ru', label: 'Russian', flag: '🇷🇺', native: 'Русский' },
+];
+
+const LANGUAGES_SOON = [
+  { code: 'fr', flag: '🇫🇷', native: 'Français' },
+  { code: 'de', flag: '🇩🇪', native: 'Deutsch' },
+  { code: 'it', flag: '🇮🇹', native: 'Italiano' },
+  { code: 'pt', flag: '🇧🇷', native: 'Português' },
+  { code: 'ja', flag: '🇯🇵', native: '日本語' },
+  { code: 'zh', flag: '🇨🇳', native: '中文' },
+  { code: 'ar', flag: '🇸🇦', native: 'العربية' },
+  { code: 'ru', flag: '🇷🇺', native: 'Русский' },
 ];
 
 export function OnboardingPage() {
@@ -39,7 +42,7 @@ export function OnboardingPage() {
         <div className="w-full space-y-3">
           <p className="text-center text-sm font-medium text-gray-400">Elige tu idioma / Choose your language</p>
           <div className="grid grid-cols-2 gap-2">
-            {LANGUAGES.map(lang => (
+            {LANGUAGES_AVAILABLE.map(lang => (
               <button
                 key={lang.code}
                 onClick={() => setSelectedLang(lang.code)}
@@ -50,19 +53,30 @@ export function OnboardingPage() {
                 )}
               >
                 <span className="text-2xl">{lang.flag}</span>
-                <div className="text-left">
-                  <p className="text-sm font-medium">{lang.native}</p>
-                </div>
+                <p className="text-sm font-medium">{lang.native}</p>
                 {selectedLang === lang.code && <span className="ml-auto text-blue-400 text-xs">✓</span>}
               </button>
             ))}
+          </div>
+
+          <div className="mt-2">
+            <p className="text-center text-xs text-gray-600 mb-2">Próximamente</p>
+            <div className="flex flex-wrap gap-2 justify-center">
+              {LANGUAGES_SOON.map(lang => (
+                <div key={lang.code}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/3 border border-white/5 opacity-50">
+                  <span className="text-base">{lang.flag}</span>
+                  <span className="text-xs text-gray-600">{lang.native}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
 
       <button
         onClick={handleContinue}
-        className="w-full bg-blue-600 text-white rounded-2xl py-4 font-bold text-base active:scale-95 transition-transform"
+        className="w-full bg-blue-600 text-white rounded-2xl py-4 font-bold text-base active:scale-95 transition-transform mt-6"
       >
         Continuar →
       </button>
