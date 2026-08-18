@@ -530,7 +530,7 @@ const [zoomedCard, setZoomedCard] = useState<PokemonCard | null>(null);
                 return (
                   <div key={card.id} className={'bg-[#111118] border rounded-xl overflow-hidden ' + (inCollection ? 'border-blue-500/30' : 'border-white/8')}>
                     <div className="relative">
-                      <img src={card.images.small} alt={card.name} className="w-full aspect-[2/3] object-cover" />
+                      <img src={card.images.small} alt={card.name} className="w-full aspect-[2/3] object-cover cursor-pointer" onClick={() => setZoomedCard(card)} />
                       {inCollection && (
                         <div className="absolute top-1 right-1 bg-blue-500/90 rounded-full px-1.5 py-0.5">
                           <span className="text-[8px] text-white font-bold">Tengo</span>
