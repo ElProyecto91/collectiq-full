@@ -57,10 +57,10 @@ const POKEMON_API_KEY = import.meta.env.VITE_POKEMONTCG_API_KEY ?? '';
 
 async function searchCards(query: string, page: number): Promise<{ cards: PokemonCard[]; total: number }> {
   const q = query.trim()
-    ? `name:"*${query.trim()}*"`
+    ? 'name:"*' + query.trim() + '*"'
     : 'name:Charizard OR name:Pikachu OR name:Mewtwo';
 
-  const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&page=${page}&pageSize=20&orderBy=-set.releaseDate`;
+  const url = 'https://api.pokemontcg.io/v2/cards?q=' + encodeURIComponent(q) + '&page=' + page + '&pageSize=20&orderBy=-set.releaseDate';
 
   for (let i = 0; i < 4; i++) {
     try {
@@ -69,7 +69,7 @@ async function searchCards(query: string, page: number): Promise<{ cards: Pokemo
         await new Promise(r => setTimeout(r, 1500 * (i + 1)));
         continue;
       }
-      if (!res.ok) throw new Error(`Error ${res.status}`);
+      if (!res.ok) throw new Error('Error ' + res.status);
       const json = await res.json();
       return { cards: json.data ?? [], total: json.totalCount ?? 0 };
     } catch (err) {
@@ -88,13 +88,13 @@ function TCGSelector({ activeTCG, setActiveTCG }: { activeTCG: string; setActive
         return (
           <button
             key={tcg.key}
-            onClick={() => tcg.available && setActiveTCG(tcg.key)}
+            onClick={() => setActiveTCG(tcg.key)}
             className={'shrink-0 flex flex-col items-center gap-1 px-3 py-2 rounded-xl text-[10px] font-medium transition-all border ' + (
               isActive
                 ? 'border-opacity-100 text-white'
                 : tcg.available
                   ? 'bg-white/5 text-gray-400 border-white/10 active:scale-95'
-                  : 'bg-white/3 text-gray-600 border-white/5 opacity-40'
+                  : 'bg-white/5 text-gray-600 border-white/8 active:scale-95'
             )}
             style={isActive ? { backgroundColor: tcg.color + '22', borderColor: tcg.color, color: tcg.color } : {}}
           >
@@ -113,9 +113,7 @@ function TCGSelector({ activeTCG, setActiveTCG }: { activeTCG: string; setActive
 }
 
 function AddCardSelector({
-  card,
-  onAdd,
-  onClose,
+  card, onAdd, onClose,
 }: {
   card: PokemonCard;
   onAdd: (variant: CardVariant, language: CardLanguage) => void;
@@ -221,7 +219,7 @@ export function ExplorerPage() {
   }, [wishlistItems]);
 
   const doSearch = useCallback(async (q: string, p: number, append: boolean) => {
-    const cacheKey = `${q}-${p}`;
+    const cacheKey = q + '-' + p;
     if (append) setIsLoadingMore(true);
     else setIsLoading(true);
     setError('');
@@ -239,7 +237,7 @@ export function ExplorerPage() {
       setHasMore(result.cards.length === 20);
       setPage(p);
     } catch {
-      setError('La base de datos oficial de Pokémon está caída. Inténtalo de nuevo en unos minutos.');
+      setError('La base de datos oficial de Pokemon esta caida. Intentalo de nuevo en unos minutos.');
     } finally {
       setIsLoading(false);
       setIsLoadingMore(false);
@@ -276,7 +274,7 @@ export function ExplorerPage() {
       marketPrice: price ?? marketPrice, tcgplayerPrice: price, currency: 'EUR',
       variant, cardLanguage: language,
     });
-    setStatusMsg('✅ ' + card.name + ' añadida a tu colección');
+    setStatusMsg('✅ ' + card.name + ' añadida a tu coleccion');
     setTimeout(() => setStatusMsg(''), 2500);
     setSelectorCard(null);
   };
@@ -326,11 +324,11 @@ export function ExplorerPage() {
           </div>
           <div>
             <p className="text-white font-bold text-lg">{currentTCG?.label}</p>
-            <p className="text-sm text-gray-500 mt-1">El catálogo de {currentTCG?.label} estará disponible próximamente.</p>
+            <p className="text-sm text-gray-500 mt-1">El catalogo de {currentTCG?.label} estara disponible proximamente.</p>
           </div>
           <button onClick={() => setActiveTCG('pokemon')}
-            className="bg-blue-600 text-white rounded-xl px-5 py-2.5 text-sm font-medium">
-            Ver Pokémon TCG
+            className="bg-blue-600 text-white rounded-xl px-5 py-2.5 text-sm font-medium active:scale-95 transition-transform">
+            Ver Pokemon TCG
           </button>
         </div>
       ) : (
@@ -405,7 +403,7 @@ export function ExplorerPage() {
                     const alreadyAdded = addedIds.has(card.id);
                     return (
                       <div key={card.id} className="bg-[#111118] border border-white/8 rounded-2xl overflow-hidden">
-                        <div onClick={() => navigate(`${RoutePaths.Explorer}/card/${card.id}`)} className="cursor-pointer relative">
+                        <div onClick={() => navigate(RoutePaths.Explorer + '/card/' + card.id)} className="cursor-pointer relative">
                           <img src={card.images.small} alt={card.name} className="w-full aspect-[2/3] object-cover" loading="lazy" />
                           {alreadyAdded && (
                             <div className="absolute top-1.5 right-1.5 bg-green-500/90 rounded-full p-0.5">
@@ -418,7 +416,7 @@ export function ExplorerPage() {
                           <p className="text-[10px] text-gray-500 truncate">{card.set.name}</p>
                           {card.rarity && (
                             <p className={cx('text-[10px] truncate font-medium', getRarityColor(card.rarity))}>
-                              {card.rarity.replace('Common', 'Común').replace('Uncommon', 'Infrecuente').replace('Rare', 'Rara').replace('Ultra Rare', 'Ultra Rara').replace('Secret Rare', 'Secreta').replace('Hyper Rare', 'Hiper Rara').replace('Double Rare', 'Doble Rara').replace('Illustration Rare', 'Ilustración Rara').replace('Special Illustration Rare', 'Ilustración Especial')}
+                              {card.rarity.replace('Common', 'Comun').replace('Uncommon', 'Infrecuente').replace('Rare', 'Rara').replace('Ultra Rare', 'Ultra Rara').replace('Secret Rare', 'Secreta').replace('Hyper Rare', 'Hiper Rara').replace('Double Rare', 'Doble Rara').replace('Illustration Rare', 'Ilustracion Rara').replace('Special Illustration Rare', 'Ilustracion Especial')}
                             </p>
                           )}
                           {price && <p className="text-[10px] text-green-400 font-medium">{formatPrice(price)}</p>}
