@@ -1,7 +1,17 @@
 export { HomePage } from './HomePage';
 export { CollectionPage } from '@/features/collection/pages/CollectionPage';
 export { WishlistPage } from './WishlistPage';
+export export { HomePage } from './HomePage';
+export { CollectionPage } from '@/features/collection/pages/CollectionPage';
+export { WishlistPage } from './WishlistPage';
 export { ProfilePage } from './ProfilePage';
+export { ExplorerPage } from '@/features/catalog/pages/ExplorerPage';
+export { CommunityPage } from './CommunityPage';
+export { DecksPage } from './DecksPage';
+export { DeckDetailPage } from './DeckDetailPage';
+export { PublicProfilePage } from './PublicProfilePage';
+export { OnboardingPage } from './OnboardingPage';
+export { StatsPage } from './StatsPage'; ProfilePage } from './ProfilePage';
 export { ExplorerPage } from '@/features/catalog/pages/ExplorerPage';
 export { CommunityPage } from './CommunityPage';
 export { DecksPage } from './DecksPage';
