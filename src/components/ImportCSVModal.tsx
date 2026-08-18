@@ -59,7 +59,7 @@ const CONDITION_MAP: Record<string, string> = {
   'lightly played': 'lightly-played', 'lightly-played': 'lightly-played', 'lp': 'lightly-played',
   'moderately played': 'moderately-played', 'moderately-played': 'moderately-played', 'mp': 'moderately-played',
   'heavily played': 'heavily-played', 'heavily-played': 'heavily-played', 'hp': 'heavily-played',
-  'damaged': 'damaged', 'damaged': 'damaged', 'd': 'damaged',
+  'damaged': 'damaged', 'd': 'damaged',
   'poco jugada': 'lightly-played',
   'moderadamente jugada': 'moderately-played',
   'muy jugada': 'heavily-played',
