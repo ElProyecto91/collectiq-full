@@ -1,4 +1,4 @@
-import { Heart, Layers, Minus, Plus, Trash2, Star, LayoutGrid, Package, Sparkles, X, Download, Upload } from 'lucide-react';
+import { Heart, Layers, Minus, Plus, Trash2, Star, LayoutGrid, Package, Sparkles, X, Download, Upload, BookOpen, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useState, useCallback } from 'react';
 import { useCollectionList, useUpdateCollectionItem, useDeleteCollectionItem } from '@/hooks/use-collection';
 import { useCreateWishlistItem, useWishlistList } from '@/hooks/use-wishlist';
@@ -11,7 +11,8 @@ import { CARD_LANGUAGES, GRADING_COMPANIES, PURCHASE_SOURCES } from '@/types';
 import { ImportCSVModal } from '@/components/ImportCSVModal';
 
 type SortOption = 'recent' | 'name' | 'value';
-type ViewMode = 'cards' | 'sets';
+type ViewMode = 'cards' | 'sets' | 'album';
+type AlbumLayout = 1 | 2 | 3 | 4;
 
 interface SetCompletion {
   setName: string;
@@ -36,6 +37,14 @@ const CONDITION_KEYS: { key: CardCondition; color: string }[] = [
   { key: 'moderately-played', color: 'text-orange-400' },
   { key: 'heavily-played', color: 'text-red-400' },
   { key: 'damaged', color: 'text-red-600' },
+];
+
+const ALBUM_BACKGROUNDS = [
+  { key: 'dark', label: 'Oscuro', bg: '#0a0a0f', border: '#ffffff15' },
+  { key: 'leather', label: 'Cuero', bg: '#1a0f0a', border: '#8B4513aa' },
+  { key: 'green', label: 'Verde', bg: '#0a1a0f', border: '#22c55e33' },
+  { key: 'navy', label: 'Marino', bg: '#0a0f1a', border: '#3b82f633' },
+  { key: 'purple', label: 'Morado', bg: '#0f0a1a', border: '#a855f733' },
 ];
 
 function getConditionLabel(key: CardCondition, t: any): string {
@@ -102,23 +111,13 @@ function TCGSelector({ activeTCG, setActiveTCG }: { activeTCG: string; setActive
       {TCG_OPTIONS.map(tcg => {
         const isActive = activeTCG === tcg.key;
         return (
-          <button
-            key={tcg.key}
-            onClick={() => setActiveTCG(tcg.key)}
+          <button key={tcg.key} onClick={() => setActiveTCG(tcg.key)}
             className={'shrink-0 flex flex-col items-center gap-1 px-3 py-2 rounded-xl text-[10px] font-medium transition-all border ' + (
-              isActive
-                ? 'border-opacity-100 text-white'
-                : tcg.available
-                  ? 'bg-white/5 text-gray-400 border-white/10 active:scale-95'
-                  : 'bg-white/5 text-gray-600 border-white/8 active:scale-95'
+              isActive ? 'border-opacity-100 text-white' : tcg.available ? 'bg-white/5 text-gray-400 border-white/10 active:scale-95' : 'bg-white/5 text-gray-600 border-white/8 active:scale-95'
             )}
-            style={isActive ? { backgroundColor: tcg.color + '22', borderColor: tcg.color, color: tcg.color } : {}}
-          >
-            <span
-              className="w-6 h-6"
-              style={{ color: isActive ? tcg.color : tcg.available ? '#9ca3af' : '#4b5563' }}
-              dangerouslySetInnerHTML={{ __html: tcg.icon }}
-            />
+            style={isActive ? { backgroundColor: tcg.color + '22', borderColor: tcg.color, color: tcg.color } : {}}>
+            <span className="w-6 h-6" style={{ color: isActive ? tcg.color : tcg.available ? '#9ca3af' : '#4b5563' }}
+              dangerouslySetInnerHTML={{ __html: tcg.icon }} />
             <span className="whitespace-nowrap">{tcg.label}</span>
             {!tcg.available && <span className="text-[8px] text-gray-600 -mt-0.5">pronto</span>}
           </button>
@@ -128,13 +127,112 @@ function TCGSelector({ activeTCG, setActiveTCG }: { activeTCG: string; setActive
   );
 }
 
+function AlbumView({ cards, onZoom }: { cards: CollectionItem[]; onZoom: (card: CollectionItem) => void }) {
+  const [layout, setLayout] = useState<AlbumLayout>(3);
+  const [page, setPage] = useState(0);
+  const [bgKey, setBgKey] = useState('dark');
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+
+  const bg = ALBUM_BACKGROUNDS.find(b => b.key === bgKey) ?? ALBUM_BACKGROUNDS[0];
+  const cardsPerPage = layout * layout;
+  const totalPages = Math.ceil(cards.length / cardsPerPage);
+  const pageCards = cards.slice(page * cardsPerPage, (page + 1) * cardsPerPage);
+
+  const handleTouchStart = (e: React.TouchEvent) => setTouchStart(e.touches[0].clientX);
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStart === null) return;
+    const diff = touchStart - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 50) {
+      if (diff > 0 && page < totalPages - 1) setPage(p => p + 1);
+      if (diff < 0 && page > 0) setPage(p => p - 1);
+    }
+    setTouchStart(null);
+  };
+
+  return (
+    <div className="space-y-3">
+      {/* Controles */}
+      <div className="flex items-center justify-between">
+        <div className="flex gap-1">
+          {([1, 2, 3, 4] as AlbumLayout[]).map(l => (
+            <button key={l} onClick={() => { setLayout(l); setPage(0); }}
+              className={'w-8 h-8 rounded-lg text-xs font-bold border transition-all ' + (
+                layout === l ? 'bg-blue-600 text-white border-blue-600' : 'bg-white/5 text-gray-400 border-white/10'
+              )}>
+              {l}x{l}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-1">
+          {ALBUM_BACKGROUNDS.map(b => (
+            <button key={b.key} onClick={() => setBgKey(b.key)}
+              className={'w-6 h-6 rounded-full border-2 transition-all ' + (bgKey === b.key ? 'border-white scale-110' : 'border-transparent')}
+              style={{ backgroundColor: b.bg }} />
+          ))}
+        </div>
+      </div>
+
+      {/* Pagina del album */}
+      <div
+        className="rounded-2xl p-3 min-h-64"
+        style={{ backgroundColor: bg.bg, border: '2px solid ' + bg.border }}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
+        {/* Numero de pagina */}
+        <div className="flex items-center justify-between mb-3">
+          <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
+            className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center disabled:opacity-30">
+            <ChevronLeft size={14} className="text-white" />
+          </button>
+          <p className="text-[10px] text-white/50 font-medium">
+            {page + 1} / {totalPages || 1}
+          </p>
+          <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}
+            className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center disabled:opacity-30">
+            <ChevronRight size={14} className="text-white" />
+          </button>
+        </div>
+
+        {/* Grid de cartas */}
+        <div className={'grid gap-2'} style={{ gridTemplateColumns: 'repeat(' + layout + ', 1fr)' }}>
+          {Array.from({ length: cardsPerPage }).map((_, i) => {
+            const card = pageCards[i];
+            return (
+              <div key={i}
+                className={'rounded-xl overflow-hidden border transition-all ' + (card ? 'cursor-pointer active:scale-95' : 'opacity-20')}
+                style={{ borderColor: bg.border, aspectRatio: '2/3', backgroundColor: card ? 'transparent' : bg.border }}
+                onClick={() => card && onZoom(card)}>
+                {card ? (
+                  <img src={card.imageUrl ?? ''} alt={card.cardName}
+                    className="w-full h-full object-cover" loading="lazy" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <span className="text-white/20 text-xs">+</span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Info pagina */}
+        {pageCards.length > 0 && (
+          <p className="text-center text-[10px] text-white/30 mt-3">
+            Cartas {page * cardsPerPage + 1}–{Math.min((page + 1) * cardsPerPage, cards.length)} de {cards.length}
+          </p>
+        )}
+      </div>
+
+      <p className="text-center text-[10px] text-gray-600">Desliza para pasar pagina</p>
+    </div>
+  );
+}
+
 function ExportModal({ cards, setGroups, onClose }: {
-  cards: CollectionItem[];
-  setGroups: SetCompletion[];
-  onClose: () => void;
+  cards: CollectionItem[]; setGroups: SetCompletion[]; onClose: () => void;
 }) {
   const [exporting, setExporting] = useState(false);
-
   const handleExport = (subset: CollectionItem[], filename: string) => {
     setExporting(true);
     setTimeout(() => { exportToCSV(subset, filename); setExporting(false); onClose(); }, 300);
@@ -196,9 +294,7 @@ function CardZoom({ card, onClose }: { card: CollectionItem; onClose: () => void
 }
 
 function EditCardModal({ card, onSave, onClose }: {
-  card: CollectionItem;
-  onSave: (update: Partial<CollectionItem>) => void;
-  onClose: () => void;
+  card: CollectionItem; onSave: (update: Partial<CollectionItem>) => void; onClose: () => void;
 }) {
   const { t } = useI18n();
   const [variant, setVariant] = useState<CardVariant>(card.variant ?? 'normal');
@@ -253,66 +349,40 @@ function EditCardModal({ card, onSave, onClose }: {
             </div>
             <button onClick={() => setStep('variant')} className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-left">
               <span className="text-xl">{currentVariant?.emoji}</span>
-              <div className="flex-1">
-                <p className="text-xs text-gray-500">{t.variants.title}</p>
-                <p className="text-sm text-white font-medium">{currentVariant?.label}</p>
-              </div>
+              <div className="flex-1"><p className="text-xs text-gray-500">{t.variants.title}</p><p className="text-sm text-white font-medium">{currentVariant?.label}</p></div>
               <span className="text-gray-500 text-xs">›</span>
             </button>
             <button onClick={() => setStep('language')} className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-left">
               <span className="text-xl">{currentLanguage?.flag}</span>
-              <div className="flex-1">
-                <p className="text-xs text-gray-500">{t.cardLanguages.title}</p>
-                <p className="text-sm text-white font-medium">{currentLanguage?.label}</p>
-              </div>
+              <div className="flex-1"><p className="text-xs text-gray-500">{t.cardLanguages.title}</p><p className="text-sm text-white font-medium">{currentLanguage?.label}</p></div>
               <span className="text-gray-500 text-xs">›</span>
             </button>
             <button onClick={() => setStep('condition')} className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-left">
               <span className="text-xl">🔍</span>
-              <div className="flex-1">
-                <p className="text-xs text-gray-500">{t.cardEdit?.condition ?? 'Condicion'}</p>
-                <p className={'text-sm font-medium ' + (conditionColor ?? 'text-gray-400')}>
-                  {condition ? getConditionLabel(condition, t) : (t.cardEdit?.conditionNone ?? 'Sin especificar')}
-                </p>
-              </div>
+              <div className="flex-1"><p className="text-xs text-gray-500">{t.cardEdit?.condition ?? 'Condicion'}</p>
+                <p className={'text-sm font-medium ' + (conditionColor ?? 'text-gray-400')}>{condition ? getConditionLabel(condition, t) : (t.cardEdit?.conditionNone ?? 'Sin especificar')}</p></div>
               <span className="text-gray-500 text-xs">›</span>
             </button>
             <button onClick={() => setStep('grading')} className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-left">
               <span className="text-xl">🏆</span>
-              <div className="flex-1">
-                <p className="text-xs text-gray-500">{t.cardEdit?.grading ?? 'Grading profesional'}</p>
-                <p className="text-sm text-white font-medium">
-                  {gradingCompany ? (gradingCompany + (gradingScore ? ' · ' + gradingScore : '')) : (t.cardEdit?.gradingNone ?? 'Sin grading')}
-                </p>
-              </div>
+              <div className="flex-1"><p className="text-xs text-gray-500">{t.cardEdit?.grading ?? 'Grading profesional'}</p>
+                <p className="text-sm text-white font-medium">{gradingCompany ? (gradingCompany + (gradingScore ? ' · ' + gradingScore : '')) : (t.cardEdit?.gradingNone ?? 'Sin grading')}</p></div>
               <span className="text-gray-500 text-xs">›</span>
             </button>
             <button onClick={() => setStep('acquisition')} className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-left">
               <span className="text-xl">💰</span>
-              <div className="flex-1">
-                <p className="text-xs text-gray-500">{t.cardEdit?.acquisition ?? 'Adquisicion'}</p>
-                <p className="text-sm text-white font-medium">
-                  {!purchasePrice && !purchaseSource ? (t.cardEdit?.acquisitionNone ?? 'Sin especificar') : (purchasePrice ? purchasePrice + 'EUR' : '') + (purchaseSource ? ' · ' + (PURCHASE_SOURCES.find(s => s.code === purchaseSource)?.emoji ?? '') : '')}
-                </p>
-              </div>
+              <div className="flex-1"><p className="text-xs text-gray-500">{t.cardEdit?.acquisition ?? 'Adquisicion'}</p>
+                <p className="text-sm text-white font-medium">{!purchasePrice && !purchaseSource ? (t.cardEdit?.acquisitionNone ?? 'Sin especificar') : (purchasePrice ? purchasePrice + 'EUR' : '') + (purchaseSource ? ' · ' + (PURCHASE_SOURCES.find(s => s.code === purchaseSource)?.emoji ?? '') : '')}</p></div>
               <span className="text-gray-500 text-xs">›</span>
             </button>
             <div className="grid grid-cols-2 gap-2">
-              <button onClick={() => setInSleeve(!inSleeve)}
-                className={'flex items-center gap-2 border rounded-xl px-3 py-3 transition-all ' + (inSleeve ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/8')}>
+              <button onClick={() => setInSleeve(!inSleeve)} className={'flex items-center gap-2 border rounded-xl px-3 py-3 transition-all ' + (inSleeve ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/8')}>
                 <span className="text-lg">🛡️</span>
-                <div className="text-left">
-                  <p className="text-xs font-medium text-white">{t.cardEdit?.inSleeve ?? 'En funda'}</p>
-                  <p className="text-[10px] text-gray-500">{inSleeve ? (t.common.yes ?? 'Si') : (t.common.no ?? 'No')}</p>
-                </div>
+                <div className="text-left"><p className="text-xs font-medium text-white">{t.cardEdit?.inSleeve ?? 'En funda'}</p><p className="text-[10px] text-gray-500">{inSleeve ? 'Si' : 'No'}</p></div>
               </button>
-              <button onClick={() => setInBinder(!inBinder)}
-                className={'flex items-center gap-2 border rounded-xl px-3 py-3 transition-all ' + (inBinder ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/8')}>
+              <button onClick={() => setInBinder(!inBinder)} className={'flex items-center gap-2 border rounded-xl px-3 py-3 transition-all ' + (inBinder ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/8')}>
                 <span className="text-lg">📁</span>
-                <div className="text-left">
-                  <p className="text-xs font-medium text-white">{t.cardEdit?.inBinder ?? 'En album'}</p>
-                  <p className="text-[10px] text-gray-500">{inBinder ? (t.common.yes ?? 'Si') : (t.common.no ?? 'No')}</p>
-                </div>
+                <div className="text-left"><p className="text-xs font-medium text-white">{t.cardEdit?.inBinder ?? 'En album'}</p><p className="text-[10px] text-gray-500">{inBinder ? 'Si' : 'No'}</p></div>
               </button>
             </div>
             <div>
@@ -321,9 +391,7 @@ function EditCardModal({ card, onSave, onClose }: {
                 placeholder={t.cardEdit?.notesPlaceholder ?? 'Estado de la carta, historial, planes...'}
                 className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50 resize-none h-20" />
             </div>
-            <button onClick={handleSave} className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold active:scale-95 transition-transform">
-              {t.common.saveChanges}
-            </button>
+            <button onClick={handleSave} className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold active:scale-95 transition-transform">{t.common.saveChanges}</button>
           </>
         )}
 
@@ -331,7 +399,7 @@ function EditCardModal({ card, onSave, onClose }: {
           <>
             <div className="flex items-center justify-between">
               <p className="text-sm font-bold text-white">{t.variants.select}</p>
-              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">{t.cardEdit?.back ?? 'Volver'}</button>
+              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">Volver</button>
             </div>
             <div className="space-y-2">
               {VARIANTS.map(v => (
@@ -350,7 +418,7 @@ function EditCardModal({ card, onSave, onClose }: {
           <>
             <div className="flex items-center justify-between">
               <p className="text-sm font-bold text-white">{t.cardLanguages.select}</p>
-              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">{t.cardEdit?.back ?? 'Volver'}</button>
+              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">Volver</button>
             </div>
             <div className="space-y-2 max-h-72 overflow-y-auto">
               {CARD_LANGUAGES.map(lang => (
@@ -369,13 +437,13 @@ function EditCardModal({ card, onSave, onClose }: {
           <>
             <div className="flex items-center justify-between">
               <p className="text-sm font-bold text-white">{t.cardEdit?.condition ?? 'Condicion'}</p>
-              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">{t.cardEdit?.back ?? 'Volver'}</button>
+              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">Volver</button>
             </div>
             <div className="space-y-2">
               <button onClick={() => { setCondition(null); setStep('main'); }}
                 className={'w-full flex items-center gap-3 border rounded-xl px-3 py-3 text-left transition-all ' + (condition === null ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/8')}>
                 <span className="text-xl">❓</span>
-                <p className="text-sm text-white font-medium">{t.cardEdit?.conditionNone ?? 'Sin especificar'}</p>
+                <p className="text-sm text-white font-medium">Sin especificar</p>
                 {condition === null && <span className="ml-auto text-blue-400">✓</span>}
               </button>
               {CONDITION_KEYS.map(c => (
@@ -393,16 +461,16 @@ function EditCardModal({ card, onSave, onClose }: {
         {step === 'grading' && (
           <>
             <div className="flex items-center justify-between">
-              <p className="text-sm font-bold text-white">{t.cardEdit?.grading ?? 'Grading profesional'}</p>
-              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">{t.cardEdit?.back ?? 'Volver'}</button>
+              <p className="text-sm font-bold text-white">Grading profesional</p>
+              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">Volver</button>
             </div>
             <div className="space-y-3">
               <div>
-                <p className="text-xs text-gray-500 mb-1.5">{t.cardEdit?.gradingCompany ?? 'Empresa de grading'}</p>
+                <p className="text-xs text-gray-500 mb-1.5">Empresa de grading</p>
                 <div className="grid grid-cols-3 gap-2">
                   <button onClick={() => setGradingCompany(null)}
                     className={'py-2 rounded-xl text-xs font-medium border transition-all ' + (gradingCompany === null ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-white/5 border-white/8 text-gray-400')}>
-                    {t.cardEdit?.gradingNoneOption ?? 'Ninguna'}
+                    Ninguna
                   </button>
                   {GRADING_COMPANIES.map(g => (
                     <button key={g.code} onClick={() => setGradingCompany(g.code)}
@@ -415,30 +483,27 @@ function EditCardModal({ card, onSave, onClose }: {
               {gradingCompany && (
                 <>
                   <div>
-                    <p className="text-xs text-gray-500 mb-1.5">{t.cardEdit?.gradingScore ?? 'Nota global (1-10)'}</p>
-                    <input type="number" min="1" max="10" step="0.5" value={gradingScore}
-                      onChange={e => setGradingScore(e.target.value)} placeholder="ej: 9.5"
+                    <p className="text-xs text-gray-500 mb-1.5">Nota global (1-10)</p>
+                    <input type="number" min="1" max="10" step="0.5" value={gradingScore} onChange={e => setGradingScore(e.target.value)} placeholder="ej: 9.5"
                       className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50" />
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500 mb-1.5">{t.cardEdit?.gradingCertificate ?? 'Numero de certificado'}</p>
-                    <input type="text" value={gradingCertificate} onChange={e => setGradingCertificate(e.target.value)}
-                      placeholder="ej: 12345678"
+                    <p className="text-xs text-gray-500 mb-1.5">Numero de certificado</p>
+                    <input type="text" value={gradingCertificate} onChange={e => setGradingCertificate(e.target.value)} placeholder="ej: 12345678"
                       className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50" />
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500 mb-1.5">{t.cardEdit?.subGrades ?? 'Sub-notas'}</p>
+                    <p className="text-xs text-gray-500 mb-1.5">Sub-notas</p>
                     <div className="grid grid-cols-2 gap-2">
                       {[
-                        { label: t.cardEdit?.centering ?? 'Centrado', value: gradeCentering, set: setGradeCentering },
-                        { label: t.cardEdit?.corners ?? 'Esquinas', value: gradeCorners, set: setGradeCorners },
-                        { label: t.cardEdit?.edges ?? 'Bordes', value: gradeEdges, set: setGradeEdges },
-                        { label: t.cardEdit?.surface ?? 'Superficie', value: gradeSurface, set: setGradeSurface },
+                        { label: 'Centrado', value: gradeCentering, set: setGradeCentering },
+                        { label: 'Esquinas', value: gradeCorners, set: setGradeCorners },
+                        { label: 'Bordes', value: gradeEdges, set: setGradeEdges },
+                        { label: 'Superficie', value: gradeSurface, set: setGradeSurface },
                       ].map(sub => (
                         <div key={sub.label}>
                           <p className="text-[10px] text-gray-500 mb-1">{sub.label}</p>
-                          <input type="number" min="1" max="10" step="0.5" value={sub.value}
-                            onChange={e => sub.set(e.target.value)} placeholder="1-10"
+                          <input type="number" min="1" max="10" step="0.5" value={sub.value} onChange={e => sub.set(e.target.value)} placeholder="1-10"
                             className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50" />
                         </div>
                       ))}
@@ -446,9 +511,7 @@ function EditCardModal({ card, onSave, onClose }: {
                   </div>
                 </>
               )}
-              <button onClick={() => setStep('main')} className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold">
-                {t.cardEdit?.saveGrading ?? 'Guardar grading'}
-              </button>
+              <button onClick={() => setStep('main')} className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold">Guardar grading</button>
             </div>
           </>
         )}
@@ -456,18 +519,17 @@ function EditCardModal({ card, onSave, onClose }: {
         {step === 'acquisition' && (
           <>
             <div className="flex items-center justify-between">
-              <p className="text-sm font-bold text-white">{t.cardEdit?.acquisition ?? 'Adquisicion'}</p>
-              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">{t.cardEdit?.back ?? 'Volver'}</button>
+              <p className="text-sm font-bold text-white">Adquisicion</p>
+              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">Volver</button>
             </div>
             <div className="space-y-3">
               <div>
-                <p className="text-xs text-gray-500 mb-1.5">{t.cardEdit?.purchasePrice ?? 'Precio pagado'}</p>
-                <input type="number" min="0" step="0.01" value={purchasePrice}
-                  onChange={e => setPurchasePrice(e.target.value)} placeholder="0.00"
+                <p className="text-xs text-gray-500 mb-1.5">Precio pagado</p>
+                <input type="number" min="0" step="0.01" value={purchasePrice} onChange={e => setPurchasePrice(e.target.value)} placeholder="0.00"
                   className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50" />
               </div>
               <div>
-                <p className="text-xs text-gray-500 mb-1.5">{t.cardEdit?.howObtained ?? 'Como la conseguiste'}</p>
+                <p className="text-xs text-gray-500 mb-1.5">Como la conseguiste</p>
                 <div className="grid grid-cols-3 gap-2">
                   {PURCHASE_SOURCES.map(s => (
                     <button key={s.code} onClick={() => setPurchaseSource(s.code)}
@@ -479,13 +541,11 @@ function EditCardModal({ card, onSave, onClose }: {
                 </div>
               </div>
               <div>
-                <p className="text-xs text-gray-500 mb-1.5">{t.cardEdit?.acquiredDate ?? 'Fecha de adquisicion'}</p>
+                <p className="text-xs text-gray-500 mb-1.5">Fecha de adquisicion</p>
                 <input type="date" value={acquiredAt} onChange={e => setAcquiredAt(e.target.value)}
                   className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500/50" />
               </div>
-              <button onClick={() => setStep('main')} className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold">
-                {t.cardEdit?.saveAcquisition ?? 'Guardar adquisicion'}
-              </button>
+              <button onClick={() => setStep('main')} className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold">Guardar adquisicion</button>
             </div>
           </>
         )}
@@ -517,13 +577,8 @@ export function CollectionPage() {
   const showComingSoon = activeTCG !== 'all' && activeTCG !== 'pokemon';
   const cards = showComingSoon ? [] : (activeTCG === 'all' ? allCards : allCards.filter(c => c.tcg === activeTCG));
 
-  const updateEntry = useCallback((id: string, update: Partial<CollectionItem>) => {
-    updateItem({ id, update });
-  }, [updateItem]);
-
-  const removeEntry = useCallback((id: string) => {
-    deleteItem(id);
-  }, [deleteItem]);
+  const updateEntry = useCallback((id: string, update: Partial<CollectionItem>) => { updateItem({ id, update }); }, [updateItem]);
+  const removeEntry = useCallback((id: string) => { deleteItem(id); }, [deleteItem]);
 
   const setGroups: SetCompletion[] = Object.values(
     cards.reduce((acc, card) => {
@@ -543,11 +598,7 @@ export function CollectionPage() {
     .sort((a, b) => {
       if (sort === 'recent') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       if (sort === 'name') return a.cardName.localeCompare(b.cardName);
-      if (sort === 'value') {
-        const va = a.marketPrice ?? a.tcgplayerPrice ?? 0;
-        const vb = b.marketPrice ?? b.tcgplayerPrice ?? 0;
-        return vb - va;
-      }
+      if (sort === 'value') return (b.marketPrice ?? b.tcgplayerPrice ?? 0) - (a.marketPrice ?? a.tcgplayerPrice ?? 0);
       return 0;
     });
 
@@ -556,11 +607,7 @@ export function CollectionPage() {
   const favorites = cards.filter(c => c.favorite).length;
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-32">
-        <p className="text-gray-500 text-sm">Cargando coleccion...</p>
-      </div>
-    );
+    return <div className="flex items-center justify-center py-32"><p className="text-gray-500 text-sm">Cargando coleccion...</p></div>;
   }
 
   return (
@@ -568,19 +615,12 @@ export function CollectionPage() {
 
       {zoomedCard && <CardZoom card={zoomedCard} onClose={() => setZoomedCard(null)} />}
       {editingCard && (
-        <EditCardModal
-          card={editingCard}
+        <EditCardModal card={editingCard}
           onSave={(update) => { updateEntry(editingCard.id, update); setEditingCard(null); }}
-          onClose={() => setEditingCard(null)}
-        />
+          onClose={() => setEditingCard(null)} />
       )}
       {showExport && <ExportModal cards={cards} setGroups={setGroups} onClose={() => setShowExport(false)} />}
-      {showImport && (
-        <ImportCSVModal
-          onClose={() => setShowImport(false)}
-          onSuccess={() => { refetch(); }}
-        />
-      )}
+      {showImport && <ImportCSVModal onClose={() => setShowImport(false)} onSuccess={() => { refetch(); }} />}
 
       <div className="flex items-center justify-between">
         <div>
@@ -605,17 +645,14 @@ export function CollectionPage() {
 
       {showComingSoon ? (
         <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
-          <div className="w-20 h-20 rounded-2xl flex items-center justify-center"
-            style={{ backgroundColor: (currentTCG?.color ?? '#6366f1') + '22' }}>
-            <span className="w-10 h-10" style={{ color: currentTCG?.color }}
-              dangerouslySetInnerHTML={{ __html: currentTCG?.icon ?? '' }} />
+          <div className="w-20 h-20 rounded-2xl flex items-center justify-center" style={{ backgroundColor: (currentTCG?.color ?? '#6366f1') + '22' }}>
+            <span className="w-10 h-10" style={{ color: currentTCG?.color }} dangerouslySetInnerHTML={{ __html: currentTCG?.icon ?? '' }} />
           </div>
           <div>
             <p className="text-white font-bold text-lg">{currentTCG?.label}</p>
             <p className="text-sm text-gray-500 mt-1">El catalogo de {currentTCG?.label} estara disponible proximamente.</p>
           </div>
-          <button onClick={() => setActiveTCG('pokemon')}
-            className="bg-blue-600 text-white rounded-xl px-5 py-2.5 text-sm font-medium active:scale-95 transition-transform">
+          <button onClick={() => setActiveTCG('pokemon')} className="bg-blue-600 text-white rounded-xl px-5 py-2.5 text-sm font-medium active:scale-95 transition-transform">
             Ver Pokemon TCG
           </button>
         </div>
@@ -641,15 +678,22 @@ export function CollectionPage() {
               <button onClick={() => setView('cards')}
                 className={'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors ' + (view === 'cards' ? 'bg-blue-600 text-white' : 'text-gray-400')}>
                 <LayoutGrid size={13} />
-                {t.collection.title}
+                Cartas
               </button>
               <button onClick={() => setView('sets')}
                 className={'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors ' + (view === 'sets' ? 'bg-blue-600 text-white' : 'text-gray-400')}>
                 <Package size={13} />
-                {t.stats.sets}
+                Sets
+              </button>
+              <button onClick={() => setView('album')}
+                className={'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors ' + (view === 'album' ? 'bg-blue-600 text-white' : 'text-gray-400')}>
+                <BookOpen size={13} />
+                Album
               </button>
             </div>
           )}
+
+          {view === 'album' && <AlbumView cards={cards} onZoom={setZoomedCard} />}
 
           {view === 'cards' && (
             <>
@@ -658,7 +702,6 @@ export function CollectionPage() {
                   placeholder={t.collection.searchPlaceholder}
                   className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50" />
               </div>
-
               <div className="flex items-center gap-2 overflow-x-auto pb-1">
                 <span className="shrink-0 text-xs text-gray-500">{t.collection.sort}</span>
                 {(['recent', 'name', 'value'] as SortOption[]).map(opt => (
@@ -668,28 +711,21 @@ export function CollectionPage() {
                   </button>
                 ))}
               </div>
-
               {cards.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
-                  <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center">
-                    <Layers size={28} className="text-gray-600" />
-                  </div>
+                  <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center"><Layers size={28} className="text-gray-600" /></div>
                   <div>
                     <p className="text-white font-semibold">{t.collection.noCardsYet}</p>
                     <p className="text-sm text-gray-500 mt-1">{t.collection.noCardsYetDesc}</p>
                   </div>
                 </div>
               ) : filtered.length === 0 ? (
-                <div className="text-center py-12 text-gray-500 text-sm">
-                  {t.collection.noMatchesDesc.replace('{search}', search)}
-                </div>
+                <div className="text-center py-12 text-gray-500 text-sm">{t.collection.noMatchesDesc.replace('{search}', search)}</div>
               ) : (
                 <div className="grid grid-cols-2 gap-3">
                   {filtered.map(card => (
-                    <CollectionCard key={card.id} card={card}
-                      onUpdate={updateEntry} onRemove={removeEntry}
-                      onEdit={() => setEditingCard(card)} onZoom={() => setZoomedCard(card)}
-                      formatPrice={formatPrice} t={t} />
+                    <CollectionCard key={card.id} card={card} onUpdate={updateEntry} onRemove={removeEntry}
+                      onEdit={() => setEditingCard(card)} onZoom={() => setZoomedCard(card)} formatPrice={formatPrice} t={t} />
                   ))}
                 </div>
               )}
@@ -700,9 +736,7 @@ export function CollectionPage() {
             <div className="space-y-3">
               {setGroups.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
-                  <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center">
-                    <Package size={28} className="text-gray-600" />
-                  </div>
+                  <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center"><Package size={28} className="text-gray-600" /></div>
                   <p className="text-white font-semibold">Sin sets todavia</p>
                 </div>
               ) : (
@@ -777,16 +811,11 @@ export function CollectionPage() {
 }
 
 function CollectionCard({ card, onUpdate, onRemove, onEdit, onZoom, formatPrice, t }: {
-  card: CollectionItem;
-  onUpdate: (id: string, update: Partial<CollectionItem>) => void;
-  onRemove: (id: string) => void;
-  onEdit: () => void;
-  onZoom: () => void;
-  formatPrice: (price: number | null | undefined) => string;
-  t: any;
+  card: CollectionItem; onUpdate: (id: string, update: Partial<CollectionItem>) => void;
+  onRemove: (id: string) => void; onEdit: () => void; onZoom: () => void;
+  formatPrice: (price: number | null | undefined) => string; t: any;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
-
   const handleRemove = () => {
     if (!confirmDelete) { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); return; }
     onRemove(card.id);
