@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Share2, LogOut, Globe, Coins, BarChart2 } from 'lucide-react';
+import { Share2, LogOut, Globe, Coins, BarChart2, Trophy } from 'lucide-react';
 import { useUserStore } from '@/store';
 import { useI18n } from '@/i18n';
 import { useCurrency } from '@/hooks/use-currency';
 import { useCollectionList } from '@/hooks/use-collection';
+import { useXP, getLevelName } from '@/hooks/use-xp';
+import { AchievementToast } from '@/components/AchievementToast';
 
 const CURRENCIES = ['EUR', 'USD', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'BRL', 'MXN', 'PLN'];
 
@@ -20,6 +22,7 @@ export function ProfilePage() {
   const { currency, setCurrency } = useCurrency();
   const { data: cards = [] } = useCollectionList();
   const navigate = useNavigate();
+  const { xpData, unlockedAchievements, newAchievement } = useXP();
 
   const totalCards = cards.reduce((s, c) => s + c.quantity, 0);
   const uniqueCards = cards.length;
@@ -27,6 +30,7 @@ export function ProfilePage() {
 
   const displayName = telegramUser?.first_name ?? telegramUser?.username ?? 'Coleccionista';
   const username = telegramUser?.username ? '@' + telegramUser.username : null;
+  const levelName = getLevelName(xpData.level);
 
   const handleShare = () => {
     if (!telegramUser?.id) return;
@@ -50,26 +54,48 @@ export function ProfilePage() {
   return (
     <div className="space-y-4 pt-3 pb-24 px-4">
 
+      <AchievementToast achievement={newAchievement} onDone={() => {}} />
+
       <div>
         <h1 className="text-2xl font-bold text-white">{t.profile.title}</h1>
       </div>
 
       {/* Avatar y nombre */}
       <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 flex items-center gap-4">
-        <div className="w-14 h-14 rounded-full bg-blue-600/20 border border-blue-500/30 flex items-center justify-center shrink-0">
-          <span className="text-xl font-bold text-blue-400">
-            {displayName[0].toUpperCase()}
-          </span>
+        <div className="relative">
+          <div className="w-14 h-14 rounded-full bg-blue-600/20 border border-blue-500/30 flex items-center justify-center shrink-0">
+            <span className="text-xl font-bold text-blue-400">{displayName[0].toUpperCase()}</span>
+          </div>
+          <div className="absolute -bottom-1 -right-1 bg-yellow-500 rounded-full px-1.5 py-0.5">
+            <span className="text-[9px] font-black text-black">{xpData.level}</span>
+          </div>
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-white font-bold truncate">{displayName}</p>
           {username && <p className="text-xs text-gray-500 mt-0.5">{username}</p>}
-          <p className="text-xs text-blue-400 mt-0.5">Telegram</p>
+          <p className="text-xs text-yellow-400 mt-0.5 font-medium">{levelName} · {xpData.xp} XP</p>
         </div>
         <button onClick={handleShare}
           className="w-10 h-10 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center shrink-0 active:scale-95 transition-transform">
           <Share2 size={18} className="text-blue-400" />
         </button>
+      </div>
+
+      {/* Barra XP */}
+      <div className="bg-[#111118] border border-white/8 rounded-2xl p-3 space-y-2 cursor-pointer active:scale-95 transition-transform"
+        onClick={() => navigate('/achievements')}>
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-gray-500">Progreso — Nivel {xpData.level} → {xpData.level + 1}</p>
+          <p className="text-xs text-yellow-400 font-bold">{xpData.progress}%</p>
+        </div>
+        <div className="w-full bg-white/10 rounded-full h-2">
+          <div className="bg-gradient-to-r from-yellow-500 to-orange-500 h-2 rounded-full transition-all"
+            style={{ width: xpData.progress + '%' }} />
+        </div>
+        <div className="flex items-center justify-between">
+          <p className="text-[10px] text-gray-600">{xpData.xp} / {xpData.nextLevelXP} XP</p>
+          <p className="text-[10px] text-yellow-500">{unlockedAchievements.length} logros desbloqueados →</p>
+        </div>
       </div>
 
       {/* Stats */}
@@ -99,9 +125,20 @@ export function ProfilePage() {
         </button>
       </div>
 
-      {/* Estadisticas */}
-      <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
+      {/* Herramientas */}
+      <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-2">
         <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Herramientas</p>
+        <button onClick={() => navigate('/achievements')}
+          className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3 active:scale-95 transition-transform">
+          <div className="w-8 h-8 rounded-lg bg-yellow-500/20 flex items-center justify-center">
+            <Trophy size={16} className="text-yellow-400" />
+          </div>
+          <div className="text-left flex-1">
+            <p className="text-sm font-medium text-white">Logros</p>
+            <p className="text-xs text-gray-500">{unlockedAchievements.length} de {11} desbloqueados</p>
+          </div>
+          <span className="text-gray-500 text-xs">›</span>
+        </button>
         <button onClick={() => navigate('/stats')}
           className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3 active:scale-95 transition-transform">
           <div className="w-8 h-8 rounded-lg bg-purple-600/20 flex items-center justify-center">
@@ -118,7 +155,6 @@ export function ProfilePage() {
       {/* Preferencias */}
       <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
         <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Preferencias</p>
-
         <div>
           <p className="text-xs text-gray-500 mb-1.5 flex items-center gap-1.5">
             <Globe size={12} /> Idioma
@@ -136,7 +172,6 @@ export function ProfilePage() {
             ))}
           </div>
         </div>
-
         <div>
           <p className="text-xs text-gray-500 mb-1.5 flex items-center gap-1.5">
             <Coins size={12} /> Moneda
