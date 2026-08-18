@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Minus, Search, Loader2, LayoutGrid, List, BarChart2, Zap, Shield, Sword } from 'lucide-react';
+import { ArrowLeft, Plus, Minus, Search, Loader2, LayoutGrid, List, BarChart2, Zap, Shield, Sword, SlidersHorizontal, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useUserStore } from '@/store';
 import { useCollectionList } from '@/hooks/use-collection';
@@ -10,9 +10,12 @@ interface PokemonCard {
   name: string;
   number: string;
   supertype: string;
+  subtypes?: string[];
   types?: string[];
+  rarity?: string;
   images: { small: string };
-  set: { name: string };
+  set: { name: string; id: string };
+  legalities?: { standard?: string; expanded?: string };
 }
 
 const POKEMON_API_KEY = import.meta.env.VITE_POKEMONTCG_API_KEY ?? '';
@@ -41,7 +44,29 @@ const SUPERTYPES = [
   { key: 'Energy', label: 'Energia' },
 ];
 
+const SUBTYPES = [
+  { key: 'Basic', label: 'Basico' },
+  { key: 'Stage 1', label: 'Fase 1' },
+  { key: 'Stage 2', label: 'Fase 2' },
+  { key: 'ex', label: 'ex' },
+  { key: 'GX', label: 'GX' },
+  { key: 'V', label: 'V' },
+  { key: 'VMAX', label: 'VMAX' },
+  { key: 'VSTAR', label: 'VSTAR' },
+  { key: 'Item', label: 'Objeto' },
+  { key: 'Supporter', label: 'Seguidor' },
+  { key: 'Stadium', label: 'Estadio' },
+];
+
+const FORMATS = [
+  { key: '', label: 'Libre', desc: 'Todas las cartas' },
+  { key: 'standard', label: 'Standard', desc: 'Marcas H, I, J' },
+  { key: 'expanded', label: 'Expanded', desc: 'Desde Black & White' },
+];
+
 const TYPES = ['Fire', 'Water', 'Grass', 'Lightning', 'Psychic', 'Fighting', 'Darkness', 'Metal', 'Dragon', 'Colorless'];
+
+const PAGE_SIZES = [20, 50];
 
 interface DeckCard {
   card: PokemonCard;
@@ -65,15 +90,25 @@ export function CreateDeckPage() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [isPublic, setIsPublic] = useState(true);
+
+  // Filtros
   const [query, setQuery] = useState('');
   const [selectedSupertype, setSelectedSupertype] = useState('');
   const [selectedType, setSelectedType] = useState('');
+  const [selectedSubtype, setSelectedSubtype] = useState('');
+  const [selectedFormat, setSelectedFormat] = useState('');
+  const [onlyMyCollection, setOnlyMyCollection] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+  const [pageSize, setPageSize] = useState(20);
+  const [page, setPage] = useState(1);
+  const [totalResults, setTotalResults] = useState(0);
+  const [showFilters, setShowFilters] = useState(false);
+
   const [searchResults, setSearchResults] = useState<PokemonCard[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [deckCards, setDeckCards] = useState<Map<string, DeckCard>>(new Map());
   const [isSaving, setIsSaving] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [showAll, setShowAll] = useState(false);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const totalCards = Array.from(deckCards.values()).reduce((s, c) => s + c.quantity, 0);
@@ -88,16 +123,24 @@ export function CreateDeckPage() {
       return acc;
     }, {} as Record<string, number>);
 
-  const doSearch = useCallback(async (q: string, supertype: string, type: string, all: boolean) => {
+  const activeFilterCount = [selectedSupertype, selectedType, selectedSubtype, selectedFormat, onlyMyCollection ? 'x' : ''].filter(Boolean).length;
+
+  const doSearch = useCallback(async (
+    q: string, supertype: string, type: string, subtype: string,
+    format: string, all: boolean, pg: number, pgSize: number, myCollection: boolean
+  ) => {
     setIsSearching(true);
     try {
       let queryStr = '';
       if (q.trim()) queryStr += 'name:"*' + q.trim() + '*"';
       if (supertype) queryStr += (queryStr ? ' ' : '') + 'supertype:' + supertype;
       if (type) queryStr += (queryStr ? ' ' : '') + 'types:' + type;
+      if (subtype) queryStr += (queryStr ? ' ' : '') + 'subtypes:"' + subtype + '"';
+      if (format === 'standard') queryStr += (queryStr ? ' ' : '') + 'legalities.standard:Legal';
+      if (format === 'expanded') queryStr += (queryStr ? ' ' : '') + 'legalities.expanded:Legal';
 
       if (!queryStr) {
-        if (all) {
+        if (all || supertype || type || subtype || format) {
           queryStr = 'name:a OR name:e OR name:i OR name:o';
         } else {
           setSearchResults([]);
@@ -107,34 +150,50 @@ export function CreateDeckPage() {
       }
 
       const res = await fetch(
-        'https://api.pokemontcg.io/v2/cards?q=' + encodeURIComponent(queryStr) + '&pageSize=20&orderBy=-set.releaseDate',
+        'https://api.pokemontcg.io/v2/cards?q=' + encodeURIComponent(queryStr) +
+        '&pageSize=' + pgSize + '&page=' + pg + '&orderBy=-set.releaseDate',
         { headers: { 'X-Api-Key': POKEMON_API_KEY } }
       );
       const json = await res.json();
-      setSearchResults(json.data ?? []);
+      setTotalResults(json.totalCount ?? 0);
+
+      let results = json.data ?? [];
+      if (myCollection) {
+        results = results.filter((c: PokemonCard) => collectionIds.has(c.id));
+      }
+      setSearchResults(results);
     } catch {
       setSearchResults([]);
     } finally {
       setIsSearching(false);
     }
-  }, []);
+  }, [collectionIds]);
 
   useEffect(() => {
     if (step === 'cards') {
-      doSearch(query, selectedSupertype, selectedType, showAll);
+      doSearch(query, selectedSupertype, selectedType, selectedSubtype, selectedFormat, showAll, page, pageSize, onlyMyCollection);
     }
-  }, [showAll, step]);
+  }, [showAll, step, pageSize]);
 
-  const handleSearchChange = (q: string) => {
-    setQuery(q);
+  const triggerSearch = (overrides: Partial<{
+    q: string; supertype: string; type: string; subtype: string;
+    format: string; all: boolean; pg: number; myCollection: boolean;
+  }> = {}) => {
     clearTimeout(searchTimeout.current);
-    searchTimeout.current = setTimeout(() => doSearch(q, selectedSupertype, selectedType, showAll || q.trim().length > 0), 600);
-  };
-
-  const handleFilterChange = (supertype: string, type: string) => {
-    setSelectedSupertype(supertype);
-    setSelectedType(type);
-    doSearch(query, supertype, type, showAll);
+    searchTimeout.current = setTimeout(() => {
+      doSearch(
+        overrides.q ?? query,
+        overrides.supertype ?? selectedSupertype,
+        overrides.type ?? selectedType,
+        overrides.subtype ?? selectedSubtype,
+        overrides.format ?? selectedFormat,
+        overrides.all ?? showAll,
+        overrides.pg ?? 1,
+        pageSize,
+        overrides.myCollection ?? onlyMyCollection,
+      );
+      setPage(overrides.pg ?? 1);
+    }, overrides.q !== undefined ? 600 : 0);
   };
 
   const addCard = (card: PokemonCard) => {
@@ -193,6 +252,8 @@ export function CreateDeckPage() {
     }
   };
 
+  const totalPages = Math.ceil(totalResults / pageSize);
+
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white pb-8">
 
@@ -244,7 +305,7 @@ export function CreateDeckPage() {
               {isPublic && <span className="text-[10px] text-white font-bold">✓</span>}
             </div>
           </button>
-          <button onClick={() => { if (name.trim()) { setStep('cards'); } }}
+          <button onClick={() => { if (name.trim()) setStep('cards'); }}
             disabled={!name.trim()}
             className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold disabled:opacity-40 active:scale-95 transition-transform">
             Siguiente — Añadir cartas →
@@ -255,7 +316,7 @@ export function CreateDeckPage() {
       {step === 'cards' && (
         <div className="px-4 space-y-3">
 
-          {/* Barra de progreso */}
+          {/* Barra progreso */}
           <div className="bg-[#111118] border border-white/8 rounded-xl p-3 space-y-2">
             <div className="flex justify-between text-xs text-gray-500">
               <span>{'🎴 ' + pokemonCount + ' Pokemon'}</span>
@@ -272,63 +333,165 @@ export function CreateDeckPage() {
             </p>
           </div>
 
-          {/* Toggle mostrar todas */}
-          <button onClick={() => setShowAll(!showAll)}
-            className={'w-full flex items-center justify-between px-4 py-2.5 rounded-xl border transition-all ' + (showAll ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/8')}>
-            <div className="flex items-center gap-2">
-              <LayoutGrid size={14} className={showAll ? 'text-blue-400' : 'text-gray-500'} />
-              <p className="text-sm font-medium text-white">Mostrar todas las cartas</p>
-            </div>
-            <div className={'w-10 h-5 rounded-full transition-all flex items-center px-0.5 ' + (showAll ? 'bg-blue-500 justify-end' : 'bg-white/10 justify-start')}>
-              <div className="w-4 h-4 rounded-full bg-white shadow" />
-            </div>
-          </button>
-
-          {/* Busqueda */}
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-            <input value={query} onChange={e => handleSearchChange(e.target.value)}
-              placeholder="Buscar por nombre..."
-              className="w-full bg-white/5 border border-white/10 rounded-xl pl-11 pr-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50" />
-            {isSearching && <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-400 animate-spin" />}
-          </div>
-
-          {/* Filtros supertipo */}
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {SUPERTYPES.map(st => (
-              <button key={st.key} onClick={() => handleFilterChange(st.key, selectedType)}
-                className={'shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ' + (
-                  selectedSupertype === st.key ? 'bg-blue-600 text-white border-blue-600' : 'bg-white/5 text-gray-400 border-white/10'
+          {/* Formato */}
+          <div className="flex gap-2">
+            {FORMATS.map(f => (
+              <button key={f.key}
+                onClick={() => { setSelectedFormat(f.key); triggerSearch({ format: f.key }); }}
+                className={'flex-1 py-2 rounded-xl text-xs font-medium border transition-all text-center ' + (
+                  selectedFormat === f.key ? 'bg-blue-600 text-white border-blue-600' : 'bg-white/5 text-gray-400 border-white/10'
                 )}>
-                {st.label}
+                <p className="font-bold">{f.label}</p>
+                <p className="text-[9px] opacity-70">{f.desc}</p>
               </button>
             ))}
           </div>
 
-          {/* Filtros tipo */}
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            <button onClick={() => handleFilterChange(selectedSupertype, '')}
-              className={'shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ' + (
-                selectedType === '' ? 'bg-white/20 text-white border-white/20' : 'bg-white/5 text-gray-400 border-white/10'
-              )}>
-              Todos
+          {/* Busqueda + filtros */}
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+              <input value={query}
+                onChange={e => { setQuery(e.target.value); triggerSearch({ q: e.target.value }); }}
+                placeholder="Buscar por nombre..."
+                className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50" />
+              {isSearching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-400 animate-spin" />}
+            </div>
+            <button onClick={() => setShowFilters(!showFilters)}
+              className={'relative w-11 h-11 rounded-xl border flex items-center justify-center transition-all ' + (showFilters || activeFilterCount > 0 ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-white/5 border-white/10 text-gray-400')}>
+              <SlidersHorizontal size={16} />
+              {activeFilterCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 rounded-full text-[9px] text-white flex items-center justify-center font-bold">
+                  {activeFilterCount}
+                </span>
+              )}
             </button>
-            {TYPES.map(type => (
-              <button key={type} onClick={() => handleFilterChange(selectedSupertype, type)}
-                className={'shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ' + (
-                  selectedType === type ? 'text-white border-opacity-100' : 'bg-white/5 text-gray-400 border-white/10'
-                )}
-                style={selectedType === type ? { backgroundColor: TYPE_COLORS[type] + '33', borderColor: TYPE_COLORS[type] } : {}}>
-                <span>{TYPE_EMOJIS[type]}</span>
-                <span>{TYPE_LABELS[type]}</span>
-              </button>
-            ))}
           </div>
 
-          {/* Vista toggle */}
+          {/* Panel de filtros */}
+          {showFilters && (
+            <div className="bg-[#111118] border border-white/8 rounded-xl p-3 space-y-3">
+
+              {/* Mostrar todas */}
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-white font-medium">Mostrar todas las cartas</p>
+                <button onClick={() => { setShowAll(!showAll); }}
+                  className={'w-10 h-5 rounded-full transition-all flex items-center px-0.5 ' + (showAll ? 'bg-blue-500 justify-end' : 'bg-white/10 justify-start')}>
+                  <div className="w-4 h-4 rounded-full bg-white shadow" />
+                </button>
+              </div>
+
+              {/* Solo mi coleccion */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-white font-medium">Solo mi coleccion</p>
+                  <p className="text-[10px] text-gray-500">Cartas que ya tienes fisicamente</p>
+                </div>
+                <button onClick={() => { setOnlyMyCollection(!onlyMyCollection); triggerSearch({ myCollection: !onlyMyCollection }); }}
+                  className={'w-10 h-5 rounded-full transition-all flex items-center px-0.5 ' + (onlyMyCollection ? 'bg-green-500 justify-end' : 'bg-white/10 justify-start')}>
+                  <div className="w-4 h-4 rounded-full bg-white shadow" />
+                </button>
+              </div>
+
+              {/* Supertipo */}
+              <div>
+                <p className="text-[10px] text-gray-500 mb-1.5">Tipo de carta</p>
+                <div className="flex gap-1.5 flex-wrap">
+                  {SUPERTYPES.map(st => (
+                    <button key={st.key}
+                      onClick={() => { setSelectedSupertype(st.key); triggerSearch({ supertype: st.key }); }}
+                      className={'px-3 py-1 rounded-full text-xs font-medium border transition-all ' + (
+                        selectedSupertype === st.key ? 'bg-blue-600 text-white border-blue-600' : 'bg-white/5 text-gray-400 border-white/10'
+                      )}>
+                      {st.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Tipo elemental */}
+              <div>
+                <p className="text-[10px] text-gray-500 mb-1.5">Tipo elemental</p>
+                <div className="flex gap-1.5 overflow-x-auto pb-1">
+                  <button onClick={() => { setSelectedType(''); triggerSearch({ type: '' }); }}
+                    className={'shrink-0 px-2.5 py-1 rounded-full text-xs border transition-all ' + (
+                      selectedType === '' ? 'bg-white/20 text-white border-white/20' : 'bg-white/5 text-gray-400 border-white/10'
+                    )}>
+                    Todos
+                  </button>
+                  {TYPES.map(type => (
+                    <button key={type}
+                      onClick={() => { setSelectedType(type); triggerSearch({ type }); }}
+                      className={'shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-full text-xs border transition-all ' + (
+                        selectedType === type ? 'text-white' : 'bg-white/5 text-gray-400 border-white/10'
+                      )}
+                      style={selectedType === type ? { backgroundColor: TYPE_COLORS[type] + '33', borderColor: TYPE_COLORS[type] } : {}}>
+                      <span>{TYPE_EMOJIS[type]}</span>
+                      <span>{TYPE_LABELS[type]}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Subtipo */}
+              <div>
+                <p className="text-[10px] text-gray-500 mb-1.5">Subtipo</p>
+                <div className="flex gap-1.5 overflow-x-auto pb-1">
+                  <button onClick={() => { setSelectedSubtype(''); triggerSearch({ subtype: '' }); }}
+                    className={'shrink-0 px-2.5 py-1 rounded-full text-xs border transition-all ' + (
+                      selectedSubtype === '' ? 'bg-white/20 text-white border-white/20' : 'bg-white/5 text-gray-400 border-white/10'
+                    )}>
+                    Todos
+                  </button>
+                  {SUBTYPES.map(st => (
+                    <button key={st.key}
+                      onClick={() => { setSelectedSubtype(st.key); triggerSearch({ subtype: st.key }); }}
+                      className={'shrink-0 px-2.5 py-1 rounded-full text-xs border transition-all ' + (
+                        selectedSubtype === st.key ? 'bg-purple-500/20 border-purple-500/50 text-purple-400' : 'bg-white/5 text-gray-400 border-white/10'
+                      )}>
+                      {st.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Resultados por pagina */}
+              <div>
+                <p className="text-[10px] text-gray-500 mb-1.5">Resultados por pagina</p>
+                <div className="flex gap-2">
+                  {PAGE_SIZES.map(ps => (
+                    <button key={ps}
+                      onClick={() => setPageSize(ps)}
+                      className={'flex-1 py-1.5 rounded-xl text-xs font-medium border transition-all ' + (
+                        pageSize === ps ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-white/5 border-white/10 text-gray-400'
+                      )}>
+                      {ps} cartas
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Limpiar filtros */}
+              {activeFilterCount > 0 && (
+                <button onClick={() => {
+                  setSelectedSupertype(''); setSelectedType(''); setSelectedSubtype('');
+                  setSelectedFormat(''); setOnlyMyCollection(false);
+                  triggerSearch({ supertype: '', type: '', subtype: '', format: '', myCollection: false });
+                }}
+                  className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs">
+                  <X size={12} />
+                  Limpiar {activeFilterCount} filtro{activeFilterCount > 1 ? 's' : ''}
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Vista toggle + info */}
           <div className="flex items-center justify-between">
             <p className="text-xs text-gray-500">
-              {searchResults.length > 0 ? searchResults.length + ' resultados' : showAll ? 'Cargando...' : 'Busca o activa "Mostrar todas"'}
+              {searchResults.length > 0
+                ? totalResults.toLocaleString() + ' resultados · pag ' + page + '/' + Math.max(1, totalPages)
+                : showAll || selectedSupertype || selectedType ? 'Cargando...' : 'Busca o ajusta los filtros'}
             </p>
             <div className="flex gap-1 bg-white/5 rounded-lg p-0.5">
               <button onClick={() => setViewMode('grid')}
@@ -394,7 +557,7 @@ export function CreateDeckPage() {
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-bold truncate">{card.name}</p>
                       <p className="text-[10px] text-gray-500 truncate">{card.set.name}</p>
-                      <div className="flex items-center gap-1.5 mt-0.5">
+                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                         <span className={'text-[9px] px-1.5 py-0.5 rounded-full ' + (
                           card.supertype === 'Pokémon' ? 'bg-blue-500/20 text-blue-400' :
                           card.supertype === 'Trainer' ? 'bg-yellow-500/20 text-yellow-400' :
@@ -404,6 +567,9 @@ export function CreateDeckPage() {
                         </span>
                         {card.types && card.types[0] && (
                           <span className="text-[9px] text-gray-500">{TYPE_EMOJIS[card.types[0]]} {TYPE_LABELS[card.types[0]] ?? card.types[0]}</span>
+                        )}
+                        {card.subtypes && card.subtypes[0] && (
+                          <span className="text-[9px] text-purple-400">{card.subtypes[0]}</span>
                         )}
                         {inCollection && <span className="text-[9px] text-blue-400">✓ Tengo</span>}
                       </div>
@@ -425,10 +591,28 @@ export function CreateDeckPage() {
             </div>
           )}
 
+          {/* Paginacion */}
+          {totalPages > 1 && searchResults.length > 0 && (
+            <div className="flex items-center justify-between gap-2">
+              <button onClick={() => { const p = Math.max(1, page - 1); setPage(p); doSearch(query, selectedSupertype, selectedType, selectedSubtype, selectedFormat, showAll, p, pageSize, onlyMyCollection); }}
+                disabled={page === 1}
+                className="flex-1 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-gray-400 disabled:opacity-30 active:scale-95 transition-transform">
+                ← Anterior
+              </button>
+              <span className="text-xs text-gray-500 shrink-0">{page}/{totalPages}</span>
+              <button onClick={() => { const p = Math.min(totalPages, page + 1); setPage(p); doSearch(query, selectedSupertype, selectedType, selectedSubtype, selectedFormat, showAll, p, pageSize, onlyMyCollection); }}
+                disabled={page >= totalPages}
+                className="flex-1 py-2.5 rounded-xl bg-blue-600 text-sm text-white disabled:opacity-30 active:scale-95 transition-transform">
+                Siguiente →
+              </button>
+            </div>
+          )}
+
           {/* Sin resultados */}
           {!isSearching && searchResults.length === 0 && (
             <div className="text-center py-8 text-gray-500">
-              <p className="text-sm">{showAll ? 'Cargando cartas...' : 'Busca una carta o activa "Mostrar todas"'}</p>
+              <p className="text-sm">Busca una carta o ajusta los filtros</p>
+              <p className="text-xs mt-1">Activa "Mostrar todas" para ver el catalogo completo</p>
             </div>
           )}
 
@@ -488,7 +672,7 @@ export function CreateDeckPage() {
                   <p className={'text-2xl font-bold ' + item.color}>{item.value}</p>
                   <p className="text-[10px] text-gray-500 mt-0.5">{item.label}</p>
                   <div className="w-full bg-white/10 rounded-full h-1 mt-2">
-                    <div className={item.bg + ' h-1 rounded-full transition-all'} style={{ width: (item.value / 60 * 100) + '%' }} />
+                    <div className={item.bg + ' h-1 rounded-full'} style={{ width: (item.value / 60 * 100) + '%' }} />
                   </div>
                 </div>
               ))}
@@ -507,7 +691,7 @@ export function CreateDeckPage() {
                       <span className="text-white font-bold">{count}</span>
                     </div>
                     <div className="w-full bg-white/10 rounded-full h-1.5">
-                      <div className="h-1.5 rounded-full transition-all"
+                      <div className="h-1.5 rounded-full"
                         style={{ width: (count / pokemonCount * 100) + '%', backgroundColor: TYPE_COLORS[type] ?? '#6366f1' }} />
                     </div>
                   </div>
@@ -521,7 +705,7 @@ export function CreateDeckPage() {
               <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Cartas de tu coleccion</p>
               <div className="flex items-center gap-3">
                 <div className="flex-1 bg-white/10 rounded-full h-3">
-                  <div className="bg-green-500 h-3 rounded-full transition-all"
+                  <div className="bg-green-500 h-3 rounded-full"
                     style={{ width: (Array.from(deckCards.keys()).filter(id => collectionIds.has(id)).length / deckCards.size * 100) + '%' }} />
                 </div>
                 <span className="text-sm font-bold text-green-400">
