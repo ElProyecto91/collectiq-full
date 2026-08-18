@@ -278,7 +278,7 @@ export function CommunityPage() {
               </div>
             ) : (
               ranked.map((deck, i) => (
-                <div key={deck.id} className="flex items-center gap-3 bg-[#111118] border border-white/8 rounded-xl px-4 py-3">
+                <div key={deck.id} className="flex items-center gap-3 bg-[#111118] border border-white/8 rounded-xl px-4 py-3 cursor-pointer" onClick={() => navigate('/decks/' + deck.id)}>
                   <span className={'text-lg font-bold w-6 text-center ' + (
                     i === 0 ? 'text-yellow-400' : i === 1 ? 'text-gray-300' : i === 2 ? 'text-amber-600' : 'text-gray-600'
                   )}>
