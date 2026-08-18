@@ -16,6 +16,7 @@ import { LoginPage } from '@/pages/LoginPage';
 import ScannerPage from '@/features/scanner/ScannerPage';
 import { CardDetailsPage } from '@/features/catalog/pages/CardDetailsPage';
 import { PublicProfilePage } from '@/pages/PublicProfilePage';
+import { OnboardingPage } from '@/pages/OnboardingPage';
 
 const router = createBrowserRouter([
   {
@@ -39,6 +40,10 @@ const router = createBrowserRouter([
   {
     path: '/login',
     element: <LoginPage />,
+  },
+  {
+    path: '/onboarding',
+    element: <OnboardingPage />,
   },
   {
     path: '/u/:telegramId',
