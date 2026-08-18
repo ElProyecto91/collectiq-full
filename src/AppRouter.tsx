@@ -3,7 +3,8 @@ import { AppLayout } from '@/layouts';
 import { RoutePaths } from '@/config';
 import {
   CollectionPage, ExplorerPage, HomePage, ProfilePage,
-  WishlistPage, CommunityPage, DecksPage, DeckDetailPage, StatsPage,
+  WishlistPage, CommunityPage, DecksPage, DeckDetailPage,
+  StatsPage, AchievementsPage,
 } from '@/pages';
 import { LoginPage } from '@/pages/LoginPage';
 import ScannerPage from '@/features/scanner/ScannerPage';
@@ -27,6 +28,7 @@ const router = createBrowserRouter([
       { path: RoutePaths.DeckDetail, element: <DeckDetailPage /> },
       { path: '/decks/new', element: <CreateDeckPage /> },
       { path: '/stats', element: <StatsPage /> },
+      { path: '/achievements', element: <AchievementsPage /> },
     ],
   },
   { path: RoutePaths.Scanner, element: <ScannerPage /> },
