@@ -1,6 +1,5 @@
 import { Plus, Layers } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { RoutePaths } from '@/config';
 
 export function DecksPage() {
   const navigate = useNavigate();
@@ -13,7 +12,9 @@ export function DecksPage() {
           <h1 className="text-2xl font-bold">Mis Mazos</h1>
           <p className="text-sm text-gray-500">Crea y comparte tus mazos.</p>
         </div>
-        <button className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center active:scale-95 transition-transform">
+        <button
+          onClick={() => navigate('/decks/new')}
+          className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center active:scale-95 transition-transform">
           <Plus size={18} className="text-white" />
         </button>
       </div>
@@ -23,10 +24,12 @@ export function DecksPage() {
           <Layers size={28} className="text-gray-600" />
         </div>
         <div>
-          <p className="text-white font-semibold">Aún no tienes mazos</p>
-          <p className="text-sm text-gray-500 mt-1">Crea tu primer mazo de 60 cartas y compártelo con la comunidad.</p>
+          <p className="text-white font-semibold">Aun no tienes mazos</p>
+          <p className="text-sm text-gray-500 mt-1">Crea tu primer mazo de 60 cartas y compartelo con la comunidad.</p>
         </div>
-        <button className="bg-blue-600 text-white rounded-2xl px-6 py-3 font-semibold flex items-center gap-2 active:scale-95 transition-transform">
+        <button
+          onClick={() => navigate('/decks/new')}
+          className="bg-blue-600 text-white rounded-2xl px-6 py-3 font-semibold flex items-center gap-2 active:scale-95 transition-transform">
           <Plus size={18} />
           Crear mazo
         </button>
