@@ -1,4 +1,4 @@
-import { Heart, Layers, Minus, Plus, Trash2, Star, LayoutGrid, Package, Sparkles, X, Download } from 'lucide-react';
+import { Heart, Layers, Minus, Plus, Trash2, Star, LayoutGrid, Package, Sparkles, X, Download, Upload } from 'lucide-react';
 import { useState, useCallback } from 'react';
 import { useCollectionList, useUpdateCollectionItem, useDeleteCollectionItem } from '@/hooks/use-collection';
 import { useCreateWishlistItem, useWishlistList } from '@/hooks/use-wishlist';
@@ -8,6 +8,7 @@ import { useI18n } from '@/i18n';
 import { useActiveTCG, TCG_OPTIONS } from '@/hooks/use-active-tcg';
 import type { CollectionItem, CardVariant, CardLanguage, CardCondition, GradingCompany, PurchaseSource } from '@/types';
 import { CARD_LANGUAGES, GRADING_COMPANIES, PURCHASE_SOURCES } from '@/types';
+import { ImportCSVModal } from '@/components/ImportCSVModal';
 
 type SortOption = 'recent' | 'name' | 'value';
 type ViewMode = 'cards' | 'sets';
@@ -126,9 +127,7 @@ function TCGSelector({ activeTCG, setActiveTCG }: { activeTCG: string; setActive
   );
 }
 
-function ExportModal({
-  cards, setGroups, onClose,
-}: {
+function ExportModal({ cards, setGroups, onClose }: {
   cards: CollectionItem[];
   setGroups: SetCompletion[];
   onClose: () => void;
@@ -501,9 +500,10 @@ export function CollectionPage() {
   const [editingCard, setEditingCard] = useState<CollectionItem | null>(null);
   const [zoomedCard, setZoomedCard] = useState<CollectionItem | null>(null);
   const [showExport, setShowExport] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const { activeTCG, setActiveTCG } = useActiveTCG();
 
-  const { data: allCards = [], isLoading } = useCollectionList();
+  const { data: allCards = [], isLoading, refetch } = useCollectionList();
   const { data: wishlistItems = [] } = useWishlistList();
   const { mutate: updateItem } = useUpdateCollectionItem();
   const { mutate: deleteItem } = useDeleteCollectionItem();
@@ -573,8 +573,12 @@ export function CollectionPage() {
           onClose={() => setEditingCard(null)}
         />
       )}
-      {showExport && (
-        <ExportModal cards={cards} setGroups={setGroups} onClose={() => setShowExport(false)} />
+      {showExport && <ExportModal cards={cards} setGroups={setGroups} onClose={() => setShowExport(false)} />}
+      {showImport && (
+        <ImportCSVModal
+          onClose={() => setShowImport(false)}
+          onSuccess={() => { refetch(); }}
+        />
       )}
 
       <div className="flex items-center justify-between">
@@ -582,12 +586,18 @@ export function CollectionPage() {
           <h1 className="text-2xl font-bold text-white">{t.collection.title}</h1>
           <p className="text-sm text-gray-500">{t.collection.subtitle}</p>
         </div>
-        {!showComingSoon && cards.length > 0 && (
-          <button onClick={() => setShowExport(true)}
+        <div className="flex gap-2">
+          <button onClick={() => setShowImport(true)}
             className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 active:scale-95 transition-transform">
-            <Download size={16} />
+            <Upload size={16} />
           </button>
-        )}
+          {!showComingSoon && cards.length > 0 && (
+            <button onClick={() => setShowExport(true)}
+              className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 active:scale-95 transition-transform">
+              <Download size={16} />
+            </button>
+          )}
+        </div>
       </div>
 
       <TCGSelector activeTCG={activeTCG} setActiveTCG={setActiveTCG} />
