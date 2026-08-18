@@ -117,6 +117,7 @@ export function CreateDeckPage() {
   const [deckCards, setDeckCards] = useState<Map<string, DeckCard>>(new Map());
   const [isSaving, setIsSaving] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+const [zoomedCard, setZoomedCard] = useState<PokemonCard | null>(null);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const totalCards = Array.from(deckCards.values()).reduce((s, c) => s + c.quantity, 0);
@@ -271,6 +272,12 @@ export function CreateDeckPage() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white pb-8">
+{zoomedCard && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-6" onClick={() => setZoomedCard(null)}>
+    <img src={zoomedCard.images.small} alt={zoomedCard.name} className="w-full max-w-xs rounded-2xl shadow-2xl" />
+    <p className="absolute bottom-8 text-white text-center font-bold">{zoomedCard.name}</p>
+  </div>
+)}
 
       <div className="px-4 pt-6 pb-4 flex items-center gap-3">
         <button onClick={() => step === 'cards' ? setStep('info') : step === 'stats' ? setStep('cards') : navigate(-1)}
