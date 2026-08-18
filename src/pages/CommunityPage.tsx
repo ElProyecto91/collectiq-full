@@ -201,7 +201,7 @@ export function CommunityPage() {
                   const isOwn = deck.telegram_user_id === telegramUser?.id;
 
                   return (
-                    <div key={deck.id} className="bg-[#111118] border border-white/8 rounded-2xl overflow-hidden">
+                    <div key={deck.id} className="bg-[#111118] border border-white/8 rounded-2xl overflow-hidden cursor-pointer" onClick={() => navigate('/decks/' + deck.id)}>
                       <div className="relative h-20 bg-gradient-to-r from-blue-950/50 to-purple-950/50 overflow-hidden">
                         {deck.cover_card_image && (
                           <img src={deck.cover_card_image} alt=""
