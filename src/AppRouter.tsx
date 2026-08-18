@@ -1,16 +1,9 @@
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
-
 import { AppLayout } from '@/layouts';
 import { RoutePaths } from '@/config';
 import {
-  CollectionPage,
-  ExplorerPage,
-  HomePage,
-  ProfilePage,
-  WishlistPage,
-  CommunityPage,
-  DecksPage,
-  DeckDetailPage,
+  CollectionPage, ExplorerPage, HomePage, ProfilePage,
+  WishlistPage, CommunityPage, DecksPage, DeckDetailPage, StatsPage,
 } from '@/pages';
 import { LoginPage } from '@/pages/LoginPage';
 import ScannerPage from '@/features/scanner/ScannerPage';
@@ -33,24 +26,13 @@ const router = createBrowserRouter([
       { path: RoutePaths.Decks, element: <DecksPage /> },
       { path: RoutePaths.DeckDetail, element: <DeckDetailPage /> },
       { path: '/decks/new', element: <CreateDeckPage /> },
+      { path: '/stats', element: <StatsPage /> },
     ],
   },
-  {
-    path: RoutePaths.Scanner,
-    element: <ScannerPage />,
-  },
-  {
-    path: '/login',
-    element: <LoginPage />,
-  },
-  {
-    path: '/onboarding',
-    element: <OnboardingPage />,
-  },
-  {
-    path: '/u/:telegramId',
-    element: <PublicProfilePage />,
-  },
+  { path: RoutePaths.Scanner, element: <ScannerPage /> },
+  { path: '/login', element: <LoginPage /> },
+  { path: '/onboarding', element: <OnboardingPage /> },
+  { path: '/u/:telegramId', element: <PublicProfilePage /> },
 ]);
 
 export function AppRouter() {
