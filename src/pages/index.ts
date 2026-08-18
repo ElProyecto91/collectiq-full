@@ -9,3 +9,4 @@ export { DeckDetailPage } from './DeckDetailPage';
 export { PublicProfilePage } from './PublicProfilePage';
 export { OnboardingPage } from './OnboardingPage';
 export { StatsPage } from './StatsPage';
+export { AchievementsPage } from './AchievementsPage';
