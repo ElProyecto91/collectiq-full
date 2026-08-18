@@ -13,6 +13,12 @@ export function AppLayout() {
   const sessionLoaded = useUserStore((s) => s.sessionLoaded);
 
   useEffect(() => {
+    const onboardingDone = localStorage.getItem('collectiq-onboarding-done');
+    if (!onboardingDone) {
+      navigate('/onboarding');
+      return;
+    }
+
     const webApp = window.Telegram?.WebApp;
     if (!webApp) return;
 
@@ -61,4 +67,4 @@ export function AppLayout() {
       <BottomNav />
     </div>
   );
-} 
+}
