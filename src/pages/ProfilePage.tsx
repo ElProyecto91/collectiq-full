@@ -1,8 +1,10 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Share2, LogOut, Globe, Coins, BarChart2 } from 'lucide-react';
 import { useUserStore } from '@/store';
 import { useI18n } from '@/i18n';
 import { useCurrency } from '@/hooks/use-currency';
 import { useCollectionList } from '@/hooks/use-collection';
-import { Share2, LogOut, Globe, Coins } from 'lucide-react';
 
 const CURRENCIES = ['EUR', 'USD', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'BRL', 'MXN', 'PLN'];
 
@@ -17,6 +19,7 @@ export function ProfilePage() {
   const { t } = useI18n();
   const { currency, setCurrency } = useCurrency();
   const { data: cards = [] } = useCollectionList();
+  const navigate = useNavigate();
 
   const totalCards = cards.reduce((s, c) => s + c.quantity, 0);
   const uniqueCards = cards.length;
@@ -51,6 +54,7 @@ export function ProfilePage() {
         <h1 className="text-2xl font-bold text-white">{t.profile.title}</h1>
       </div>
 
+      {/* Avatar y nombre */}
       <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 flex items-center gap-4">
         <div className="w-14 h-14 rounded-full bg-blue-600/20 border border-blue-500/30 flex items-center justify-center shrink-0">
           <span className="text-xl font-bold text-blue-400">
@@ -68,6 +72,7 @@ export function ProfilePage() {
         </button>
       </div>
 
+      {/* Stats */}
       <div className="grid grid-cols-3 gap-2">
         {[
           { label: t.stats.cards, value: totalCards, color: 'text-blue-400' },
@@ -81,6 +86,7 @@ export function ProfilePage() {
         ))}
       </div>
 
+      {/* Compartir */}
       <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
         <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Compartir</p>
         <button onClick={handleShare}
@@ -93,11 +99,28 @@ export function ProfilePage() {
         </button>
       </div>
 
+      {/* Estadisticas */}
+      <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
+        <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Herramientas</p>
+        <button onClick={() => navigate('/stats')}
+          className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3 active:scale-95 transition-transform">
+          <div className="w-8 h-8 rounded-lg bg-purple-600/20 flex items-center justify-center">
+            <BarChart2 size={16} className="text-purple-400" />
+          </div>
+          <div className="text-left flex-1">
+            <p className="text-sm font-medium text-white">Estadisticas</p>
+            <p className="text-xs text-gray-500">Valor, ROI y evolucion de tu coleccion</p>
+          </div>
+          <span className="text-gray-500 text-xs">›</span>
+        </button>
+      </div>
+
+      {/* Preferencias */}
       <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
         <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Preferencias</p>
 
         <div>
-          <p className="text-xs text-gray-500 mb-2 flex items-center gap-1.5">
+          <p className="text-xs text-gray-500 mb-1.5 flex items-center gap-1.5">
             <Globe size={12} /> Idioma
           </p>
           <div className="flex gap-2">
@@ -115,7 +138,7 @@ export function ProfilePage() {
         </div>
 
         <div>
-          <p className="text-xs text-gray-500 mb-2 flex items-center gap-1.5">
+          <p className="text-xs text-gray-500 mb-1.5 flex items-center gap-1.5">
             <Coins size={12} /> Moneda
           </p>
           <div className="flex gap-2 overflow-x-auto pb-1">
