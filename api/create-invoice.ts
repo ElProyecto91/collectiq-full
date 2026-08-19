@@ -17,7 +17,7 @@ export default async function handler(req: Request) {
         description: 'Escaneos ilimitados, sin publicidad y acceso a todas las funciones premium durante 30 días.',
         payload: JSON.stringify({ telegramUserId, type: 'go_monthly' }),
         currency: 'XTR', // Telegram Stars
-        prices: [{ label: 'CollectIQ GO — 1 mes', amount: 150 }], // 150 Stars
+        prices: [{ label: 'CollectIQ GO — 1 mes', amount: 75 }], // 75 Stars ~1.80€
       }),
     });
 
