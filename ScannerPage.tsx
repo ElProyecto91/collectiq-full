@@ -128,7 +128,11 @@ export default function ScannerPage() {
   const telegramUser = useUserStore((s) => s.telegramUser);
 
   useEffect(() => {
-    if (!telegramUser?.id) return;
+    // Si no hay usuario en 3 segundos, asumimos FREE
+    if (!telegramUser?.id) {
+      const timeout = setTimeout(() => setIsPremium(false), 3000);
+      return () => clearTimeout(timeout);
+    }
     supabase.from('user_premium').select('plan, expires_at')
       .eq('telegram_user_id', telegramUser.id).maybeSingle()
       .then(({ data }) => {
@@ -225,13 +229,15 @@ export default function ScannerPage() {
       }
 
       // Solo descontamos si la búsqueda fue exitosa
-      if (accumulated > 0) {
-        const newAcc = accumulated - 1;
-        setAccumulated(newAcc);
-        setAccumulatedScans(newAcc);
-      } else {
-        incrementScansToday();
-        setScansToday(getScansToday());
+      if (!isPremium) {
+        if (accumulated > 0) {
+          const newAcc = accumulated - 1;
+          setAccumulated(newAcc);
+          setAccumulatedScans(newAcc);
+        } else {
+          incrementScansToday();
+          setScansToday(getScansToday());
+        }
       }
 
       setProgress(100);
@@ -249,7 +255,7 @@ export default function ScannerPage() {
       }
       setPhase('error');
     }
-  }, [currentFile, canScan, accumulated]);
+  }, [currentFile, canScan, accumulated, isPremium]);
 
   const manualSearch = useCallback(async () => {
     if (!searchQuery.trim()) return;
