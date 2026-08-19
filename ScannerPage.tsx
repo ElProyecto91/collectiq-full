@@ -40,16 +40,12 @@ async function extractCardNameWithVision(base64: string): Promise<{ names: strin
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ image: base64 }),
   });
-
   if (!res.ok) {
     const err = await res.json();
     throw new Error(err.error ?? `Vision error: ${res.status}`);
   }
-
   const data = await res.json();
   if (!data.text) throw new Error('No se detectó texto en la imagen');
-
-  // Gemini ya devuelve el nombre limpio — usarlo directamente
   const name = data.text.trim().replace(/^["']|["']$/g, '');
   return { names: [name], rawText: name };
 }
@@ -124,7 +120,7 @@ export default function ScannerPage() {
 
   const [scansToday, setScansToday] = useState(getScansToday());
   const [accumulated, setAccumulated] = useState(getAccumulatedScans());
-  const [isPremium, setIsPremium] = useState(false);
+  const [isPremium, setIsPremium] = useState<boolean | null>(null); // null = cargando
   const [watchingAd, setWatchingAd] = useState(false);
   const [adCountdown, setAdCountdown] = useState(0);
 
@@ -142,7 +138,7 @@ export default function ScannerPage() {
   }, [telegramUser?.id]);
 
   const totalScansAvailable = DAILY_SCAN_LIMIT + accumulated;
-  const canScan = isPremium || scansToday < totalScansAvailable;
+  const canScan = isPremium === true || (isPremium !== null && scansToday < totalScansAvailable);
   const remainingScans = isPremium ? Infinity : Math.max(0, totalScansAvailable - scansToday);
 
   const watchAd = useCallback(() => {
@@ -217,13 +213,19 @@ export default function ScannerPage() {
 
       let cards: PokemonCard[] = [];
       let usedName = '';
-      for (const name of names) {
-        setStatusMsg(`Buscando "${name}"…`);
-        cards = await searchPokemonTCG(name);
-        if (cards.length > 0) { usedName = name; break; }
+
+      try {
+        for (const name of names) {
+          setStatusMsg(`Buscando "${name}"…`);
+          cards = await searchPokemonTCG(name);
+          if (cards.length > 0) { usedName = name; break; }
+        }
+      } catch (apiErr) {
+        // Si la API de Pokémon falla, NO descontamos escaneo
+        throw new Error('pokétcg_error');
       }
 
-      // Consumir escaneo
+      // Solo descontamos escaneo si la búsqueda fue exitosa
       if (accumulated > 0) {
         const newAcc = accumulated - 1;
         setAccumulated(newAcc);
@@ -238,10 +240,11 @@ export default function ScannerPage() {
       setSearchQuery(usedName || names[0]);
       setResults(cards);
       setPhase(cards.length === 0 ? 'no-results' : 'results');
+
     } catch (err: any) {
       const msg = err?.message ?? '';
-      if (msg.includes('fetch') || msg.includes('500') || msg.includes('503') || msg.includes('PokéTCG')) {
-        setErrorMsg('La base de datos oficial de Pokémon está caída o en mantenimiento. Inténtalo de nuevo en unos minutos.');
+      if (msg === 'pokétcg_error' || msg.includes('fetch') || msg.includes('500') || msg.includes('503') || msg.includes('PokéTCG')) {
+        setErrorMsg('La base de datos oficial de Pokémon está caída o en mantenimiento. Inténtalo de nuevo en unos minutos. No se ha descontado ningún escaneo.');
       } else {
         setErrorMsg(msg || 'Error al analizar la carta. Inténtalo de nuevo.');
       }
@@ -302,21 +305,36 @@ export default function ScannerPage() {
         </div>
       </div>
 
-      {!isPremium && (
+      {/* Contador de escaneos — visible siempre excepto GO confirmado */}
+      {isPremium === false && (
         <div className="mx-4 mb-3 bg-[#111118] border border-white/8 rounded-2xl p-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Zap size={16} className="text-blue-400" />
             <div>
-              <p className="text-xs font-bold text-white">{remainingScans === Infinity ? '∞' : remainingScans} escaneos disponibles</p>
-              <p className="text-[10px] text-gray-500">{scansToday}/{DAILY_SCAN_LIMIT} diarios · {accumulated} acumulados</p>
+              <p className="text-xs font-bold text-white">
+                {remainingScans} escaneo{remainingScans !== 1 ? 's' : ''} disponible{remainingScans !== 1 ? 's' : ''}
+              </p>
+              <p className="text-[10px] text-gray-500">
+                {scansToday}/{DAILY_SCAN_LIMIT} diarios · {accumulated} acumulados
+              </p>
             </div>
           </div>
           {accumulated < MAX_ACCUMULATED && (
             <button onClick={watchAd} disabled={watchingAd}
               className="flex items-center gap-1.5 bg-green-500/10 border border-green-500/20 text-green-400 rounded-xl px-3 py-2 text-xs font-bold active:scale-95 transition-transform disabled:opacity-50">
-              {watchingAd ? <><Loader2 size={12} className="animate-spin" />{adCountdown}s</> : <><Tv size={12} />+{AD_BONUS_SCANS}</>}
+              {watchingAd
+                ? <><Loader2 size={12} className="animate-spin" />{adCountdown}s</>
+                : <><Tv size={12} />+{AD_BONUS_SCANS}</>}
             </button>
           )}
+        </div>
+      )}
+
+      {/* Badge GO */}
+      {isPremium === true && (
+        <div className="mx-4 mb-3 bg-yellow-500/10 border border-yellow-500/20 rounded-2xl p-3 flex items-center gap-2">
+          <Zap size={16} className="text-yellow-400" />
+          <p className="text-xs font-bold text-yellow-400">CollectIQ GO · Escaneos ilimitados ✨</p>
         </div>
       )}
 
@@ -356,7 +374,7 @@ export default function ScannerPage() {
           <div className="bg-blue-500/10 border border-blue-500/30 rounded-2xl px-4 py-3 text-sm text-blue-300 text-center">{statusMsg}</div>
         )}
 
-        {!isPremium && !canScan && phase === 'idle' && (
+        {isPremium === false && !canScan && phase === 'idle' && (
           <div className="bg-orange-500/10 border border-orange-500/30 rounded-2xl p-4 space-y-3">
             <p className="text-sm font-bold text-orange-300">⚡ Límite diario alcanzado</p>
             <p className="text-xs text-orange-400/80">Has usado tus {DAILY_SCAN_LIMIT} escaneos de hoy. Ve un anuncio para conseguir más o hazte GO para escaneos ilimitados.</p>
@@ -385,7 +403,9 @@ export default function ScannerPage() {
             <div className="flex-1">
               <p className="text-sm text-yellow-300 font-medium">No encontramos la carta</p>
               <p className="text-xs text-yellow-400/70 mt-1">
-                {detectedName ? `Detectamos "${detectedName}" pero no hay resultados. Corrige el nombre abajo.` : 'No detectamos el nombre. Escríbelo manualmente abajo.'}
+                {detectedName
+                  ? `Detectamos "${detectedName}" pero no hay resultados. Corrige el nombre abajo.`
+                  : 'No detectamos el nombre. Escríbelo manualmente abajo.'}
               </p>
             </div>
           </div>
@@ -464,11 +484,13 @@ export default function ScannerPage() {
                   </div>
                 </div>
               )}
-              <button onClick={openCamera} disabled={!canScan}
+              <button onClick={openCamera} disabled={!canScan || isPremium === null}
                 className={cx('w-full rounded-2xl py-4 font-semibold flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform',
-                  canScan ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-blue-900/40' : 'bg-white/5 text-gray-500 cursor-not-allowed')}>
+                  isPremium === null ? 'bg-white/5 text-gray-500' :
+                  canScan ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-blue-900/40'
+                  : 'bg-white/5 text-gray-500 cursor-not-allowed')}>
                 <Camera className="w-5 h-5" />
-                {canScan ? 'Escanear carta' : 'Límite alcanzado'}
+                {isPremium === null ? 'Cargando...' : canScan ? 'Escanear carta' : 'Límite alcanzado'}
               </button>
             </div>
           )}
