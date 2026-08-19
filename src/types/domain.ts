@@ -104,6 +104,8 @@ export interface CollectionItem extends CardRef {
   gradeSurface: number | null;
   inSleeve: boolean;
   inBinder: boolean;
+  storageLocation: string | null;
+  sleeveType: string | null;
   customPhoto: string | null;
 }
 
@@ -140,6 +142,8 @@ export interface CollectionItemInput {
   gradeSurface?: number | null;
   inSleeve?: boolean;
   inBinder?: boolean;
+  storageLocation?: string | null;
+  sleeveType?: string | null;
   customPhoto?: string | null;
 }
 
