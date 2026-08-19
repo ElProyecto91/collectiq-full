@@ -99,8 +99,7 @@ function getScansToday(): number {
 }
 
 function incrementScansToday() {
-  const key = getTodayKey();
-  localStorage.setItem(key, String(getScansToday() + 1));
+  localStorage.setItem(getTodayKey(), String(getScansToday() + 1));
 }
 
 function getAccumulatedScans(): number {
@@ -114,7 +113,7 @@ function setAccumulatedScans(n: number) {
 export default function ScannerPage() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [showTutorial, setShowTutorial] = useState(true);
+  const [showTutorial] = useState(true);
 
   const [phase, setPhase] = useState<ScanPhase>('idle');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -159,7 +158,6 @@ export default function ScannerPage() {
     }
     setWatchingAd(true);
     setAdCountdown(5);
-    // SIMULACIÓN — reemplazar con SDK Monetag cuando esté aprobado
     const interval = setInterval(() => {
       setAdCountdown(prev => {
         if (prev <= 1) {
@@ -202,13 +200,10 @@ export default function ScannerPage() {
   };
 
   const analyzeCard = useCallback(async () => {
-    if (!currentFile) return;
-    if (!canScan) return;
-
+    if (!currentFile || !canScan) return;
     setPhase('analyzing');
     setProgress(20);
     setStatusMsg('Enviando imagen a Google Vision…');
-
     try {
       const base64 = await toBase64(currentFile);
       setProgress(50);
@@ -233,7 +228,6 @@ export default function ScannerPage() {
         if (cards.length > 0) { usedName = name; break; }
       }
 
-      // Consumir escaneo
       if (accumulated > 0) {
         const newAcc = accumulated - 1;
         setAccumulated(newAcc);
@@ -277,13 +271,13 @@ export default function ScannerPage() {
 
   const addCard = (card: PokemonCard) => {
     if (!telegramUser?.id) return;
-    const tcgplayerPrice = getTCGPlayerPrice(card);
-    const marketPrice = card.cardmarket?.prices?.averageSellPrice ?? null;
     createItem({
       cardId: card.id, tcg: 'pokemon', telegramUserId: telegramUser.id,
       cardName: card.name, setName: card.set.name, cardNumber: card.number,
       rarity: card.rarity ?? null, imageUrl: card.images.small, quantity: 1,
-      favorite: false, setTotal: card.set.total ?? null, marketPrice, tcgplayerPrice, currency: 'EUR',
+      favorite: false, setTotal: card.set.total ?? null,
+      marketPrice: card.cardmarket?.prices?.averageSellPrice ?? null,
+      tcgplayerPrice: getTCGPlayerPrice(card), currency: 'EUR',
     });
     setAddedIds(prev => new Set(prev).add(card.id));
     setStatusMsg(`✅ ${card.name} añadida a tu colección`);
@@ -312,28 +306,19 @@ export default function ScannerPage() {
         </div>
       </div>
 
-      {/* Contador de escaneos */}
       {!isPremium && (
         <div className="mx-4 mb-3 bg-[#111118] border border-white/8 rounded-2xl p-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Zap size={16} className="text-blue-400" />
             <div>
-              <p className="text-xs font-bold text-white">
-                {remainingScans === Infinity ? '∞' : remainingScans} escaneos disponibles
-              </p>
-              <p className="text-[10px] text-gray-500">
-                {scansToday}/{DAILY_SCAN_LIMIT} diarios · {accumulated} acumulados
-              </p>
+              <p className="text-xs font-bold text-white">{remainingScans === Infinity ? '∞' : remainingScans} escaneos disponibles</p>
+              <p className="text-[10px] text-gray-500">{scansToday}/{DAILY_SCAN_LIMIT} diarios · {accumulated} acumulados</p>
             </div>
           </div>
           {accumulated < MAX_ACCUMULATED && (
             <button onClick={watchAd} disabled={watchingAd}
               className="flex items-center gap-1.5 bg-green-500/10 border border-green-500/20 text-green-400 rounded-xl px-3 py-2 text-xs font-bold active:scale-95 transition-transform disabled:opacity-50">
-              {watchingAd ? (
-                <><Loader2 size={12} className="animate-spin" />{adCountdown}s</>
-              ) : (
-                <><Tv size={12} />+{AD_BONUS_SCANS}</>
-              )}
+              {watchingAd ? <><Loader2 size={12} className="animate-spin" />{adCountdown}s</> : <><Tv size={12} />+{AD_BONUS_SCANS}</>}
             </button>
           )}
         </div>
@@ -352,7 +337,6 @@ export default function ScannerPage() {
               <p className="text-sm text-gray-500 text-center px-8">Apunta la cámara a una carta</p>
             </div>
           )}
-
           {(['tl','tr','bl','br'] as const).map((c) => (
             <span key={c} className={cx('absolute w-5 h-5 border-blue-400',
               c === 'tl' && 'top-3 left-3 border-t-2 border-l-2 rounded-tl-lg',
@@ -361,7 +345,6 @@ export default function ScannerPage() {
               c === 'br' && 'bottom-3 right-3 border-b-2 border-r-2 rounded-br-lg',
             )} />
           ))}
-
           {phase === 'analyzing' && (
             <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center gap-4 p-6">
               <Loader2 className="w-10 h-10 text-blue-400 animate-spin" />
@@ -377,14 +360,15 @@ export default function ScannerPage() {
           <div className="bg-blue-500/10 border border-blue-500/30 rounded-2xl px-4 py-3 text-sm text-blue-300 text-center">{statusMsg}</div>
         )}
 
-        {/* Límite alcanzado */}
         {!isPremium && !canScan && phase === 'idle' && (
           <div className="bg-orange-500/10 border border-orange-500/30 rounded-2xl p-4 space-y-3">
             <p className="text-sm font-bold text-orange-300">⚡ Límite diario alcanzado</p>
             <p className="text-xs text-orange-400/80">Has usado tus {DAILY_SCAN_LIMIT} escaneos de hoy. Ve un anuncio para conseguir más o hazte GO para escaneos ilimitados.</p>
             <button onClick={watchAd} disabled={watchingAd || accumulated >= MAX_ACCUMULATED}
               className="w-full flex items-center justify-center gap-2 bg-green-500/10 border border-green-500/20 text-green-400 rounded-xl py-3 text-sm font-bold active:scale-95 transition-transform disabled:opacity-50">
-              {watchingAd ? <><Loader2 size={14} className="animate-spin" />Viendo anuncio... {adCountdown}s</> : <><Tv size={14} />Ver anuncio → +{AD_BONUS_SCANS} escaneos</>}
+              {watchingAd
+                ? <><Loader2 size={14} className="animate-spin" />Viendo anuncio... {adCountdown}s</>
+                : <><Tv size={14} />Ver anuncio → +{AD_BONUS_SCANS} escaneos</>}
             </button>
           </div>
         )}
@@ -484,8 +468,7 @@ export default function ScannerPage() {
                   </div>
                 </div>
               )}
-              <button onClick={openCamera}
-                disabled={!canScan}
+              <button onClick={openCamera} disabled={!canScan}
                 className={cx('w-full rounded-2xl py-4 font-semibold flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform',
                   canScan ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-blue-900/40' : 'bg-white/5 text-gray-500 cursor-not-allowed')}>
                 <Camera className="w-5 h-5" />
