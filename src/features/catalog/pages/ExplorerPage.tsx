@@ -1,14 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Compass,
-  Loader2,
-  SearchX,
-  Plus,
-  CheckCircle2,
-  Search,
-  TrendingUp,
-  Heart,
+  Compass, Loader2, SearchX, Plus, CheckCircle2, Search, TrendingUp, Heart, PackagePlus,
 } from 'lucide-react';
 import { RoutePaths } from '@/config';
 import { cx } from '@/utils';
@@ -25,16 +18,12 @@ import { CARD_LANGUAGES } from '@/types';
 import { supabase } from '@/lib/supabase';
 
 interface PokemonCard {
-  id: string;
-  name: string;
-  number: string;
-  rarity?: string;
+  id: string; name: string; number: string; rarity?: string;
   images: { small: string; large: string };
   set: { id: string; name: string; series: string; releaseDate?: string; total?: number };
   cardmarket?: { prices?: { averageSellPrice?: number } };
   tcgplayer?: { prices?: { normal?: { market?: number }; holofoil?: { market?: number }; reverseHolofoil?: { market?: number } } };
-  types?: string[];
-  supertype?: string;
+  types?: string[]; supertype?: string;
 }
 
 function getRarityColor(rarity?: string): string {
@@ -62,15 +51,12 @@ async function searchCards(query: string, page: number): Promise<{ cards: Pokemo
   const q = query.trim()
     ? 'name:"*' + query.trim() + '*"'
     : 'name:Charizard OR name:Pikachu OR name:Mewtwo';
-
   const url = 'https://api.pokemontcg.io/v2/cards?q=' + encodeURIComponent(q) + '&page=' + page + '&pageSize=20&orderBy=-set.releaseDate';
-
   for (let i = 0; i < 4; i++) {
     try {
       const res = await fetch(url, { headers: { 'X-Api-Key': POKEMON_API_KEY } });
       if (res.status === 429 || res.status === 500 || res.status === 503) {
-        await new Promise(r => setTimeout(r, 1500 * (i + 1)));
-        continue;
+        await new Promise(r => setTimeout(r, 1500 * (i + 1))); continue;
       }
       if (!res.ok) throw new Error('Error ' + res.status);
       const json = await res.json();
@@ -186,6 +172,7 @@ export function ExplorerPage() {
   const [error, setError] = useState('');
   const [statusMsg, setStatusMsg] = useState('');
   const [selectorCard, setSelectorCard] = useState<PokemonCard | null>(null);
+  const [addingFullSet, setAddingFullSet] = useState(false);
   const navigate = useNavigate();
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -213,7 +200,6 @@ export function ExplorerPage() {
     if (append) setIsLoadingMore(true);
     else setIsLoading(true);
     setError('');
-
     try {
       let result;
       if (cache.current.has(cacheKey)) {
@@ -265,25 +251,17 @@ export function ExplorerPage() {
       marketPrice: price ?? marketPrice, tcgplayerPrice: price, currency: 'EUR',
       variant, cardLanguage: language,
     });
-
     setStatusMsg('✅ ' + card.name + ' añadida a tu coleccion');
     setTimeout(() => setStatusMsg(''), 2500);
-    setSelectorCard(null);
 
     const { count: totalDecks } = await supabase
       .from('decks').select('*', { count: 'exact', head: true })
       .eq('telegram_user_id', telegramUser.id);
-
     const newTotal = collectionCards.reduce((s, c) => s + c.quantity, 0) + 1;
     const newUnique = addedIds.has(card.id) ? collectionCards.length : collectionCards.length + 1;
-
     checkAchievements({
-      totalCards: newTotal,
-      uniqueCards: newUnique,
-      totalDecks: totalDecks ?? 0,
-      completedSets: 0,
-      totalVotes: 0,
-      totalFavorites: collectionCards.filter(c => c.favorite).length,
+      totalCards: newTotal, uniqueCards: newUnique, totalDecks: totalDecks ?? 0,
+      completedSets: 0, totalVotes: 0, totalFavorites: collectionCards.filter(c => c.favorite).length,
     });
   };
 
@@ -298,6 +276,43 @@ export function ExplorerPage() {
     setStatusMsg('❤️ ' + card.name + ' añadida a tu wishlist');
     setTimeout(() => setStatusMsg(''), 2500);
   };
+
+  const addFullSet = useCallback(async () => {
+    if (!telegramUser?.id || cards.length === 0 || addingFullSet) return;
+    const setId = cards[0]?.set?.id;
+    if (!setId) return;
+    setAddingFullSet(true);
+    setStatusMsg('⏳ Añadiendo set completo...');
+    try {
+      const res = await fetch(
+        `https://api.pokemontcg.io/v2/cards?q=set.id:${setId}&pageSize=250`,
+        { headers: { 'X-Api-Key': POKEMON_API_KEY } }
+      );
+      const json = await res.json();
+      const setCards: PokemonCard[] = json.data ?? [];
+      let added = 0;
+      for (const card of setCards) {
+        if (addedIds.has(card.id)) continue;
+        const price = card.cardmarket?.prices?.averageSellPrice ?? card.tcgplayer?.prices?.normal?.market ?? null;
+        createItem({
+          cardId: card.id, tcg: 'pokemon', telegramUserId: telegramUser.id,
+          cardName: card.name, setName: card.set.name, cardNumber: card.number,
+          rarity: card.rarity ?? null, imageUrl: card.images.small, quantity: 1,
+          favorite: false, setTotal: card.set.total ?? null,
+          marketPrice: price, tcgplayerPrice: price, currency: 'EUR',
+          variant: 'normal', cardLanguage: 'en',
+        });
+        added++;
+      }
+      setStatusMsg(`✅ ${added} cartas del set añadidas`);
+      setTimeout(() => setStatusMsg(''), 3000);
+    } catch {
+      setStatusMsg('❌ Error al añadir el set. Inténtalo de nuevo.');
+      setTimeout(() => setStatusMsg(''), 3000);
+    } finally {
+      setAddingFullSet(false);
+    }
+  }, [cards, telegramUser?.id, addedIds, createItem, addingFullSet]);
 
   const currentTCG = TCG_OPTIONS.find(t => t.key === activeTCG);
   const showComingSoon = activeTCG !== 'all' && activeTCG !== 'pokemon';
@@ -336,8 +351,7 @@ export function ExplorerPage() {
             <p className="text-white font-bold text-lg">{currentTCG?.label}</p>
             <p className="text-sm text-gray-500 mt-1">El catalogo de {currentTCG?.label} estara disponible proximamente.</p>
           </div>
-          <button onClick={() => setActiveTCG('pokemon')}
-            className="bg-blue-600 text-white rounded-xl px-5 py-2.5 text-sm font-medium">
+          <button onClick={() => setActiveTCG('pokemon')} className="bg-blue-600 text-white rounded-xl px-5 py-2.5 text-sm font-medium">
             Ver Pokemon TCG
           </button>
         </div>
@@ -360,11 +374,20 @@ export function ExplorerPage() {
           )}
 
           {!isLoading && cards.length > 0 && (
-            <div className="px-4 pb-2 flex items-center gap-2">
-              <TrendingUp className="w-3.5 h-3.5 text-gray-500" />
-              <span className="text-xs text-gray-500">
-                {query.trim() ? total.toLocaleString() + ' resultados para "' + query.trim() + '"' : t.explorer.latestCards}
-              </span>
+            <div className="px-4 pb-2 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-3.5 h-3.5 text-gray-500" />
+                <span className="text-xs text-gray-500">
+                  {query.trim() ? total.toLocaleString() + ' resultados para "' + query.trim() + '"' : t.explorer.latestCards}
+                </span>
+              </div>
+              {!query.trim() && (
+                <button onClick={addFullSet} disabled={addingFullSet}
+                  className="flex items-center gap-1.5 bg-purple-500/10 border border-purple-500/20 text-purple-400 rounded-xl px-3 py-1.5 text-xs font-medium active:scale-95 transition-transform disabled:opacity-50">
+                  {addingFullSet ? <Loader2 size={12} className="animate-spin" /> : <PackagePlus size={12} />}
+                  Set completo
+                </button>
+              )}
             </div>
           )}
 
@@ -387,9 +410,7 @@ export function ExplorerPage() {
             {error && !isLoading && (
               <div className="text-center py-12">
                 <p className="text-red-400 text-sm">{error}</p>
-                <button onClick={() => doSearch(query, 1, false)} className="mt-3 text-xs text-blue-400 underline">
-                  {t.common.tryAgain}
-                </button>
+                <button onClick={() => doSearch(query, 1, false)} className="mt-3 text-xs text-blue-400 underline">{t.common.tryAgain}</button>
               </div>
             )}
 
