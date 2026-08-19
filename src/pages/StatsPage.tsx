@@ -1,3 +1,15 @@
+// Añadir import
+import { useMissions } from '@/hooks/use-missions';
+
+// Dentro de StatsPage(), añadir:
+const { updateMission } = useMissions();
+
+// En el useEffect de loadSnapshots:
+useEffect(() => {
+  if (!telegramUser?.id) return;
+  loadSnapshots();
+  updateMission('check_value'); // ← añadir esta línea
+}, [telegramUser?.id]);
 import { useEffect, useState } from 'react';
 import { TrendingUp, TrendingDown, Minus, BarChart2, Star, Package } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
