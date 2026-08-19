@@ -102,7 +102,6 @@ export function CardDetailsPage() {
   const tcgPrice = card.tcgplayer?.prices?.holofoil?.market ?? card.tcgplayer?.prices?.normal?.market;
   const trendPrice = card.cardmarket?.prices?.trendPrice;
   const lowPrice = card.cardmarket?.prices?.lowPrice;
-
   const cardmarketUrl = `https://www.cardmarket.com/en/Pokemon/Products/Singles?searchString=${encodeURIComponent(card.name)}`;
 
   return (
@@ -120,6 +119,7 @@ export function CardDetailsPage() {
 
       <div className="px-4 space-y-4">
 
+        {/* Nombre + info básica */}
         <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
           <div className="flex items-start justify-between gap-2">
             <div>
@@ -135,6 +135,7 @@ export function CardDetailsPage() {
           {card.flavorText && <p className="text-xs text-gray-400 italic border-t border-white/8 pt-3">"{card.flavorText}"</p>}
         </div>
 
+        {/* Habilidades */}
         {card.abilities && card.abilities.length > 0 && (
           <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
             <p className="text-xs text-purple-400 font-bold uppercase tracking-wider">Habilidad</p>
@@ -147,6 +148,7 @@ export function CardDetailsPage() {
           </div>
         )}
 
+        {/* Ataques */}
         {card.attacks && card.attacks.length > 0 && (
           <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-4">
             <p className="text-xs text-blue-400 font-bold uppercase tracking-wider">Ataques</p>
@@ -165,6 +167,7 @@ export function CardDetailsPage() {
           </div>
         )}
 
+        {/* Debilidad / Resistencia / Retirada */}
         {(card.weaknesses || card.resistances || card.retreatCost) && (
           <div className="bg-[#111118] border border-white/8 rounded-2xl p-4">
             <div className="grid grid-cols-3 gap-3 text-center">
@@ -190,6 +193,7 @@ export function CardDetailsPage() {
           </div>
         )}
 
+        {/* Precios */}
         {(cardmarketPrice || tcgPrice) && (
           <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
             <p className="text-xs text-green-400 font-bold uppercase tracking-wider">Precios de mercado</p>
@@ -219,25 +223,26 @@ export function CardDetailsPage() {
                 </div>
               )}
             </div>
-
-            {/* Links de compra */}
-            <div className="pt-1 space-y-2">
-              <p className="text-xs text-gray-500 font-medium">Comprar carta</p>
-              <a href={cardmarketUrl} target="_blank" rel="noopener noreferrer"
-                className="flex items-center justify-between w-full bg-blue-600/10 border border-blue-500/20 rounded-xl px-4 py-3 active:scale-95 transition-transform">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">🛒</span>
-                  <div>
-                    <p className="text-sm font-bold text-white">Cardmarket</p>
-                    <p className="text-[10px] text-gray-500">Mayor mercado europeo</p>
-                  </div>
-                </div>
-                <ExternalLink size={14} className="text-gray-500" />
-              </a>
-            </div>
           </div>
         )}
 
+        {/* Comprar en Cardmarket — siempre visible */}
+        <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-2">
+          <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Comprar carta</p>
+          <a href={cardmarketUrl} target="_blank" rel="noopener noreferrer"
+            className="flex items-center justify-between w-full bg-blue-600/10 border border-blue-500/20 rounded-xl px-4 py-3 active:scale-95 transition-transform">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🛒</span>
+              <div>
+                <p className="text-sm font-bold text-white">Cardmarket</p>
+                <p className="text-[10px] text-gray-500">Mayor mercado europeo</p>
+              </div>
+            </div>
+            <ExternalLink size={14} className="text-gray-500" />
+          </a>
+        </div>
+
+        {/* Información */}
         <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-2">
           <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Información</p>
           <div className="grid grid-cols-2 gap-y-2 gap-x-4">
@@ -252,6 +257,7 @@ export function CardDetailsPage() {
           </div>
         </div>
 
+        {/* Legalidades */}
         {card.legalities && (
           <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-2">
             <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Legalidades</p>
@@ -268,6 +274,7 @@ export function CardDetailsPage() {
           </div>
         )}
 
+        {/* Añadir a colección */}
         <button onClick={handleAdd} disabled={!!isInCollection}
           className={cx('w-full rounded-2xl py-4 font-semibold flex items-center justify-center gap-2 transition-all',
             isInCollection ? 'bg-green-500/20 text-green-400 cursor-default' : 'bg-blue-600 text-white active:scale-95')}>
