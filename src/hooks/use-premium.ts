@@ -10,7 +10,7 @@ export interface PremiumData {
 }
 
 export const GO_PRICE_STARS = 150; // ~1.99€ en Telegram Stars
-export const GO_SCAN_LIMIT = 10; // escaneos gratis por día
+export const GO_SCAN_LIMIT = 5; // escaneos gratis por día
 
 export function usePremium() {
   const telegramUser = useUserStore((s) => s.telegramUser);
