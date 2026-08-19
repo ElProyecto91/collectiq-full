@@ -12,6 +12,7 @@ import { useCurrency } from '@/hooks/use-currency';
 import { useI18n } from '@/i18n';
 import { useActiveTCG, TCG_OPTIONS } from '@/hooks/use-active-tcg';
 import { useXP } from '@/hooks/use-xp';
+import { useMissions } from '@/hooks/use-missions';
 import { AchievementToast } from '@/components/AchievementToast';
 import type { CardVariant, CardLanguage } from '@/types';
 import { CARD_LANGUAGES } from '@/types';
@@ -187,6 +188,7 @@ export function ExplorerPage() {
   const { t } = useI18n();
   const { activeTCG, setActiveTCG } = useActiveTCG();
   const { checkAchievements, newAchievement } = useXP();
+  const { updateMission } = useMissions();
 
   const addedIds = new Set(collectionCards.map(c => c.cardId));
   const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
@@ -224,7 +226,10 @@ export function ExplorerPage() {
 
   useEffect(() => {
     clearTimeout(searchTimeout.current);
-    searchTimeout.current = setTimeout(() => { doSearch(query, 1, false); }, 800);
+    searchTimeout.current = setTimeout(() => {
+      doSearch(query, 1, false);
+      if (query.trim()) updateMission('explore');
+    }, 800);
     return () => clearTimeout(searchTimeout.current);
   }, [query]);
 
@@ -251,8 +256,11 @@ export function ExplorerPage() {
       marketPrice: price ?? marketPrice, tcgplayerPrice: price, currency: 'EUR',
       variant, cardLanguage: language,
     });
+
     setStatusMsg('✅ ' + card.name + ' añadida a tu coleccion');
     setTimeout(() => setStatusMsg(''), 2500);
+
+    await updateMission('add_card');
 
     const { count: totalDecks } = await supabase
       .from('decks').select('*', { count: 'exact', head: true })
@@ -265,7 +273,7 @@ export function ExplorerPage() {
     });
   };
 
-  const handleWishlist = (card: PokemonCard) => {
+  const handleWishlist = async (card: PokemonCard) => {
     if (!telegramUser?.id) return;
     createWishlistItem({
       cardId: card.id, tcg: 'pokemon', telegramUserId: telegramUser.id,
@@ -275,6 +283,7 @@ export function ExplorerPage() {
     setWishlistIds(prev => new Set([...prev, card.id]));
     setStatusMsg('❤️ ' + card.name + ' añadida a tu wishlist');
     setTimeout(() => setStatusMsg(''), 2500);
+    await updateMission('add_wishlist');
   };
 
   const addFullSet = useCallback(async () => {
@@ -304,6 +313,7 @@ export function ExplorerPage() {
         });
         added++;
       }
+      if (added > 0) await updateMission('add_card');
       setStatusMsg(`✅ ${added} cartas del set añadidas`);
       setTimeout(() => setStatusMsg(''), 3000);
     } catch {
@@ -319,7 +329,6 @@ export function ExplorerPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-[#0a0a0f] text-white pb-24">
-
       <AchievementToast achievement={newAchievement} onDone={() => {}} />
 
       {selectorCard && (
@@ -410,7 +419,9 @@ export function ExplorerPage() {
             {error && !isLoading && (
               <div className="text-center py-12">
                 <p className="text-red-400 text-sm">{error}</p>
-                <button onClick={() => doSearch(query, 1, false)} className="mt-3 text-xs text-blue-400 underline">{t.common.tryAgain}</button>
+                <button onClick={() => doSearch(query, 1, false)} className="mt-3 text-xs text-blue-400 underline">
+                  {t.common.tryAgain}
+                </button>
               </div>
             )}
 
