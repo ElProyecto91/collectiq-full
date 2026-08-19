@@ -54,7 +54,14 @@ export default async function handler(req: Request): Promise<Response> {
       }
     );
 
-    const geminiData = await geminiRes.json();
+    const rawText = await geminiRes.text();
+
+    let geminiData;
+    try {
+      geminiData = JSON.parse(rawText);
+    } catch {
+      return new Response(JSON.stringify({ error: 'Gemini response parse error: ' + rawText.slice(0, 100) }), { status: 500, headers });
+    }
 
     if (!geminiRes.ok) {
       const msg = geminiData?.error?.message ?? `Gemini API error ${geminiRes.status}`;
@@ -62,10 +69,6 @@ export default async function handler(req: Request): Promise<Response> {
     }
 
     const text: string = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-
-    if (!text) {
-      return new Response(JSON.stringify({ error: 'No text detected' }), { status: 200, headers });
-    }
 
     return new Response(JSON.stringify({ text }), { status: 200, headers });
 
