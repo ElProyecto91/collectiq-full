@@ -254,6 +254,7 @@ export function ExplorerPage() {
 
   const handleAdd = async (card: PokemonCard, variant: CardVariant, language: CardLanguage) => {
     if (!telegramUser?.id) return;
+    setSelectorCard(null);
     const price = getPriceForVariant(card, variant);
     const marketPrice = card.cardmarket?.prices?.averageSellPrice ?? null;
     createItem({
