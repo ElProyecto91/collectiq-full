@@ -10,3 +10,7 @@ export { PublicProfilePage } from './PublicProfilePage';
 export { OnboardingPage } from './OnboardingPage';
 export { StatsPage } from './StatsPage';
 export { AchievementsPage } from './AchievementsPage';
+export { MissionsPage } from './MissionsPage';
+export { FriendsPage } from './FriendsPage';
+export { PremiumPage } from './PremiumPage';
+export { NotificationsPage } from './NotificationsPage';
