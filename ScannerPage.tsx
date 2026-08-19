@@ -120,7 +120,7 @@ export default function ScannerPage() {
 
   const [scansToday, setScansToday] = useState(getScansToday());
   const [accumulated, setAccumulated] = useState(getAccumulatedScans());
-  const [isPremium, setIsPremium] = useState<boolean | null>(null); // null = cargando
+  const [isPremium, setIsPremium] = useState<boolean | null>(null);
   const [watchingAd, setWatchingAd] = useState(false);
   const [adCountdown, setAdCountdown] = useState(0);
 
@@ -139,7 +139,7 @@ export default function ScannerPage() {
 
   const totalScansAvailable = DAILY_SCAN_LIMIT + accumulated;
   const canScan = isPremium === true || (isPremium !== null && scansToday < totalScansAvailable);
-  const remainingScans = isPremium ? Infinity : Math.max(0, totalScansAvailable - scansToday);
+  const remainingScans = Math.max(0, totalScansAvailable - scansToday);
 
   const watchAd = useCallback(() => {
     if (watchingAd) return;
@@ -220,12 +220,11 @@ export default function ScannerPage() {
           cards = await searchPokemonTCG(name);
           if (cards.length > 0) { usedName = name; break; }
         }
-      } catch (apiErr) {
-        // Si la API de Pokémon falla, NO descontamos escaneo
+      } catch {
         throw new Error('pokétcg_error');
       }
 
-      // Solo descontamos escaneo si la búsqueda fue exitosa
+      // Solo descontamos si la búsqueda fue exitosa
       if (accumulated > 0) {
         const newAcc = accumulated - 1;
         setAccumulated(newAcc);
@@ -244,7 +243,7 @@ export default function ScannerPage() {
     } catch (err: any) {
       const msg = err?.message ?? '';
       if (msg === 'pokétcg_error' || msg.includes('fetch') || msg.includes('500') || msg.includes('503') || msg.includes('PokéTCG')) {
-        setErrorMsg('La base de datos oficial de Pokémon está caída o en mantenimiento. Inténtalo de nuevo en unos minutos. No se ha descontado ningún escaneo.');
+        setErrorMsg('La base de datos oficial de Pokémon está caída. Inténtalo de nuevo en unos minutos. No se ha descontado ningún escaneo.');
       } else {
         setErrorMsg(msg || 'Error al analizar la carta. Inténtalo de nuevo.');
       }
@@ -305,38 +304,48 @@ export default function ScannerPage() {
         </div>
       </div>
 
-      {/* Contador de escaneos — visible siempre excepto GO confirmado */}
-      {isPremium === false && (
-        <div className="mx-4 mb-3 bg-[#111118] border border-white/8 rounded-2xl p-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Zap size={16} className="text-blue-400" />
-            <div>
-              <p className="text-xs font-bold text-white">
-                {remainingScans} escaneo{remainingScans !== 1 ? 's' : ''} disponible{remainingScans !== 1 ? 's' : ''}
-              </p>
-              <p className="text-[10px] text-gray-500">
-                {scansToday}/{DAILY_SCAN_LIMIT} diarios · {accumulated} acumulados
-              </p>
-            </div>
+      {/* Barra de estado — siempre visible */}
+      <div className="mx-4 mb-3">
+        {isPremium === null && (
+          <div className="bg-[#111118] border border-white/8 rounded-2xl p-3 animate-pulse">
+            <div className="h-4 bg-white/10 rounded w-1/2" />
           </div>
-          {accumulated < MAX_ACCUMULATED && (
-            <button onClick={watchAd} disabled={watchingAd}
-              className="flex items-center gap-1.5 bg-green-500/10 border border-green-500/20 text-green-400 rounded-xl px-3 py-2 text-xs font-bold active:scale-95 transition-transform disabled:opacity-50">
-              {watchingAd
-                ? <><Loader2 size={12} className="animate-spin" />{adCountdown}s</>
-                : <><Tv size={12} />+{AD_BONUS_SCANS}</>}
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Badge GO */}
-      {isPremium === true && (
-        <div className="mx-4 mb-3 bg-yellow-500/10 border border-yellow-500/20 rounded-2xl p-3 flex items-center gap-2">
-          <Zap size={16} className="text-yellow-400" />
-          <p className="text-xs font-bold text-yellow-400">CollectIQ GO · Escaneos ilimitados ✨</p>
-        </div>
-      )}
+        )}
+        {isPremium === true && (
+          <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-2xl p-3 flex items-center gap-2">
+            <Zap size={16} className="text-yellow-400" />
+            <p className="text-xs font-bold" style={{
+              background: 'linear-gradient(135deg, #FFD700, #FFA500, #FFD700)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+            }}>CollectIQ GO · Escaneos ilimitados ✨</p>
+          </div>
+        )}
+        {isPremium === false && (
+          <div className="bg-[#111118] border border-white/8 rounded-2xl p-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Zap size={16} className="text-blue-400" />
+              <div>
+                <p className="text-xs font-bold text-white">
+                  {remainingScans} escaneo{remainingScans !== 1 ? 's' : ''} disponible{remainingScans !== 1 ? 's' : ''}
+                </p>
+                <p className="text-[10px] text-gray-500">
+                  {scansToday}/{DAILY_SCAN_LIMIT} diarios · {accumulated} acumulados
+                </p>
+              </div>
+            </div>
+            {accumulated < MAX_ACCUMULATED && (
+              <button onClick={watchAd} disabled={watchingAd}
+                className="flex items-center gap-1.5 bg-green-500/10 border border-green-500/20 text-green-400 rounded-xl px-3 py-2 text-xs font-bold active:scale-95 transition-transform disabled:opacity-50">
+                {watchingAd
+                  ? <><Loader2 size={12} className="animate-spin" />{adCountdown}s</>
+                  : <><Tv size={12} />+{AD_BONUS_SCANS}</>}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
 
       <div className="flex-1 px-4 space-y-4">
         <div className="relative rounded-2xl overflow-hidden bg-[#111118] border border-white/10" style={{ aspectRatio: '3/4' }}>
@@ -487,8 +496,8 @@ export default function ScannerPage() {
               <button onClick={openCamera} disabled={!canScan || isPremium === null}
                 className={cx('w-full rounded-2xl py-4 font-semibold flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform',
                   isPremium === null ? 'bg-white/5 text-gray-500' :
-                  canScan ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-blue-900/40'
-                  : 'bg-white/5 text-gray-500 cursor-not-allowed')}>
+                  canScan ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-blue-900/40' :
+                  'bg-white/5 text-gray-500 cursor-not-allowed')}>
                 <Camera className="w-5 h-5" />
                 {isPremium === null ? 'Cargando...' : canScan ? 'Escanear carta' : 'Límite alcanzado'}
               </button>
