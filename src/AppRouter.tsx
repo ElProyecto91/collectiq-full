@@ -4,7 +4,8 @@ import { RoutePaths } from '@/config';
 import {
   CollectionPage, ExplorerPage, HomePage, ProfilePage,
   WishlistPage, CommunityPage, DecksPage, DeckDetailPage,
-  StatsPage, AchievementsPage,
+  StatsPage, AchievementsPage, MissionsPage, FriendsPage,
+  PremiumPage, NotificationsPage,
 } from '@/pages';
 import { LoginPage } from '@/pages/LoginPage';
 import ScannerPage from '@/features/scanner/ScannerPage';
@@ -29,6 +30,10 @@ const router = createBrowserRouter([
       { path: '/decks/new', element: <CreateDeckPage /> },
       { path: '/stats', element: <StatsPage /> },
       { path: '/achievements', element: <AchievementsPage /> },
+      { path: '/missions', element: <MissionsPage /> },
+      { path: '/friends', element: <FriendsPage /> },
+      { path: '/premium', element: <PremiumPage /> },
+      { path: '/notifications', element: <NotificationsPage /> },
     ],
   },
   { path: RoutePaths.Scanner, element: <ScannerPage /> },
