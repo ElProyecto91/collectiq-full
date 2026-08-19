@@ -23,8 +23,7 @@ type ScanPhase = 'idle' | 'preview' | 'analyzing' | 'results' | 'no-results' | '
 
 const POKEMON_API_KEY = import.meta.env.VITE_POKEMONTCG_API_KEY ?? '';
 const DAILY_SCAN_LIMIT = 5;
-const MAX_ACCUMULATED = 10;
-const AD_BONUS_SCANS = 2;
+const AD_BONUS_SCANS = 1;
 
 async function toBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -87,7 +86,7 @@ function getTodayKey() { return 'scans_' + new Date().toISOString().split('T')[0
 function getScansToday(): number { return parseInt(localStorage.getItem(getTodayKey()) ?? '0'); }
 function incrementScansToday() { localStorage.setItem(getTodayKey(), String(getScansToday() + 1)); }
 function getAccumulatedScans(): number { return parseInt(localStorage.getItem('scans_accumulated') ?? '0'); }
-function setAccumulatedScans(n: number) { localStorage.setItem('scans_accumulated', String(Math.min(n, MAX_ACCUMULATED))); }
+function setAccumulatedScans(n: number) { localStorage.setItem('scans_accumulated', String(n)); }
 
 export default function ScannerPage() {
   const navigate = useNavigate();
@@ -132,22 +131,18 @@ export default function ScannerPage() {
 
   const watchAd = useCallback(() => {
     if (watchingAd) return;
-    if (accumulated >= MAX_ACCUMULATED) {
-      setStatusMsg('Ya tienes el máximo de escaneos acumulados (' + MAX_ACCUMULATED + ')');
-      setTimeout(() => setStatusMsg(''), 3000);
-      return;
-    }
     setWatchingAd(true);
     setAdCountdown(5);
+    // SIMULACIÓN — reemplazar con SDK Monetag cuando esté aprobado
     const interval = setInterval(() => {
       setAdCountdown(prev => {
         if (prev <= 1) {
           clearInterval(interval);
-          const newAccumulated = Math.min(accumulated + AD_BONUS_SCANS, MAX_ACCUMULATED);
+          const newAccumulated = accumulated + AD_BONUS_SCANS;
           setAccumulated(newAccumulated);
           setAccumulatedScans(newAccumulated);
           setWatchingAd(false);
-          setStatusMsg('🎉 +' + AD_BONUS_SCANS + ' escaneos añadidos');
+          setStatusMsg('🎉 +' + AD_BONUS_SCANS + ' escaneo añadido');
           setTimeout(() => setStatusMsg(''), 3000);
           return 0;
         }
@@ -323,16 +318,16 @@ export default function ScannerPage() {
                   {remainingScans} escaneo{remainingScans !== 1 ? 's' : ''} disponible{remainingScans !== 1 ? 's' : ''}
                 </p>
                 <p className="text-[10px] text-gray-500">
-                  {scansToday}/{DAILY_SCAN_LIMIT} diarios · {accumulated} acumulados
+                  {scansToday}/{DAILY_SCAN_LIMIT} diarios · {accumulated} extra
                 </p>
               </div>
             </div>
-            {accumulated < MAX_ACCUMULATED && (
-              <button onClick={watchAd} disabled={watchingAd}
-                className="flex items-center gap-1.5 bg-green-500/10 border border-green-500/20 text-green-400 rounded-xl px-3 py-2 text-xs font-bold active:scale-95 transition-transform disabled:opacity-50">
-                {watchingAd ? <><Loader2 size={12} className="animate-spin" />{adCountdown}s</> : <><Tv size={12} />+{AD_BONUS_SCANS}</>}
-              </button>
-            )}
+            <button onClick={watchAd} disabled={watchingAd}
+              className="flex items-center gap-1.5 bg-green-500/10 border border-green-500/20 text-green-400 rounded-xl px-3 py-2 text-xs font-bold active:scale-95 transition-transform disabled:opacity-50">
+              {watchingAd
+                ? <><Loader2 size={12} className="animate-spin" />{adCountdown}s</>
+                : <><Tv size={12} />+1 escaneo</>}
+            </button>
           </div>
         )}
       </div>
@@ -377,9 +372,11 @@ export default function ScannerPage() {
           <div className="bg-orange-500/10 border border-orange-500/30 rounded-2xl p-4 space-y-3">
             <p className="text-sm font-bold text-orange-300">⚡ Límite diario alcanzado</p>
             <p className="text-xs text-orange-400/80">Has usado tus {DAILY_SCAN_LIMIT} escaneos de hoy. Ve un anuncio para conseguir más o hazte GO para escaneos ilimitados.</p>
-            <button onClick={watchAd} disabled={watchingAd || accumulated >= MAX_ACCUMULATED}
+            <button onClick={watchAd} disabled={watchingAd}
               className="w-full flex items-center justify-center gap-2 bg-green-500/10 border border-green-500/20 text-green-400 rounded-xl py-3 text-sm font-bold active:scale-95 transition-transform disabled:opacity-50">
-              {watchingAd ? <><Loader2 size={14} className="animate-spin" />Viendo anuncio... {adCountdown}s</> : <><Tv size={14} />Ver anuncio → +{AD_BONUS_SCANS} escaneos</>}
+              {watchingAd
+                ? <><Loader2 size={14} className="animate-spin" />Viendo anuncio... {adCountdown}s</>
+                : <><Tv size={14} />Ver anuncio → +1 escaneo</>}
             </button>
           </div>
         )}
