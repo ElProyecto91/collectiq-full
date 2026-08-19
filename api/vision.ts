@@ -15,7 +15,7 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   try {
-    const apiKey = (globalThis as any).process?.env?.GEMINI_API_KEY ?? '';
+    const apiKey = process.env.GEMINI_API_KEY ?? '';
     if (!apiKey) {
       return new Response(JSON.stringify({ error: 'Missing GEMINI_API_KEY' }), { status: 500, headers });
     }
