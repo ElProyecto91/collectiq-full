@@ -34,28 +34,24 @@ async function toBase64(file: File): Promise<string> {
   });
 }
 
-function extractCardName(fullText: string): string[] {
-  const lines = fullText.split('\n').map(l => l.trim()).filter(Boolean);
-  const skipPrefixes = ['FASE','FASE2','FASE 2','BASIC','STAGE','LEVEL','ITEM','TRAINER','ENERGY','HP','PS','GX','EX','BASICO','BÁSICO','HOLOGRAPHIC','POKEMON','POKÉMON','SUPPORTER','TOOL','VMAX','VSTAR','TAG','TEAM','EASE'];
-  const candidates: string[] = [];
-  for (const line of lines.slice(0, 12)) {
-    let cleaned = line.replace(/[^a-zA-ZÀ-ÿ\s\-]/g, '').trim();
-    for (const prefix of skipPrefixes) {
-      cleaned = cleaned.replace(new RegExp(`^${prefix}\\s*`, 'i'), '').trim();
-    }
-    if (cleaned.length >= 3 && cleaned.length <= 25 && !skipPrefixes.some(s => cleaned.toUpperCase().trim() === s.trim()) && !cleaned.match(/^\d+$/) && /[a-zA-Z]/.test(cleaned)) {
-      candidates.push(cleaned);
-    }
-  }
-  return candidates;
-}
-
 async function extractCardNameWithVision(base64: string): Promise<{ names: string[]; rawText: string }> {
-  const res = await fetch('/api/vision', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image: base64 }) });
-  if (!res.ok) { const err = await res.json(); throw new Error(err.error ?? `Vision error: ${res.status}`); }
+  const res = await fetch('/api/vision', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image: base64 }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error ?? `Vision error: ${res.status}`);
+  }
+
   const data = await res.json();
   if (!data.text) throw new Error('No se detectó texto en la imagen');
-  return { names: extractCardName(data.text), rawText: data.text };
+
+  // Gemini ya devuelve el nombre limpio — usarlo directamente
+  const name = data.text.trim().replace(/^["']|["']$/g, '');
+  return { names: [name], rawText: name };
 }
 
 function getTCGPlayerPrice(card: PokemonCard): number | null {
@@ -203,15 +199,15 @@ export default function ScannerPage() {
     if (!currentFile || !canScan) return;
     setPhase('analyzing');
     setProgress(20);
-    setStatusMsg('Enviando imagen a Google Vision…');
+    setStatusMsg('Enviando imagen a Gemini…');
     try {
       const base64 = await toBase64(currentFile);
       setProgress(50);
-      setStatusMsg('Leyendo texto de la carta…');
+      setStatusMsg('Identificando la carta…');
       const { names } = await extractCardNameWithVision(base64);
       setProgress(70);
 
-      if (names.length === 0) {
+      if (names.length === 0 || !names[0]) {
         setDetectedName('');
         setSearchQuery('');
         setResults([]);
@@ -223,11 +219,11 @@ export default function ScannerPage() {
       let usedName = '';
       for (const name of names) {
         setStatusMsg(`Buscando "${name}"…`);
-        setProgress(70 + (names.indexOf(name) * 10));
         cards = await searchPokemonTCG(name);
         if (cards.length > 0) { usedName = name; break; }
       }
 
+      // Consumir escaneo
       if (accumulated > 0) {
         const newAcc = accumulated - 1;
         setAccumulated(newAcc);
