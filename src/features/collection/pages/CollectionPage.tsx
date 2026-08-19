@@ -595,14 +595,19 @@ const [filterRarity, setFilterRarity] = useState<string>('');
 
   const wishlistCardIds = new Set(wishlistItems.map(w => w.cardId));
 
-  const filtered = [...cards]
-    .filter(c => c.cardName.toLowerCase().includes(search.toLowerCase()))
-    .sort((a, b) => {
-      if (sort === 'recent') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-      if (sort === 'name') return a.cardName.localeCompare(b.cardName);
-      if (sort === 'value') return (b.marketPrice ?? b.tcgplayerPrice ?? 0) - (a.marketPrice ?? a.tcgplayerPrice ?? 0);
-      return 0;
-    });
+  const availableSets = [...new Set(cards.map(c => c.setName))].sort();
+const availableRarities = [...new Set(cards.map(c => c.rarity).filter(Boolean))].sort() as string[];
+
+const filtered = [...cards]
+  .filter(c => c.cardName.toLowerCase().includes(search.toLowerCase()))
+  .filter(c => filterSet ? c.setName === filterSet : true)
+  .filter(c => filterRarity ? (c.rarity ?? '') === filterRarity : true)
+  .sort((a, b) => {
+    if (sort === 'recent') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    if (sort === 'name') return a.cardName.localeCompare(b.cardName);
+    if (sort === 'value') return (b.marketPrice ?? b.tcgplayerPrice ?? 0) - (a.marketPrice ?? a.tcgplayerPrice ?? 0);
+    return 0;
+  });
 
   const totalCards = cards.reduce((s, c) => s + c.quantity, 0);
   const uniqueCards = cards.length;
@@ -704,6 +709,35 @@ const [filterRarity, setFilterRarity] = useState<string>('');
                   placeholder={t.collection.searchPlaceholder}
                   className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50" />
               </div>
+{availableSets.length > 1 && (
+  <div className="flex gap-2 overflow-x-auto pb-1">
+    <button onClick={() => setFilterSet('')}
+      className={'shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ' + (!filterSet ? 'bg-blue-600 text-white border-blue-600' : 'bg-white/5 border-white/10 text-gray-400')}>
+      Todos los sets
+    </button>
+    {availableSets.map(s => (
+      <button key={s} onClick={() => setFilterSet(filterSet === s ? '' : s)}
+        className={'shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-all truncate max-w-[120px] ' + (filterSet === s ? 'bg-blue-600 text-white border-blue-600' : 'bg-white/5 border-white/10 text-gray-400')}>
+        {s}
+      </button>
+    ))}
+  </div>
+)}
+
+{availableRarities.length > 1 && (
+  <div className="flex gap-2 overflow-x-auto pb-1">
+    <button onClick={() => setFilterRarity('')}
+      className={'shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ' + (!filterRarity ? 'bg-purple-600 text-white border-purple-600' : 'bg-white/5 border-white/10 text-gray-400')}>
+      Todas las rarezas
+    </button>
+    {availableRarities.map(r => (
+      <button key={r} onClick={() => setFilterRarity(filterRarity === r ? '' : r)}
+        className={'shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-all truncate max-w-[120px] ' + (filterRarity === r ? 'bg-purple-600 text-white border-purple-600' : 'bg-white/5 border-white/10 text-gray-400')}>
+        {r}
+      </button>
+    ))}
+  </div>
+)}
               <div className="flex items-center gap-2 overflow-x-auto pb-1">
                 <span className="shrink-0 text-xs text-gray-500">{t.collection.sort}</span>
                 {(['recent', 'name', 'value'] as SortOption[]).map(opt => (
