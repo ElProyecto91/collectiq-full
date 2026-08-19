@@ -6,7 +6,7 @@ import { useUserStore } from '@/store';
 
 const FREE_FEATURES = [
   '5 escaneos con IA al dia',
-  'Ver anuncios para conseguir +2 escaneos extra',
+  'Ver anuncios para conseguir +1 escaneo extra sin límite',
   'Coleccion ilimitada',
   'Explorador de cartas',
   'Deck builder completo',
@@ -126,7 +126,7 @@ export function PremiumPage() {
               <p className="text-2xl font-black text-yellow-400">{GO_PRICE_STARS} Stars</p>
               <p className="text-sm text-gray-500">/mes</p>
             </div>
-            <p className="text-xs text-gray-600">~1.99€ · Cancela cuando quieras</p>
+            <p className="text-xs text-gray-600">~1.80€ · Sin renovación automática</p>
           </div>
         )}
 
@@ -182,7 +182,9 @@ export function PremiumPage() {
             ) : (
               <button onClick={handleUpgrade} disabled={isPaying}
                 className="w-full py-2 rounded-xl bg-gradient-to-r from-yellow-500 to-orange-500 text-black text-xs font-black active:scale-95 transition-transform disabled:opacity-50 flex items-center justify-center gap-1.5">
-                {isPaying ? <><Loader2 size={12} className="animate-spin" />Procesando...</> : <>⭐ Activar GO — {GO_PRICE_STARS} Stars</>}
+                {isPaying
+                  ? <><Loader2 size={12} className="animate-spin" />Procesando...</>
+                  : <>⭐ Activar GO — {GO_PRICE_STARS} Stars</>}
               </button>
             )}
           </div>
@@ -201,7 +203,7 @@ export function PremiumPage() {
             <p className="text-sm text-white">Con el plan gratuito tienes <span className="text-blue-400 font-bold">5 escaneos</span> al día con IA.</p>
             <div className="flex items-start gap-2 bg-green-500/10 border border-green-500/20 rounded-xl px-3 py-2.5">
               <Tv size={14} className="text-green-400 shrink-0 mt-0.5" />
-              <p className="text-xs text-green-300">Ve un anuncio y consigue <span className="font-bold">+2 escaneos extra</span> acumulables (máx. 10).</p>
+              <p className="text-xs text-green-300">Ve un anuncio y consigue <span className="font-bold">+1 escaneo extra</span> sin límite diario.</p>
             </div>
             <p className="text-xs text-gray-500">Con <span className="text-yellow-400 font-bold">CollectIQ GO</span> los escaneos son ilimitados y sin publicidad.</p>
           </div>
@@ -212,9 +214,9 @@ export function PremiumPage() {
           <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Preguntas frecuentes</p>
           {[
             { q: '¿Que son las Telegram Stars?', a: 'Son la moneda virtual de Telegram. Puedes comprarlas desde la app de Telegram con tarjeta normal, Apple Pay o Google Pay.' },
-            { q: '¿Puedo cancelar cuando quiera?', a: 'Si, el plan es mensual y no se renueva automáticamente. Cada mes decides si quieres continuar.' },
-            { q: '¿Pierdo mis datos si cancelo?', a: 'No, tu coleccion y datos siempre se mantienen independientemente del plan.' },
-            { q: '¿Cuándo se activa el GO?', a: 'En segundos después del pago. Si no se activa, reinicia la app.' },
+            { q: '¿Se renueva automáticamente?', a: 'No, el plan es mensual y no se renueva solo. Cada mes decides si quieres continuar.' },
+            { q: '¿Pierdo mis datos si no renuevo?', a: 'No, tu coleccion y datos siempre se mantienen independientemente del plan.' },
+            { q: '¿Cuándo se activa el GO?', a: 'En segundos después del pago. Si no se activa, cierra y vuelve a abrir la app.' },
           ].map(item => (
             <div key={item.q} className="space-y-1">
               <p className="text-xs font-bold text-white">{item.q}</p>
