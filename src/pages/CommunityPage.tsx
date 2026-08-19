@@ -3,6 +3,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useUserStore } from '@/store';
+import { useMissions } from '@/hooks/use-missions';
+import { GOBadge } from '@/components/GOBadge';
 
 interface PublicDeck {
   id: string;
@@ -24,8 +26,10 @@ export function CommunityPage() {
   const [decks, setDecks] = useState<PublicDeck[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [goUserIds, setGoUserIds] = useState<Set<number>>(new Set());
   const navigate = useNavigate();
   const telegramUser = useUserStore((s) => s.telegramUser);
+  const { updateMission } = useMissions();
 
   useEffect(() => {
     if (activeTab === 'decks') loadDecks();
@@ -44,27 +48,17 @@ export function CommunityPage() {
       if (!decksData) { setDecks([]); return; }
 
       const decksWithStats = await Promise.all(decksData.map(async deck => {
-        const { count: votes } = await supabase
-          .from('deck_votes')
-          .select('*', { count: 'exact', head: true })
-          .eq('deck_id', deck.id);
-
-        const { count: copies } = await supabase
-          .from('deck_copies')
-          .select('*', { count: 'exact', head: true })
-          .eq('deck_id', deck.id);
-
-        const { data: userVoteData } = await supabase
-          .from('deck_votes')
-          .select('id')
-          .eq('deck_id', deck.id)
-          .eq('telegram_user_id', telegramUser?.id ?? 0)
-          .maybeSingle();
-
-        const { data: cards } = await supabase
-          .from('deck_cards')
-          .select('supertype, quantity')
-          .eq('deck_id', deck.id);
+        const [
+          { count: votes },
+          { count: copies },
+          { data: userVoteData },
+          { data: cards },
+        ] = await Promise.all([
+          supabase.from('deck_votes').select('*', { count: 'exact', head: true }).eq('deck_id', deck.id),
+          supabase.from('deck_copies').select('*', { count: 'exact', head: true }).eq('deck_id', deck.id),
+          supabase.from('deck_votes').select('id').eq('deck_id', deck.id).eq('telegram_user_id', telegramUser?.id ?? 0).maybeSingle(),
+          supabase.from('deck_cards').select('supertype, quantity').eq('deck_id', deck.id),
+        ]);
 
         return {
           ...deck,
@@ -76,6 +70,19 @@ export function CommunityPage() {
       }));
 
       setDecks(decksWithStats);
+
+      // Cargar GO de todos los autores de golpe
+      const authorIds = [...new Set(decksData.map(d => d.telegram_user_id))];
+      const now = new Date().toISOString();
+      const { data: goData } = await supabase
+        .from('user_premium')
+        .select('telegram_user_id')
+        .in('telegram_user_id', authorIds)
+        .eq('plan', 'go')
+        .gt('expires_at', now);
+
+      setGoUserIds(new Set((goData ?? []).map(d => d.telegram_user_id)));
+
     } finally {
       setIsLoading(false);
     }
@@ -88,29 +95,18 @@ export function CommunityPage() {
       await supabase.from('deck_votes').delete()
         .eq('deck_id', deck.id)
         .eq('telegram_user_id', telegramUser.id);
-      setDecks(prev => prev.map(d => d.id === deck.id
-        ? { ...d, votes: d.votes - 1, userVoted: false }
-        : d));
+      setDecks(prev => prev.map(d => d.id === deck.id ? { ...d, votes: d.votes - 1, userVoted: false } : d));
     } else {
-      await supabase.from('deck_votes').insert({
-        deck_id: deck.id,
-        telegram_user_id: telegramUser.id,
-      });
-      setDecks(prev => prev.map(d => d.id === deck.id
-        ? { ...d, votes: d.votes + 1, userVoted: true }
-        : d));
+      await supabase.from('deck_votes').insert({ deck_id: deck.id, telegram_user_id: telegramUser.id });
+      setDecks(prev => prev.map(d => d.id === deck.id ? { ...d, votes: d.votes + 1, userVoted: true } : d));
+      await updateMission('vote_deck');
     }
   };
 
   const handleCopy = async (deck: PublicDeck) => {
     if (!telegramUser?.id) return;
-    await supabase.from('deck_copies').insert({
-      deck_id: deck.id,
-      telegram_user_id: telegramUser.id,
-    });
-    setDecks(prev => prev.map(d => d.id === deck.id
-      ? { ...d, copies: d.copies + 1 }
-      : d));
+    await supabase.from('deck_copies').insert({ deck_id: deck.id, telegram_user_id: telegramUser.id });
+    setDecks(prev => prev.map(d => d.id === deck.id ? { ...d, copies: d.copies + 1 } : d));
     alert('Mazo copiado — proximamente podras verlo en Mis Mazos');
   };
 
@@ -147,8 +143,7 @@ export function CommunityPage() {
             <button key={tab.key}
               onClick={() => setActiveTab(tab.key as CommunityTab)}
               className={'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors ' + (activeTab === tab.key ? 'bg-blue-600 text-white' : 'text-gray-400')}>
-              {tab.icon}
-              {tab.label}
+              {tab.icon}{tab.label}
             </button>
           ))}
         </div>
@@ -187,8 +182,7 @@ export function CommunityPage() {
                 </div>
                 <button onClick={() => navigate('/decks/new')}
                   className="bg-blue-600 text-white rounded-2xl px-6 py-3 font-semibold flex items-center gap-2 active:scale-95 transition-transform">
-                  <Plus size={18} />
-                  Crear mi primer mazo
+                  <Plus size={18} />Crear mi primer mazo
                 </button>
               </div>
             ) : (
@@ -199,23 +193,22 @@ export function CommunityPage() {
                   const energyCount = deck.cards.filter(c => c.supertype === 'Energy').reduce((s, c) => s + c.quantity, 0);
                   const totalCards = deck.cards.reduce((s, c) => s + c.quantity, 0);
                   const isOwn = deck.telegram_user_id === telegramUser?.id;
+                  const isAuthorGO = goUserIds.has(deck.telegram_user_id);
 
                   return (
                     <div key={deck.id} className="bg-[#111118] border border-white/8 rounded-2xl overflow-hidden cursor-pointer" onClick={() => navigate('/decks/' + deck.id)}>
                       <div className="relative h-20 bg-gradient-to-r from-blue-950/50 to-purple-950/50 overflow-hidden">
                         {deck.cover_card_image && (
-                          <img src={deck.cover_card_image} alt=""
-                            className="absolute right-4 top-0 h-full w-20 object-cover opacity-40 rounded-lg" />
+                          <img src={deck.cover_card_image} alt="" className="absolute right-4 top-0 h-full w-20 object-cover opacity-40 rounded-lg" />
                         )}
                         <div className="absolute inset-0 bg-gradient-to-r from-[#111118] via-[#111118]/80 to-transparent" />
                         <div className="absolute bottom-3 left-4">
                           <div className="flex items-center gap-2">
                             <p className="text-sm font-bold text-white">{deck.name}</p>
                             {isOwn && <span className="text-[9px] bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded-full">Tuyo</span>}
+                            {isAuthorGO && <GOBadge size="xs" />}
                           </div>
-                          {deck.description && (
-                            <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{deck.description}</p>
-                          )}
+                          {deck.description && <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{deck.description}</p>}
                         </div>
                       </div>
 
@@ -224,27 +217,22 @@ export function CommunityPage() {
                           <span>{'🎴 ' + pokemonCount + ' · 🎓 ' + trainerCount + ' · ⚡ ' + energyCount}</span>
                           <span className={totalCards === 60 ? 'text-green-400' : 'text-gray-500'}>{totalCards}/60</span>
                         </div>
-
                         <div className="w-full bg-white/10 rounded-full h-1 flex overflow-hidden">
                           <div className="bg-blue-500 h-1" style={{ width: (pokemonCount / 60 * 100) + '%' }} />
                           <div className="bg-yellow-500 h-1" style={{ width: (trainerCount / 60 * 100) + '%' }} />
                           <div className="bg-red-500 h-1" style={{ width: (energyCount / 60 * 100) + '%' }} />
                         </div>
-
                         <div className="flex gap-2">
-                          <button onClick={() => handleVote(deck)}
+                          <button onClick={e => { e.stopPropagation(); handleVote(deck); }}
                             className={'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-medium border transition-all ' + (
-                              deck.userVoted
-                                ? 'bg-pink-500/10 border-pink-500/30 text-pink-400'
-                                : 'bg-white/5 border-white/10 text-gray-400 active:scale-95'
+                              deck.userVoted ? 'bg-pink-500/10 border-pink-500/30 text-pink-400' : 'bg-white/5 border-white/10 text-gray-400 active:scale-95'
                             )}>
                             <Heart size={13} className={deck.userVoted ? 'fill-pink-400' : ''} />
                             {deck.votes} votos
                           </button>
-                          <button onClick={() => handleCopy(deck)}
+                          <button onClick={e => { e.stopPropagation(); handleCopy(deck); }}
                             className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-medium border border-white/10 bg-white/5 text-gray-400 active:scale-95 transition-transform">
-                            <Copy size={13} />
-                            {deck.copies} copias
+                            <Copy size={13} />{deck.copies} copias
                           </button>
                         </div>
                       </div>
@@ -279,19 +267,20 @@ export function CommunityPage() {
             ) : (
               ranked.map((deck, i) => (
                 <div key={deck.id} className="flex items-center gap-3 bg-[#111118] border border-white/8 rounded-xl px-4 py-3 cursor-pointer" onClick={() => navigate('/decks/' + deck.id)}>
-                  <span className={'text-lg font-bold w-6 text-center ' + (
-                    i === 0 ? 'text-yellow-400' : i === 1 ? 'text-gray-300' : i === 2 ? 'text-amber-600' : 'text-gray-600'
-                  )}>
+                  <span className={'text-lg font-bold w-6 text-center ' + (i === 0 ? 'text-yellow-400' : i === 1 ? 'text-gray-300' : i === 2 ? 'text-amber-600' : 'text-gray-600')}>
                     {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1)}
                   </span>
                   {deck.cover_card_image && (
                     <img src={deck.cover_card_image} alt={deck.name} className="w-10 h-14 object-cover rounded" />
                   )}
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold truncate">{deck.name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-bold truncate">{deck.name}</p>
+                      {goUserIds.has(deck.telegram_user_id) && <GOBadge size="xs" />}
+                    </div>
                     <p className="text-xs text-gray-500">{deck.votes} votos · {deck.copies} copias</p>
                   </div>
-                  <button onClick={() => handleVote(deck)}
+                  <button onClick={e => { e.stopPropagation(); handleVote(deck); }}
                     className={'w-9 h-9 rounded-xl border flex items-center justify-center transition-all ' + (
                       deck.userVoted ? 'bg-pink-500/10 border-pink-500/30 text-pink-400' : 'bg-white/5 border-white/10 text-gray-400'
                     )}>
