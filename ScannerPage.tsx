@@ -9,6 +9,7 @@ import { cx } from '@/utils';
 import { useCreateCollectionItem } from '@/hooks/use-collection';
 import { useUserStore } from '@/store';
 import { supabase } from '@/lib/supabase';
+import { useMissions } from '@/hooks/use-missions';
 
 interface PokemonCard {
   id: string; name: string; number: string; rarity?: string;
@@ -82,31 +83,16 @@ function getRarityColor(rarity?: string): string {
   return 'text-gray-400';
 }
 
-function getTodayKey() {
-  return 'scans_' + new Date().toISOString().split('T')[0];
-}
-
-function getScansToday(): number {
-  return parseInt(localStorage.getItem(getTodayKey()) ?? '0');
-}
-
-function incrementScansToday() {
-  localStorage.setItem(getTodayKey(), String(getScansToday() + 1));
-}
-
-function getAccumulatedScans(): number {
-  return parseInt(localStorage.getItem('scans_accumulated') ?? '0');
-}
-
-function setAccumulatedScans(n: number) {
-  localStorage.setItem('scans_accumulated', String(Math.min(n, MAX_ACCUMULATED)));
-}
+function getTodayKey() { return 'scans_' + new Date().toISOString().split('T')[0]; }
+function getScansToday(): number { return parseInt(localStorage.getItem(getTodayKey()) ?? '0'); }
+function incrementScansToday() { localStorage.setItem(getTodayKey(), String(getScansToday() + 1)); }
+function getAccumulatedScans(): number { return parseInt(localStorage.getItem('scans_accumulated') ?? '0'); }
+function setAccumulatedScans(n: number) { localStorage.setItem('scans_accumulated', String(Math.min(n, MAX_ACCUMULATED))); }
 
 export default function ScannerPage() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showTutorial] = useState(true);
-
   const [phase, setPhase] = useState<ScanPhase>('idle');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [currentFile, setCurrentFile] = useState<File | null>(null);
@@ -117,7 +103,6 @@ export default function ScannerPage() {
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const [statusMsg, setStatusMsg] = useState('');
   const [progress, setProgress] = useState(0);
-
   const [scansToday, setScansToday] = useState(getScansToday());
   const [accumulated, setAccumulated] = useState(getAccumulatedScans());
   const [isPremium, setIsPremium] = useState<boolean | null>(null);
@@ -126,9 +111,9 @@ export default function ScannerPage() {
 
   const { mutate: createItem } = useCreateCollectionItem();
   const telegramUser = useUserStore((s) => s.telegramUser);
+  const { updateMission } = useMissions();
 
   useEffect(() => {
-    // Si no hay usuario en 3 segundos, asumimos FREE
     if (!telegramUser?.id) {
       const timeout = setTimeout(() => setIsPremium(false), 3000);
       return () => clearTimeout(timeout);
@@ -273,7 +258,7 @@ export default function ScannerPage() {
     }
   }, [searchQuery]);
 
-  const addCard = (card: PokemonCard) => {
+  const addCard = async (card: PokemonCard) => {
     if (!telegramUser?.id) return;
     createItem({
       cardId: card.id, tcg: 'pokemon', telegramUserId: telegramUser.id,
@@ -286,6 +271,7 @@ export default function ScannerPage() {
     setAddedIds(prev => new Set(prev).add(card.id));
     setStatusMsg(`✅ ${card.name} añadida a tu colección`);
     setTimeout(() => setStatusMsg(''), 3000);
+    await updateMission('add_card');
   };
 
   const reset = () => {
@@ -344,9 +330,7 @@ export default function ScannerPage() {
             {accumulated < MAX_ACCUMULATED && (
               <button onClick={watchAd} disabled={watchingAd}
                 className="flex items-center gap-1.5 bg-green-500/10 border border-green-500/20 text-green-400 rounded-xl px-3 py-2 text-xs font-bold active:scale-95 transition-transform disabled:opacity-50">
-                {watchingAd
-                  ? <><Loader2 size={12} className="animate-spin" />{adCountdown}s</>
-                  : <><Tv size={12} />+{AD_BONUS_SCANS}</>}
+                {watchingAd ? <><Loader2 size={12} className="animate-spin" />{adCountdown}s</> : <><Tv size={12} />+{AD_BONUS_SCANS}</>}
               </button>
             )}
           </div>
@@ -395,9 +379,7 @@ export default function ScannerPage() {
             <p className="text-xs text-orange-400/80">Has usado tus {DAILY_SCAN_LIMIT} escaneos de hoy. Ve un anuncio para conseguir más o hazte GO para escaneos ilimitados.</p>
             <button onClick={watchAd} disabled={watchingAd || accumulated >= MAX_ACCUMULATED}
               className="w-full flex items-center justify-center gap-2 bg-green-500/10 border border-green-500/20 text-green-400 rounded-xl py-3 text-sm font-bold active:scale-95 transition-transform disabled:opacity-50">
-              {watchingAd
-                ? <><Loader2 size={14} className="animate-spin" />Viendo anuncio... {adCountdown}s</>
-                : <><Tv size={14} />Ver anuncio → +{AD_BONUS_SCANS} escaneos</>}
+              {watchingAd ? <><Loader2 size={14} className="animate-spin" />Viendo anuncio... {adCountdown}s</> : <><Tv size={14} />Ver anuncio → +{AD_BONUS_SCANS} escaneos</>}
             </button>
           </div>
         )}
@@ -418,9 +400,7 @@ export default function ScannerPage() {
             <div className="flex-1">
               <p className="text-sm text-yellow-300 font-medium">No encontramos la carta</p>
               <p className="text-xs text-yellow-400/70 mt-1">
-                {detectedName
-                  ? `Detectamos "${detectedName}" pero no hay resultados. Corrige el nombre abajo.`
-                  : 'No detectamos el nombre. Escríbelo manualmente abajo.'}
+                {detectedName ? `Detectamos "${detectedName}" pero no hay resultados. Corrige el nombre abajo.` : 'No detectamos el nombre. Escríbelo manualmente abajo.'}
               </p>
             </div>
           </div>
