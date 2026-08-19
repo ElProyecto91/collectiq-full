@@ -15,9 +15,9 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   try {
-    const apiKey = (globalThis as any).process?.env?.GOOGLE_VISION_API_KEY ?? '';
+    const apiKey = (globalThis as any).process?.env?.GEMINI_API_KEY ?? '';
     if (!apiKey) {
-      return new Response(JSON.stringify({ error: 'Missing GOOGLE_VISION_API_KEY' }), { status: 500, headers });
+      return new Response(JSON.stringify({ error: 'Missing GEMINI_API_KEY' }), { status: 500, headers });
     }
 
     const body = await req.json();
@@ -27,28 +27,46 @@ export default async function handler(req: Request): Promise<Response> {
       return new Response(JSON.stringify({ error: 'Missing image field' }), { status: 400, headers });
     }
 
-    const visionRes = await fetch(
-      `https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`,
+    const geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          requests: [{
-            image: { content: image },
-            features: [{ type: 'TEXT_DETECTION', maxResults: 1 }],
+          contents: [{
+            parts: [
+              {
+                text: 'Extract all text visible in this Pokemon card image. Return only the raw text, one piece per line, no explanations.',
+              },
+              {
+                inline_data: {
+                  mime_type: 'image/jpeg',
+                  data: image,
+                },
+              },
+            ],
           }],
+          generationConfig: {
+            temperature: 0,
+            maxOutputTokens: 256,
+          },
         }),
       }
     );
 
-    const visionData = await visionRes.json();
+    const geminiData = await geminiRes.json();
 
-    if (!visionRes.ok) {
-      const msg = visionData?.error?.message ?? `Vision API error ${visionRes.status}`;
-      return new Response(JSON.stringify({ error: msg }), { status: visionRes.status, headers });
+    if (!geminiRes.ok) {
+      const msg = geminiData?.error?.message ?? `Gemini API error ${geminiRes.status}`;
+      return new Response(JSON.stringify({ error: msg }), { status: geminiRes.status, headers });
     }
 
-    const text: string = visionData?.responses?.[0]?.fullTextAnnotation?.text ?? '';
+    const text: string = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+
+    if (!text) {
+      return new Response(JSON.stringify({ error: 'No text detected' }), { status: 200, headers });
+    }
+
     return new Response(JSON.stringify({ text }), { status: 200, headers });
 
   } catch (err: any) {
