@@ -562,6 +562,8 @@ export function CollectionPage() {
   const [zoomedCard, setZoomedCard] = useState<CollectionItem | null>(null);
   const [showExport, setShowExport] = useState(false);
   const [showImport, setShowImport] = useState(false);
+const [filterSet, setFilterSet] = useState<string>('');
+const [filterRarity, setFilterRarity] = useState<string>('');
   const { activeTCG, setActiveTCG } = useActiveTCG();
 
   const { data: allCards = [], isLoading, refetch } = useCollectionList();
