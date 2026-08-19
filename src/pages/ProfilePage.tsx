@@ -10,6 +10,7 @@ import { useStreak } from '@/hooks/use-streak';
 import { useMissions, DAILY_MISSIONS } from '@/hooks/use-missions';
 import { usePremium } from '@/hooks/use-premium';
 import { AchievementToast } from '@/components/AchievementToast';
+import { GOBadge, GOName } from '@/components/GOBadge';
 import { supabase } from '@/lib/supabase';
 
 const CURRENCIES = ['EUR', 'USD', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'BRL', 'MXN', 'PLN'];
@@ -98,8 +99,8 @@ export function ProfilePage() {
       {/* Avatar */}
       <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 flex items-center gap-4">
         <div className="relative">
-          <div className="w-14 h-14 rounded-full bg-blue-600/20 border border-blue-500/30 flex items-center justify-center shrink-0">
-            <span className="text-xl font-bold text-blue-400">{displayName[0].toUpperCase()}</span>
+          <div className={'w-14 h-14 rounded-full flex items-center justify-center shrink-0 ' + (premium.isGO ? 'bg-yellow-500/20 border-2 border-yellow-500/50' : 'bg-blue-600/20 border border-blue-500/30')}>
+            <span className={'text-xl font-bold ' + (premium.isGO ? 'text-yellow-400' : 'text-blue-400')}>{displayName[0].toUpperCase()}</span>
           </div>
           <div className="absolute -bottom-1 -right-1 bg-yellow-500 rounded-full px-1.5 py-0.5">
             <span className="text-[9px] font-black text-black">{xpData.level}</span>
@@ -107,10 +108,12 @@ export function ProfilePage() {
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <p className="text-white font-bold truncate">{displayName}</p>
-            {premium.isGO && (
-              <span className="text-[9px] bg-yellow-500 text-black font-black px-1.5 py-0.5 rounded-full shrink-0">GO</span>
+            {premium.isGO ? (
+              <p className="font-bold truncate"><GOName name={displayName} /></p>
+            ) : (
+              <p className="text-white font-bold truncate">{displayName}</p>
             )}
+            {premium.isGO && <GOBadge />}
           </div>
           {username && <p className="text-xs text-gray-500 mt-0.5">{username}</p>}
           <p className="text-xs text-yellow-400 mt-0.5 font-medium">{levelName} · {xpData.xp} XP</p>
@@ -237,8 +240,7 @@ export function ProfilePage() {
                 className={'flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-sm border transition-all ' + (
                   savedLang === lang.code ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-white/5 border-white/8 text-gray-400'
                 )}>
-                <span>{lang.flag}</span>
-                <span>{lang.label}</span>
+                <span>{lang.flag}</span><span>{lang.label}</span>
               </button>
             ))}
           </div>
@@ -262,8 +264,7 @@ export function ProfilePage() {
 
       <button onClick={handleSignOut}
         className="w-full flex items-center justify-center gap-2 bg-red-500/10 border border-red-500/20 text-red-400 rounded-2xl py-3.5 font-medium active:scale-95 transition-transform">
-        <LogOut size={18} />
-        {t.profile.signOut}
+        <LogOut size={18} />{t.profile.signOut}
       </button>
 
       <p className="text-center text-xs text-gray-600">{t.profile.version}</p>
