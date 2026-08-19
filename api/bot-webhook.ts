@@ -12,18 +12,93 @@ async function sendMessage(chatId: number, text: string) {
   });
 }
 
+async function answerPreCheckoutQuery(preCheckoutQueryId: string, ok: boolean, errorMessage?: string) {
+  await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/answerPreCheckoutQuery`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      pre_checkout_query_id: preCheckoutQueryId,
+      ok,
+      error_message: errorMessage,
+    }),
+  });
+}
+
+async function activateGO(telegramUserId: number, starsPaid: number) {
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+  // Buscar si ya tiene GO para sumar stars
+  const existing = await fetch(
+    `${SUPABASE_URL}/rest/v1/user_premium?telegram_user_id=eq.${telegramUserId}&select=stars_paid`,
+    { headers: { 'apikey': SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}` } }
+  );
+  const existingData = await existing.json();
+  const previousStars = existingData?.[0]?.stars_paid ?? 0;
+
+  await fetch(`${SUPABASE_URL}/rest/v1/user_premium`, {
+    method: 'POST',
+    headers: {
+      'apikey': SUPABASE_SERVICE_KEY,
+      'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'resolution=merge-duplicates',
+    },
+    body: JSON.stringify({
+      telegram_user_id: telegramUserId,
+      plan: 'go',
+      expires_at: expiresAt,
+      stars_paid: previousStars + starsPaid,
+      updated_at: new Date().toISOString(),
+    }),
+  });
+
+  return expiresAt;
+}
+
 export default async function handler(req: Request) {
   if (req.method !== 'POST') return new Response('OK', { status: 200 });
 
   try {
     const update = await req.json();
+
+    // — Pago pendiente de confirmación —
+    if (update.pre_checkout_query) {
+      const query = update.pre_checkout_query;
+      await answerPreCheckoutQuery(query.id, true);
+      return new Response('OK', { status: 200 });
+    }
+
+    // — Pago completado —
+    if (update.message?.successful_payment) {
+      const payment = update.message.successful_payment;
+      const userId = update.message.from.id;
+      const starsPaid = payment.total_amount;
+
+      let telegramUserId = userId;
+      try {
+        const payload = JSON.parse(payment.invoice_payload);
+        telegramUserId = payload.telegramUserId ?? userId;
+      } catch {}
+
+      const expiresAt = await activateGO(telegramUserId, starsPaid);
+
+      await sendMessage(userId,
+        `⭐ <b>¡Bienvenido a CollectIQ GO!</b>\n\n` +
+        `Tu plan está activo hasta el <b>${new Date(expiresAt).toLocaleDateString('es-ES')}</b>.\n\n` +
+        `Disfruta de escaneos ilimitados y todas las funciones premium. 🚀\n\n` +
+        `Abre la app: https://t.me/CollectIQ_bot/app`
+      );
+
+      return new Response('OK', { status: 200 });
+    }
+
+    // — Mensaje normal — generar código de acceso —
     const message = update.message;
     if (!message) return new Response('OK', { status: 200 });
 
     const chatId = message.chat.id;
     const user = message.from;
 
-    // Generar código para cualquier mensaje
     const array = new Uint8Array(3);
     crypto.getRandomValues(array);
     const code = Array.from(array)
