@@ -26,8 +26,11 @@ export function PublicProfilePage() {
     setIsLoading(true);
     try {
       const [{ data: sessionData }, { data: cardsData }, { data: premiumData }] = await Promise.all([
-        supabase.from('user_sessions').select('username, first_name')
-          .eq('telegram_user_id', parseInt(telegramId!)).maybeSingle(),
+        supabase.from('user_sessions').select('user_data')
+          .eq('telegram_user_id', parseInt(telegramId!))
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
         supabase.from('collection_items').select('*')
           .eq('telegram_user_id', parseInt(telegramId!))
           .order('created_at', { ascending: false }),
@@ -35,12 +38,13 @@ export function PublicProfilePage() {
           .eq('telegram_user_id', parseInt(telegramId!)).maybeSingle(),
       ]);
 
+      const ud = sessionData?.user_data ?? {};
       const isExpired = premiumData?.expires_at ? new Date(premiumData.expires_at) < new Date() : true;
       const isPremium = premiumData?.plan === 'go' && !isExpired;
 
       setUser({
-        username: sessionData?.username ?? null,
-        first_name: sessionData?.first_name ?? null,
+        username: ud.username ?? null,
+        first_name: ud.first_name ?? null,
         isPremium,
       });
       setCards((cardsData ?? []).map(mapCollectionItem));
