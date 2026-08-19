@@ -1,21 +1,10 @@
-// Añadir import
-import { useMissions } from '@/hooks/use-missions';
-
-// Dentro de StatsPage(), añadir:
-const { updateMission } = useMissions();
-
-// En el useEffect de loadSnapshots:
-useEffect(() => {
-  if (!telegramUser?.id) return;
-  loadSnapshots();
-  updateMission('check_value'); // ← añadir esta línea
-}, [telegramUser?.id]);
 import { useEffect, useState } from 'react';
 import { TrendingUp, TrendingDown, Minus, BarChart2, Star, Package } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useUserStore } from '@/store';
 import { useCollectionList } from '@/hooks/use-collection';
 import { useCurrency } from '@/hooks/use-currency';
+import { useMissions } from '@/hooks/use-missions';
 
 interface Snapshot {
   total_value: number;
@@ -67,7 +56,8 @@ function MiniChart({ snapshots }: { snapshots: Snapshot[] }) {
 export function StatsPage() {
   const telegramUser = useUserStore((s) => s.telegramUser);
   const { data: cards = [] } = useCollectionList();
-  const { formatPrice, currency } = useCurrency();
+  const { formatPrice } = useCurrency();
+  const { updateMission } = useMissions();
 
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -95,6 +85,7 @@ export function StatsPage() {
   useEffect(() => {
     if (!telegramUser?.id) return;
     loadSnapshots();
+    updateMission('check_value');
   }, [telegramUser?.id]);
 
   useEffect(() => {
@@ -167,7 +158,6 @@ export function StatsPage() {
         <p className="text-sm text-gray-500">Evolucion y valor de tu coleccion.</p>
       </div>
 
-      {/* Valor total */}
       <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
         <div className="flex items-start justify-between">
           <div>
@@ -196,7 +186,6 @@ export function StatsPage() {
         </div>
       </div>
 
-      {/* Stats generales */}
       <div className="grid grid-cols-2 gap-2">
         {[
           { label: 'Cartas totales', value: totalCards, color: 'text-blue-400', icon: '🃏' },
@@ -214,7 +203,6 @@ export function StatsPage() {
         ))}
       </div>
 
-      {/* Cartas mas valiosas */}
       {topCards.length > 0 && (
         <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
           <div className="flex items-center gap-2">
@@ -240,14 +228,13 @@ export function StatsPage() {
         </div>
       )}
 
-      {/* Sets mas valiosos */}
       {setGroups.length > 0 && (
         <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
           <div className="flex items-center gap-2">
             <Package size={14} className="text-blue-400" />
             <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Sets mas valiosos</p>
           </div>
-          {setGroups.map((group, i) => (
+          {setGroups.map((group) => (
             <div key={group.setName} className="space-y-1">
               <div className="flex items-center justify-between">
                 <p className="text-xs truncate flex-1 mr-2">{group.setName}</p>
@@ -262,7 +249,6 @@ export function StatsPage() {
         </div>
       )}
 
-      {/* ROI */}
       {cards.some(c => c.purchasePrice) && (
         <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
           <div className="flex items-center gap-2">
