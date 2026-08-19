@@ -49,15 +49,25 @@ export function AdminPage() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const { data: sessions } = await supabase
+      const { data: rawSessions } = await supabase
         .from('user_sessions')
-        .select('telegram_user_id, username, first_name, created_at')
+        .select('telegram_user_id, user_data, created_at')
         .order('created_at', { ascending: false })
-        .limit(100);
+        .limit(500);
 
-      if (!sessions) return;
+      if (!rawSessions) return;
+
+      // Deduplicar — quedarse solo con la sesión más reciente por usuario
+      const seen = new Set<number>();
+      const sessions = rawSessions.filter(s => {
+        if (seen.has(s.telegram_user_id)) return false;
+        seen.add(s.telegram_user_id);
+        return true;
+      });
 
       const userStats = await Promise.all(sessions.map(async session => {
+        const ud = session.user_data ?? {};
+
         const [
           { count: totalCards },
           { count: totalDecks },
@@ -70,12 +80,14 @@ export function AdminPage() {
           supabase.from('user_premium').select('plan, expires_at').eq('telegram_user_id', session.telegram_user_id).maybeSingle(),
         ]);
 
-        const isExpired = premiumData?.expires_at ? new Date(premiumData.expires_at) < new Date() : true;
+        const isExpired = premiumData?.expires_at
+          ? new Date(premiumData.expires_at) < new Date()
+          : true;
 
         return {
           telegram_user_id: session.telegram_user_id,
-          username: session.username,
-          first_name: session.first_name,
+          username: ud.username ?? null,
+          first_name: ud.first_name ?? null,
           totalCards: totalCards ?? 0,
           totalDecks: totalDecks ?? 0,
           totalScans: totalScans ?? 0,
