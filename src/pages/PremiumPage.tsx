@@ -1,6 +1,8 @@
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, Zap, Star, Tv } from 'lucide-react';
-import { usePremium, GO_PRICE_STARS, GO_SCAN_LIMIT } from '@/hooks/use-premium';
+import { ArrowLeft, Check, Zap, Star, Tv, Loader2 } from 'lucide-react';
+import { useState } from 'react';
+import { usePremium, GO_PRICE_STARS } from '@/hooks/use-premium';
+import { useUserStore } from '@/store';
 
 const FREE_FEATURES = [
   '5 escaneos con IA al dia',
@@ -32,13 +34,48 @@ const GO_FEATURES = [
 export function PremiumPage() {
   const navigate = useNavigate();
   const { premium, isLoading } = usePremium();
+  const telegramUser = useUserStore((s) => s.telegramUser);
+  const [isPaying, setIsPaying] = useState(false);
+  const [payError, setPayError] = useState('');
 
   const handleUpgrade = async () => {
-    const tg = window.Telegram?.WebApp;
-    if (tg) {
-      tg.showAlert?.('Pago con Telegram Stars proximamente. Mantente al tanto de las novedades en CollectIQ.');
-    } else {
-      alert('Pago con Telegram Stars disponible proxima semana.');
+    if (!telegramUser?.id) {
+      setPayError('Debes estar conectado con Telegram para suscribirte.');
+      return;
+    }
+
+    const tg = (window as any).Telegram?.WebApp;
+    if (!tg) {
+      setPayError('El pago con Stars solo está disponible dentro de Telegram.');
+      return;
+    }
+
+    setIsPaying(true);
+    setPayError('');
+
+    try {
+      const res = await fetch('/api/create-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ telegramUserId: telegramUser.id }),
+      });
+
+      const data = await res.json();
+      if (!data.invoiceLink) throw new Error(data.error ?? 'Error al crear el pago');
+
+      tg.openInvoice(data.invoiceLink, (status: string) => {
+        setIsPaying(false);
+        if (status === 'paid') {
+          tg.showAlert('✅ ¡Pago completado! Tu plan GO estará activo en unos segundos. Reinicia la app para verlo.');
+        } else if (status === 'cancelled') {
+          setPayError('Pago cancelado.');
+        } else if (status === 'failed') {
+          setPayError('El pago falló. Inténtalo de nuevo.');
+        }
+      });
+    } catch (err: any) {
+      setIsPaying(false);
+      setPayError(err?.message ?? 'Error al procesar el pago.');
     }
   };
 
@@ -143,13 +180,19 @@ export function PremiumPage() {
                 <p className="text-xs text-yellow-400 font-bold">✓ Plan activo</p>
               </div>
             ) : (
-              <button onClick={handleUpgrade}
-                className="w-full py-2 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 text-white text-xs font-bold active:scale-95 transition-transform">
-                Activar GO ⭐
+              <button onClick={handleUpgrade} disabled={isPaying}
+                className="w-full py-2 rounded-xl bg-gradient-to-r from-yellow-500 to-orange-500 text-black text-xs font-black active:scale-95 transition-transform disabled:opacity-50 flex items-center justify-center gap-1.5">
+                {isPaying ? <><Loader2 size={12} className="animate-spin" />Procesando...</> : <>⭐ Activar GO — {GO_PRICE_STARS} Stars</>}
               </button>
             )}
           </div>
         </div>
+
+        {payError && (
+          <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-sm text-red-300 text-center">
+            {payError}
+          </div>
+        )}
 
         {/* Info escaneos */}
         {!premium.isGO && (
@@ -168,10 +211,10 @@ export function PremiumPage() {
         <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
           <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Preguntas frecuentes</p>
           {[
-            { q: '¿Que son las Telegram Stars?', a: 'Son la moneda virtual de Telegram. Puedes comprarlas desde la app de Telegram.' },
-            { q: '¿Puedo cancelar cuando quiera?', a: 'Si, el plan se renueva mensualmente y puedes cancelar en cualquier momento.' },
+            { q: '¿Que son las Telegram Stars?', a: 'Son la moneda virtual de Telegram. Puedes comprarlas desde la app de Telegram con tarjeta normal, Apple Pay o Google Pay.' },
+            { q: '¿Puedo cancelar cuando quiera?', a: 'Si, el plan es mensual y no se renueva automáticamente. Cada mes decides si quieres continuar.' },
             { q: '¿Pierdo mis datos si cancelo?', a: 'No, tu coleccion y datos siempre se mantienen independientemente del plan.' },
-            { q: '¿Cuando llega el pago con Stars?', a: 'Estamos implementando el sistema de pago. Muy pronto disponible.' },
+            { q: '¿Cuándo se activa el GO?', a: 'En segundos después del pago. Si no se activa, reinicia la app.' },
           ].map(item => (
             <div key={item.q} className="space-y-1">
               <p className="text-xs font-bold text-white">{item.q}</p>
