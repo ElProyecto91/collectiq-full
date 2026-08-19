@@ -42,11 +42,7 @@ export function PublicProfilePage() {
       const isExpired = premiumData?.expires_at ? new Date(premiumData.expires_at) < new Date() : true;
       const isPremium = premiumData?.plan === 'go' && !isExpired;
 
-      setUser({
-        username: ud.username ?? null,
-        first_name: ud.first_name ?? null,
-        isPremium,
-      });
+      setUser({ username: ud.username ?? null, first_name: ud.first_name ?? null, isPremium });
       setCards((cardsData ?? []).map(mapCollectionItem));
     } catch (err) {
       console.error(err);
@@ -59,22 +55,17 @@ export function PublicProfilePage() {
   const totalCards = cards.reduce((s, c) => s + c.quantity, 0);
   const totalValue = cards.reduce((s, c) => s + ((c.marketPrice ?? c.tcgplayerPrice ?? 0) * c.quantity), 0);
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
+  if (isLoading) return (
+    <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
+      <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white pb-12">
-
       {zoomedCard && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-6"
-          onClick={() => setZoomedCard(null)}>
-          <img src={zoomedCard.imageUrl ?? ''} alt={zoomedCard.cardName}
-            className="w-full max-w-xs rounded-2xl shadow-2xl" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-6" onClick={() => setZoomedCard(null)}>
+          <img src={zoomedCard.imageUrl ?? ''} alt={zoomedCard.cardName} className="w-full max-w-xs rounded-2xl shadow-2xl" />
         </div>
       )}
 
@@ -84,30 +75,19 @@ export function PublicProfilePage() {
             {displayName[0].toUpperCase()}
           </span>
         </div>
-
         <div className="flex items-center justify-center gap-2">
           {user?.isPremium ? (
-            <h1 className="text-xl font-bold" style={{
-              background: 'linear-gradient(135deg, #FFD700, #FFA500, #FFD700)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-            }}>
+            <h1 className="text-xl font-bold" style={{ background: 'linear-gradient(135deg, #FFD700, #FFA500, #FFD700)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
               {displayName}
             </h1>
           ) : (
             <h1 className="text-xl font-bold">{displayName}</h1>
           )}
-          {user?.isPremium && (
-            <span className="text-[9px] bg-yellow-500 text-black font-black px-1.5 py-0.5 rounded-full">GO</span>
-          )}
+          {user?.isPremium && <span className="text-[9px] bg-yellow-500 text-black font-black px-1.5 py-0.5 rounded-full">GO</span>}
         </div>
-
-        {user?.isPremium ? (
-          <p className="text-xs text-yellow-500/80 mt-1">✨ CollectIQ GO · Coleccion publica</p>
-        ) : (
-          <p className="text-xs text-blue-400 mt-1">CollectIQ · Coleccion publica</p>
-        )}
+        {user?.isPremium
+          ? <p className="text-xs text-yellow-500/80 mt-1">✨ CollectIQ GO · Coleccion publica</p>
+          : <p className="text-xs text-blue-400 mt-1">CollectIQ · Coleccion publica</p>}
       </div>
 
       <div className="px-4 mb-6">
@@ -126,9 +106,7 @@ export function PublicProfilePage() {
       </div>
 
       {cards.length === 0 ? (
-        <div className="text-center py-16 text-gray-500">
-          <p>Esta coleccion esta vacia</p>
-        </div>
+        <div className="text-center py-16 text-gray-500"><p>Esta coleccion esta vacia</p></div>
       ) : (
         <div className="px-4 grid grid-cols-3 gap-2">
           {cards.map(card => (
