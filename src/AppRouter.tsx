@@ -5,7 +5,7 @@ import {
   CollectionPage, ExplorerPage, HomePage, ProfilePage,
   WishlistPage, CommunityPage, DecksPage, DeckDetailPage,
   StatsPage, AchievementsPage, MissionsPage, FriendsPage,
-  PremiumPage, NotificationsPage,
+  PremiumPage, NotificationsPage, AdminPage,
 } from '@/pages';
 import { LoginPage } from '@/pages/LoginPage';
 import ScannerPage from '@/features/scanner/ScannerPage';
@@ -34,6 +34,7 @@ const router = createBrowserRouter([
       { path: '/friends', element: <FriendsPage /> },
       { path: '/premium', element: <PremiumPage /> },
       { path: '/notifications', element: <NotificationsPage /> },
+      { path: '/admin', element: <AdminPage /> },
     ],
   },
   { path: RoutePaths.Scanner, element: <ScannerPage /> },
