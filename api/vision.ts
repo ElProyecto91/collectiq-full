@@ -12,18 +12,20 @@ export default async function handler(req: any, res: any): Promise<void> {
     if (!image) { res.status(400).json({ error: 'Missing image field' }); return; }
 
     const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{
             parts: [
-              { text: 'Read the Pokemon card name in this image. Return only the card name, nothing else.' },
+              {
+                text: `This is a Pokemon trading card. The card name is always printed in large bold text at the TOP of the card, above the card illustration. It is the Pokemon's name (like Pikachu, Charizard, Octillery, etc). Return ONLY the Pokemon name, nothing else. Do not return attack names, ability names, or any other text.`
+              },
               { inline_data: { mime_type: 'image/jpeg', data: image } },
             ],
           }],
-          generationConfig: { temperature: 0, maxOutputTokens: 64 },
+          generationConfig: { temperature: 0, maxOutputTokens: 32 },
         }),
       }
     );
