@@ -35,7 +35,7 @@ export function PremiumPage() {
   const handleUpgrade = async () => {
     const tg = window.Telegram?.WebApp;
     if (tg) {
-      tg.showAlert('Pago con Telegram Stars proximamente. Mantente al tanto de las novedades en CollectIQ.');
+      tg.showAlert?.('Pago con Telegram Stars proximamente. Mantente al tanto de las novedades en CollectIQ.');
     } else {
       alert('Pago con Telegram Stars disponible proxima semana.');
     }
