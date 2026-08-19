@@ -1,9 +1,10 @@
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, Zap, Star } from 'lucide-react';
+import { ArrowLeft, Check, Zap, Star, Tv } from 'lucide-react';
 import { usePremium, GO_PRICE_STARS, GO_SCAN_LIMIT } from '@/hooks/use-premium';
 
 const FREE_FEATURES = [
-  '10 escaneos con IA al dia',
+  '5 escaneos con IA al dia',
+  'Ver anuncios para conseguir +2 escaneos extra',
   'Coleccion ilimitada',
   'Explorador de cartas',
   'Deck builder completo',
@@ -30,7 +31,7 @@ const GO_FEATURES = [
 
 export function PremiumPage() {
   const navigate = useNavigate();
-  const { premium, upgradeToGO, isLoading } = usePremium();
+  const { premium, isLoading } = usePremium();
 
   const handleUpgrade = async () => {
     const tg = window.Telegram?.WebApp;
@@ -67,7 +68,12 @@ export function PremiumPage() {
         {premium.isGO ? (
           <div className="bg-gradient-to-br from-yellow-500/20 to-orange-500/20 border border-yellow-500/30 rounded-2xl p-5 text-center space-y-2">
             <p className="text-3xl">⭐</p>
-            <p className="text-xl font-black text-yellow-400">Eres CollectIQ GO</p>
+            <p className="text-xl font-black" style={{
+              background: 'linear-gradient(135deg, #FFD700, #FFA500, #FFD700)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+            }}>Eres CollectIQ GO</p>
             <p className="text-sm text-gray-400">
               Tu plan expira el {premium.expiresAt ? new Date(premium.expiresAt).toLocaleDateString('es-ES') : '—'}
             </p>
@@ -147,10 +153,14 @@ export function PremiumPage() {
 
         {/* Info escaneos */}
         {!premium.isGO && (
-          <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-2">
-            <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Limite de escaneos</p>
-            <p className="text-sm text-white">Con el plan gratuito tienes <span className="text-blue-400 font-bold">{GO_SCAN_LIMIT} escaneos</span> al dia con IA.</p>
-            <p className="text-xs text-gray-500">Con CollectIQ GO los escaneos son ilimitados.</p>
+          <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
+            <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Límite de escaneos</p>
+            <p className="text-sm text-white">Con el plan gratuito tienes <span className="text-blue-400 font-bold">5 escaneos</span> al día con IA.</p>
+            <div className="flex items-start gap-2 bg-green-500/10 border border-green-500/20 rounded-xl px-3 py-2.5">
+              <Tv size={14} className="text-green-400 shrink-0 mt-0.5" />
+              <p className="text-xs text-green-300">Ve un anuncio y consigue <span className="font-bold">+2 escaneos extra</span> acumulables (máx. 10).</p>
+            </div>
+            <p className="text-xs text-gray-500">Con <span className="text-yellow-400 font-bold">CollectIQ GO</span> los escaneos son ilimitados y sin publicidad.</p>
           </div>
         )}
 
@@ -160,7 +170,7 @@ export function PremiumPage() {
           {[
             { q: '¿Que son las Telegram Stars?', a: 'Son la moneda virtual de Telegram. Puedes comprarlas desde la app de Telegram.' },
             { q: '¿Puedo cancelar cuando quiera?', a: 'Si, el plan se renueva mensualmente y puedes cancelar en cualquier momento.' },
-            { q: '¿Perdo mis datos si cancelo?', a: 'No, tu coleccion y datos siempre se mantienen independientemente del plan.' },
+            { q: '¿Pierdo mis datos si cancelo?', a: 'No, tu coleccion y datos siempre se mantienen independientemente del plan.' },
             { q: '¿Cuando llega el pago con Stars?', a: 'Estamos implementando el sistema de pago. Muy pronto disponible.' },
           ].map(item => (
             <div key={item.q} className="space-y-1">
