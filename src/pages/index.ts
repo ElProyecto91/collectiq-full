@@ -14,3 +14,4 @@ export { MissionsPage } from './MissionsPage';
 export { FriendsPage } from './FriendsPage';
 export { PremiumPage } from './PremiumPage';
 export { NotificationsPage } from './NotificationsPage';
+export { AdminPage } from './AdminPage';
