@@ -1,8 +1,8 @@
-import { Heart, Trash2, ExternalLink, ArrowUpDown } from 'lucide-react';
+import { Heart, Trash2, ExternalLink } from 'lucide-react';
 import { useState } from 'react';
 import { useWishlistList, useDeleteWishlistItem } from '@/hooks/use-wishlist';
 
-type SortOption = 'recent' | 'price_asc' | 'price_desc' | 'name';
+type SortOption = 'recent' | 'name';
 
 export function WishlistPage() {
   const [search, setSearch] = useState('');
@@ -12,8 +12,6 @@ export function WishlistPage() {
 
   const sorted = [...items].sort((a, b) => {
     if (sort === 'name') return a.cardName.localeCompare(b.cardName);
-    if (sort === 'price_asc') return (a.marketPrice ?? 0) - (b.marketPrice ?? 0);
-    if (sort === 'price_desc') return (b.marketPrice ?? 0) - (a.marketPrice ?? 0);
     return 0;
   });
 
@@ -38,15 +36,13 @@ export function WishlistPage() {
             placeholder="Busca en tu wishlist"
             className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50" />
 
-          <div className="flex gap-2 overflow-x-auto pb-1">
+          <div className="flex gap-2 pb-1">
             {([
               { key: 'recent', label: 'Recientes' },
-              { key: 'price_desc', label: 'Mayor precio' },
-              { key: 'price_asc', label: 'Menor precio' },
               { key: 'name', label: 'Nombre' },
             ] as { key: SortOption; label: string }[]).map(opt => (
               <button key={opt.key} onClick={() => setSort(opt.key)}
-                className={'shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ' + (
+                className={'px-3 py-1.5 rounded-full text-xs font-medium border transition-all ' + (
                   sort === opt.key ? 'bg-blue-600 text-white border-blue-600' : 'bg-white/5 border-white/10 text-gray-400'
                 )}>
                 {opt.label}
@@ -82,9 +78,6 @@ export function WishlistPage() {
                 <p className="text-xs font-bold truncate text-white">{item.cardName}</p>
                 <p className="text-[10px] text-gray-500 truncate">{item.setName}</p>
                 {item.rarity && <p className="text-[10px] text-blue-400 truncate">{item.rarity}</p>}
-                {(item.marketPrice ?? 0) > 0 && (
-                  <p className="text-[10px] text-green-400 font-bold">€{(item.marketPrice ?? 0).toFixed(2)}</p>
-                )}
               </div>
 
               <div className="px-2.5 pb-2.5 space-y-1.5">
