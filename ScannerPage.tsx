@@ -1,411 +1,536 @@
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft,
-  Camera,
-  ScanLine,
-  RefreshCw,
-  Sparkles,
-  X,
-  Search,
-  CheckCircle2,
-  AlertCircle,
-  Type,
-  Plus,
-  Cpu,
+  ArrowLeft, Camera, ScanLine, RefreshCw, Sparkles, X,
+  Search, CheckCircle2, AlertCircle, Plus, Loader2, PenLine, Tv, Zap,
 } from 'lucide-react';
-import { Button, Card } from '@/components/ui';
 import { RoutePaths } from '@/config';
 import { cx } from '@/utils';
+import { useCreateCollectionItem } from '@/hooks/use-collection';
+import { useUserStore } from '@/store';
+import { supabase } from '@/lib/supabase';
 
-/* ------------------------------------------------------------------ */
-/* Types                                                                */
-/* ------------------------------------------------------------------ */
 interface PokemonCard {
-  id: string;
-  name: string;
-  number: string;
-  rarity?: string;
+  id: string; name: string; number: string; rarity?: string;
   images: { small: string; large: string };
-  set: { name: string; series: string };
+  set: { name: string; series: string; total?: number };
+  cardmarket?: { prices?: { averageSellPrice?: number } };
+  tcgplayer?: { prices?: { normal?: { market?: number }; holofoil?: { market?: number } } };
 }
 
-type ScanPhase = 'idle' | 'preview' | 'analyzing' | 'results' | 'error';
+type ScanPhase = 'idle' | 'preview' | 'analyzing' | 'results' | 'no-results' | 'error';
 
-/* ------------------------------------------------------------------ */
-/* Helpers                                                              */
-/* ------------------------------------------------------------------ */
-function toBase64(file: File): Promise<string> {
+const POKEMON_API_KEY = import.meta.env.VITE_POKEMONTCG_API_KEY ?? '';
+const DAILY_SCAN_LIMIT = 5;
+const MAX_ACCUMULATED = 10;
+const AD_BONUS_SCANS = 2;
+
+async function toBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      resolve(result.split(',')[1]);
-    };
+    reader.onload = () => resolve((reader.result as string).split(',')[1]);
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
 }
 
-async function identifyCardWithAI(base64Image: string): Promise<string> {
-  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error('Missing Anthropic API key');
-
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 100,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'image',
-              source: { type: 'base64', media_type: 'image/jpeg', data: base64Image },
-            },
-            {
-              type: 'text',
-              text: 'This is a Pokemon trading card. Return ONLY the exact Pokemon name printed on the card, nothing else. No punctuation, no explanation.',
-            },
-          ],
-        },
-      ],
-    }),
-  });
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error((err as any)?.error?.message ?? `API error ${response.status}`);
+function extractCardName(fullText: string): string[] {
+  const lines = fullText.split('\n').map(l => l.trim()).filter(Boolean);
+  const skipPrefixes = ['FASE','FASE2','FASE 2','BASIC','STAGE','LEVEL','ITEM','TRAINER','ENERGY','HP','PS','GX','EX','BASICO','BÁSICO','HOLOGRAPHIC','POKEMON','POKÉMON','SUPPORTER','TOOL','VMAX','VSTAR','TAG','TEAM','EASE'];
+  const candidates: string[] = [];
+  for (const line of lines.slice(0, 12)) {
+    let cleaned = line.replace(/[^a-zA-ZÀ-ÿ\s\-]/g, '').trim();
+    for (const prefix of skipPrefixes) {
+      cleaned = cleaned.replace(new RegExp(`^${prefix}\\s*`, 'i'), '').trim();
+    }
+    if (cleaned.length >= 3 && cleaned.length <= 25 && !skipPrefixes.some(s => cleaned.toUpperCase().trim() === s.trim()) && !cleaned.match(/^\d+$/) && /[a-zA-Z]/.test(cleaned)) {
+      candidates.push(cleaned);
+    }
   }
-
-  const data = await response.json();
-  const text = data.content?.[0]?.text?.trim() ?? '';
-  if (!text) throw new Error('No card name returned');
-  return text;
+  return candidates;
 }
 
-async function searchPokemonTCG(name: string): Promise<PokemonCard[]> {
-  const url = `https://api.pokemontcg.io/v2/cards?q=name:"${encodeURIComponent(name)}"&pageSize=20`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('PokéTCG API error');
-  const json = await res.json();
-  return (json.data ?? []) as PokemonCard[];
+async function extractCardNameWithVision(base64: string): Promise<{ names: string[]; rawText: string }> {
+  const res = await fetch('/api/vision', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image: base64 }) });
+  if (!res.ok) { const err = await res.json(); throw new Error(err.error ?? `Vision error: ${res.status}`); }
+  const data = await res.json();
+  if (!data.text) throw new Error('No se detectó texto en la imagen');
+  return { names: extractCardName(data.text), rawText: data.text };
 }
 
-function saveToCollection(card: PokemonCard) {
-  const raw = localStorage.getItem('pokemon-collection');
-  const collection: PokemonCard[] = raw ? JSON.parse(raw) : [];
-  if (!collection.find((c) => c.id === card.id)) {
-    collection.push(card);
-    localStorage.setItem('pokemon-collection', JSON.stringify(collection));
+function getTCGPlayerPrice(card: PokemonCard): number | null {
+  const prices = card.tcgplayer?.prices;
+  if (!prices) return null;
+  return prices.holofoil?.market ?? prices.normal?.market ?? null;
+}
+
+async function searchPokemonTCG(name: string, retries = 3): Promise<PokemonCard[]> {
+  const url = `https://api.pokemontcg.io/v2/cards?q=name:"${encodeURIComponent(name)}"&pageSize=20&orderBy=-set.releaseDate`;
+  for (let i = 0; i < retries; i++) {
+    try {
+      const res = await fetch(url, { headers: { 'X-Api-Key': POKEMON_API_KEY } });
+      if (res.status === 429) { await new Promise(r => setTimeout(r, 1000 * (i + 1))); continue; }
+      if (!res.ok) throw new Error(`PokéTCG error: ${res.status}`);
+      const json = await res.json();
+      return (json.data ?? []) as PokemonCard[];
+    } catch (err) {
+      if (i === retries - 1) throw err;
+      await new Promise(r => setTimeout(r, 800 * (i + 1)));
+    }
   }
+  return [];
 }
 
-/* ------------------------------------------------------------------ */
-/* Component                                                            */
-/* ------------------------------------------------------------------ */
+function getRarityColor(rarity?: string): string {
+  if (!rarity) return 'text-gray-400';
+  const r = rarity.toLowerCase();
+  if (r.includes('secret') || r.includes('hyper')) return 'text-yellow-300';
+  if (r.includes('ultra') || r.includes('rainbow')) return 'text-purple-400';
+  if (r.includes('rare')) return 'text-blue-400';
+  return 'text-gray-400';
+}
+
+function getTodayKey() {
+  return 'scans_' + new Date().toISOString().split('T')[0];
+}
+
+function getScansToday(): number {
+  return parseInt(localStorage.getItem(getTodayKey()) ?? '0');
+}
+
+function incrementScansToday() {
+  const key = getTodayKey();
+  localStorage.setItem(key, String(getScansToday() + 1));
+}
+
+function getAccumulatedScans(): number {
+  return parseInt(localStorage.getItem('scans_accumulated') ?? '0');
+}
+
+function setAccumulatedScans(n: number) {
+  localStorage.setItem('scans_accumulated', String(Math.min(n, MAX_ACCUMULATED)));
+}
+
 export default function ScannerPage() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showTutorial, setShowTutorial] = useState(true);
 
   const [phase, setPhase] = useState<ScanPhase>('idle');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [base64Image, setBase64Image] = useState<string | null>(null);
+  const [currentFile, setCurrentFile] = useState<File | null>(null);
   const [detectedName, setDetectedName] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState<PokemonCard[]>([]);
   const [errorMsg, setErrorMsg] = useState('');
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const [statusMsg, setStatusMsg] = useState('');
+  const [progress, setProgress] = useState(0);
 
-  /* ---- file handling ---- */
+  const [scansToday, setScansToday] = useState(getScansToday());
+  const [accumulated, setAccumulated] = useState(getAccumulatedScans());
+  const [isPremium, setIsPremium] = useState(false);
+  const [watchingAd, setWatchingAd] = useState(false);
+  const [adCountdown, setAdCountdown] = useState(0);
+
+  const { mutate: createItem } = useCreateCollectionItem();
+  const telegramUser = useUserStore((s) => s.telegramUser);
+
+  useEffect(() => {
+    if (!telegramUser?.id) return;
+    supabase.from('user_premium').select('plan, expires_at')
+      .eq('telegram_user_id', telegramUser.id).maybeSingle()
+      .then(({ data }) => {
+        const isExpired = data?.expires_at ? new Date(data.expires_at) < new Date() : true;
+        setIsPremium(data?.plan === 'go' && !isExpired);
+      });
+  }, [telegramUser?.id]);
+
+  const totalScansAvailable = DAILY_SCAN_LIMIT + accumulated;
+  const canScan = isPremium || scansToday < totalScansAvailable;
+  const remainingScans = isPremium ? Infinity : Math.max(0, totalScansAvailable - scansToday);
+
+  const watchAd = useCallback(() => {
+    if (watchingAd) return;
+    if (accumulated >= MAX_ACCUMULATED) {
+      setStatusMsg('Ya tienes el máximo de escaneos acumulados (' + MAX_ACCUMULATED + ')');
+      setTimeout(() => setStatusMsg(''), 3000);
+      return;
+    }
+    setWatchingAd(true);
+    setAdCountdown(5);
+    // SIMULACIÓN — reemplazar con SDK Monetag cuando esté aprobado
+    const interval = setInterval(() => {
+      setAdCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          const newAccumulated = Math.min(accumulated + AD_BONUS_SCANS, MAX_ACCUMULATED);
+          setAccumulated(newAccumulated);
+          setAccumulatedScans(newAccumulated);
+          setWatchingAd(false);
+          setStatusMsg('🎉 +' + AD_BONUS_SCANS + ' escaneos añadidos');
+          setTimeout(() => setStatusMsg(''), 3000);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }, [watchingAd, accumulated]);
+
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     const url = URL.createObjectURL(file);
     setPreviewUrl(url);
-
-    try {
-      const b64 = await toBase64(file);
-      setBase64Image(b64);
-      setPhase('preview');
-      setResults([]);
-      setDetectedName('');
-      setSearchQuery('');
-      setErrorMsg('');
-    } catch {
-      setErrorMsg('Error reading image');
-      setPhase('error');
-    }
-
-    // reset input so same file can be selected again
+    setCurrentFile(file);
+    setPhase('preview');
+    setResults([]);
+    setDetectedName('');
+    setSearchQuery('');
+    setErrorMsg('');
+    setStatusMsg('');
     e.target.value = '';
   }, []);
 
-  /* ---- open camera ---- */
-  const openCamera = () => fileInputRef.current?.click();
+  const openCamera = () => {
+    if (!canScan) {
+      setStatusMsg('Límite diario alcanzado. Ve un anuncio para conseguir más escaneos.');
+      setTimeout(() => setStatusMsg(''), 3000);
+      return;
+    }
+    fileInputRef.current?.click();
+  };
 
-  /* ---- analyze ---- */
   const analyzeCard = useCallback(async () => {
-    if (!base64Image) return;
+    if (!currentFile) return;
+    if (!canScan) return;
+
     setPhase('analyzing');
-    setStatusMsg('Identificando carta con IA…');
+    setProgress(20);
+    setStatusMsg('Enviando imagen a Google Vision…');
 
     try {
-      const name = await identifyCardWithAI(base64Image);
-      setDetectedName(name);
-      setSearchQuery(name);
-      setStatusMsg(`Buscando "${name}" en PokéTCG…`);
+      const base64 = await toBase64(currentFile);
+      setProgress(50);
+      setStatusMsg('Leyendo texto de la carta…');
+      const { names } = await extractCardNameWithVision(base64);
+      setProgress(70);
 
-      const cards = await searchPokemonTCG(name);
+      if (names.length === 0) {
+        setDetectedName('');
+        setSearchQuery('');
+        setResults([]);
+        setPhase('no-results');
+        return;
+      }
+
+      let cards: PokemonCard[] = [];
+      let usedName = '';
+      for (const name of names) {
+        setStatusMsg(`Buscando "${name}"…`);
+        setProgress(70 + (names.indexOf(name) * 10));
+        cards = await searchPokemonTCG(name);
+        if (cards.length > 0) { usedName = name; break; }
+      }
+
+      // Consumir escaneo
+      if (accumulated > 0) {
+        const newAcc = accumulated - 1;
+        setAccumulated(newAcc);
+        setAccumulatedScans(newAcc);
+      } else {
+        incrementScansToday();
+        setScansToday(getScansToday());
+      }
+
+      setProgress(100);
+      setDetectedName(usedName || names[0]);
+      setSearchQuery(usedName || names[0]);
       setResults(cards);
-      setPhase('results');
+      setPhase(cards.length === 0 ? 'no-results' : 'results');
     } catch (err: any) {
-      setErrorMsg(err?.message ?? 'Error analyzing card');
+      const msg = err?.message ?? '';
+      if (msg.includes('fetch') || msg.includes('500') || msg.includes('503') || msg.includes('PokéTCG')) {
+        setErrorMsg('La base de datos oficial de Pokémon está caída o en mantenimiento. Inténtalo de nuevo en unos minutos.');
+      } else {
+        setErrorMsg(msg || 'Error al analizar la carta. Inténtalo de nuevo.');
+      }
       setPhase('error');
     }
-  }, [base64Image]);
+  }, [currentFile, canScan, accumulated]);
 
-  /* ---- manual search ---- */
   const manualSearch = useCallback(async () => {
     if (!searchQuery.trim()) return;
     setPhase('analyzing');
+    setProgress(50);
     setStatusMsg(`Buscando "${searchQuery}"…`);
     try {
       const cards = await searchPokemonTCG(searchQuery.trim());
+      setProgress(100);
       setResults(cards);
-      setPhase('results');
-    } catch (err: any) {
-      setErrorMsg(err?.message ?? 'Search error');
+      setPhase(cards.length === 0 ? 'no-results' : 'results');
+    } catch {
+      setErrorMsg('La base de datos oficial de Pokémon está caída. Inténtalo de nuevo en unos minutos.');
       setPhase('error');
     }
   }, [searchQuery]);
 
-  /* ---- add to collection ---- */
   const addCard = (card: PokemonCard) => {
-    saveToCollection(card);
-    setAddedIds((prev) => new Set(prev).add(card.id));
+    if (!telegramUser?.id) return;
+    const tcgplayerPrice = getTCGPlayerPrice(card);
+    const marketPrice = card.cardmarket?.prices?.averageSellPrice ?? null;
+    createItem({
+      cardId: card.id, tcg: 'pokemon', telegramUserId: telegramUser.id,
+      cardName: card.name, setName: card.set.name, cardNumber: card.number,
+      rarity: card.rarity ?? null, imageUrl: card.images.small, quantity: 1,
+      favorite: false, setTotal: card.set.total ?? null, marketPrice, tcgplayerPrice, currency: 'EUR',
+    });
+    setAddedIds(prev => new Set(prev).add(card.id));
     setStatusMsg(`✅ ${card.name} añadida a tu colección`);
-    setTimeout(() => setStatusMsg(''), 2500);
+    setTimeout(() => setStatusMsg(''), 3000);
   };
 
-  /* ---- reset ---- */
   const reset = () => {
-    setPhase('idle');
-    setPreviewUrl(null);
-    setBase64Image(null);
-    setDetectedName('');
-    setSearchQuery('');
-    setResults([]);
-    setErrorMsg('');
-    setStatusMsg('');
+    setPhase('idle'); setPreviewUrl(null); setCurrentFile(null);
+    setDetectedName(''); setSearchQuery(''); setResults([]);
+    setErrorMsg(''); setStatusMsg(''); setProgress(0);
   };
 
-  /* ---------------------------------------------------------------- */
-  /* Render                                                             */
-  /* ---------------------------------------------------------------- */
   return (
-    <div className="flex flex-col min-h-screen bg-gray-950 text-white pb-24">
-      <div className="flex items-center gap-3 px-4 pt-6 pb-2">
-        <button onClick={() => navigate(RoutePaths.Home)} className="p-2 rounded-lg hover:bg-gray-800">
-          <ArrowLeft className="w-5 h-5" />
-        </button>
-        <div>
-          <p className="text-xs text-blue-400 font-semibold uppercase tracking-widest">ESCÁNER</p>
-          <h1 className="text-xl font-bold">Escanea una carta</h1>
+    <div className="flex flex-col min-h-screen bg-[#0a0a0f] text-white pb-24">
+      <div className="relative px-4 pt-6 pb-4">
+        <div className="absolute inset-0 bg-gradient-to-b from-blue-950/40 to-transparent pointer-events-none" />
+        <div className="flex items-center gap-3 relative z-10">
+          <button onClick={() => navigate(RoutePaths.Home)}
+            className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors">
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+          <div>
+            <p className="text-[10px] text-blue-400 font-bold uppercase tracking-[0.2em]">COLLECTIQ</p>
+            <h1 className="text-lg font-bold leading-tight">Escanear carta</h1>
+          </div>
         </div>
       </div>
 
-      <div className="flex-1 px-4 pt-4 space-y-4">
+      {/* Contador de escaneos */}
+      {!isPremium && (
+        <div className="mx-4 mb-3 bg-[#111118] border border-white/8 rounded-2xl p-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Zap size={16} className="text-blue-400" />
+            <div>
+              <p className="text-xs font-bold text-white">
+                {remainingScans === Infinity ? '∞' : remainingScans} escaneos disponibles
+              </p>
+              <p className="text-[10px] text-gray-500">
+                {scansToday}/{DAILY_SCAN_LIMIT} diarios · {accumulated} acumulados
+              </p>
+            </div>
+          </div>
+          {accumulated < MAX_ACCUMULATED && (
+            <button onClick={watchAd} disabled={watchingAd}
+              className="flex items-center gap-1.5 bg-green-500/10 border border-green-500/20 text-green-400 rounded-xl px-3 py-2 text-xs font-bold active:scale-95 transition-transform disabled:opacity-50">
+              {watchingAd ? (
+                <><Loader2 size={12} className="animate-spin" />{adCountdown}s</>
+              ) : (
+                <><Tv size={12} />+{AD_BONUS_SCANS}</>
+              )}
+            </button>
+          )}
+        </div>
+      )}
 
-        {/* ---- Scanner frame ---- */}
-        <div className="relative bg-gray-900 rounded-2xl overflow-hidden aspect-[3/4] flex items-center justify-center border border-gray-800">
+      <div className="flex-1 px-4 space-y-4">
+        <div className="relative rounded-2xl overflow-hidden bg-[#111118] border border-white/10" style={{ aspectRatio: '3/4' }}>
           {previewUrl ? (
             <img src={previewUrl} alt="Card preview" className="w-full h-full object-contain" />
           ) : (
-            <div className="flex flex-col items-center gap-3 text-gray-500">
-              <ScanLine className="w-12 h-12" />
-              <p className="text-sm">La vista de la cámara aparecerá aquí</p>
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
+              <div className="relative w-32 h-32">
+                <div className="absolute inset-0 rounded-2xl border-2 border-blue-500/30" />
+                <ScanLine className="absolute inset-0 m-auto w-10 h-10 text-blue-400/60" />
+              </div>
+              <p className="text-sm text-gray-500 text-center px-8">Apunta la cámara a una carta</p>
             </div>
           )}
 
-          {/* Corner guides */}
-          {(['tl','tr','bl','br'] as const).map((corner) => (
-            <span
-              key={corner}
-              className={cx(
-                'absolute w-6 h-6 border-blue-400',
-                corner === 'tl' && 'top-3 left-3 border-t-2 border-l-2 rounded-tl-lg',
-                corner === 'tr' && 'top-3 right-3 border-t-2 border-r-2 rounded-tr-lg',
-                corner === 'bl' && 'bottom-3 left-3 border-b-2 border-l-2 rounded-bl-lg',
-                corner === 'br' && 'bottom-3 right-3 border-b-2 border-r-2 rounded-br-lg',
-              )}
-            />
+          {(['tl','tr','bl','br'] as const).map((c) => (
+            <span key={c} className={cx('absolute w-5 h-5 border-blue-400',
+              c === 'tl' && 'top-3 left-3 border-t-2 border-l-2 rounded-tl-lg',
+              c === 'tr' && 'top-3 right-3 border-t-2 border-r-2 rounded-tr-lg',
+              c === 'bl' && 'bottom-3 left-3 border-b-2 border-l-2 rounded-bl-lg',
+              c === 'br' && 'bottom-3 right-3 border-b-2 border-r-2 rounded-br-lg',
+            )} />
           ))}
 
-          {/* Analyzing overlay */}
           {phase === 'analyzing' && (
-            <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center gap-3">
-              <Cpu className="w-10 h-10 text-blue-400 animate-pulse" />
-              <p className="text-sm text-blue-200 text-center px-4">{statusMsg}</p>
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center gap-4 p-6">
+              <Loader2 className="w-10 h-10 text-blue-400 animate-spin" />
+              <p className="text-sm text-blue-200 text-center">{statusMsg}</p>
+              <div className="w-full bg-white/10 rounded-full h-1.5">
+                <div className="bg-gradient-to-r from-blue-500 to-blue-400 h-1.5 rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
+              </div>
             </div>
           )}
         </div>
 
-        {/* ---- Tip ---- */}
-        {phase === 'idle' && (
-          <p className="text-center text-xs text-gray-500">
-            Para mejores resultados, fotografía una sola carta con buena luz y sin reflejos.
-          </p>
-        )}
-
-        {/* ---- Status toast ---- */}
         {statusMsg && phase !== 'analyzing' && (
-          <div className="bg-blue-900/50 border border-blue-700 rounded-xl px-4 py-3 text-sm text-blue-200 text-center">
-            {statusMsg}
-          </div>
+          <div className="bg-blue-500/10 border border-blue-500/30 rounded-2xl px-4 py-3 text-sm text-blue-300 text-center">{statusMsg}</div>
         )}
 
-        {/* ---- Error ---- */}
-        {phase === 'error' && (
-          <Card className="bg-red-900/30 border border-red-700 rounded-xl p-4 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="text-sm text-red-200">{errorMsg}</p>
-              <button onClick={reset} className="mt-2 text-xs text-red-400 underline">Volver a intentar</button>
-            </div>
-          </Card>
-        )}
-
-        {/* ---- Search box (shown after preview or results) ---- */}
-        {(phase === 'preview' || phase === 'results') && (
-          <div className="flex gap-2">
-            <div className="flex-1 relative">
-              <Type className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && manualSearch()}
-                placeholder="Nombre de la carta…"
-                className="w-full bg-gray-800 border border-gray-700 rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
-              />
-            </div>
-            <button
-              onClick={manualSearch}
-              className="bg-gray-800 border border-gray-700 rounded-xl px-4 flex items-center justify-center hover:bg-gray-700"
-            >
-              <Search className="w-4 h-4 text-gray-300" />
+        {/* Límite alcanzado */}
+        {!isPremium && !canScan && phase === 'idle' && (
+          <div className="bg-orange-500/10 border border-orange-500/30 rounded-2xl p-4 space-y-3">
+            <p className="text-sm font-bold text-orange-300">⚡ Límite diario alcanzado</p>
+            <p className="text-xs text-orange-400/80">Has usado tus {DAILY_SCAN_LIMIT} escaneos de hoy. Ve un anuncio para conseguir más o hazte GO para escaneos ilimitados.</p>
+            <button onClick={watchAd} disabled={watchingAd || accumulated >= MAX_ACCUMULATED}
+              className="w-full flex items-center justify-center gap-2 bg-green-500/10 border border-green-500/20 text-green-400 rounded-xl py-3 text-sm font-bold active:scale-95 transition-transform disabled:opacity-50">
+              {watchingAd ? <><Loader2 size={14} className="animate-spin" />Viendo anuncio... {adCountdown}s</> : <><Tv size={14} />Ver anuncio → +{AD_BONUS_SCANS} escaneos</>}
             </button>
           </div>
         )}
 
-        {/* ---- Detected name badge ---- */}
-        {detectedName && phase === 'results' && (
-          <div className="flex items-center gap-2 bg-blue-900/30 border border-blue-800 rounded-xl px-3 py-2">
-            <Sparkles className="w-4 h-4 text-blue-400" />
-            <span className="text-xs text-blue-300">IA detectó: <strong>{detectedName}</strong></span>
+        {phase === 'error' && (
+          <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm text-red-300">{errorMsg}</p>
+              <button onClick={reset} className="mt-2 text-xs text-red-400 underline">Volver a intentar</button>
+            </div>
           </div>
         )}
 
-        {/* ---- Results grid ---- */}
-        {phase === 'results' && (
+        {phase === 'no-results' && (
+          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-2xl p-4 flex items-start gap-3">
+            <PenLine className="w-5 h-5 text-yellow-400 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm text-yellow-300 font-medium">No encontramos la carta</p>
+              <p className="text-xs text-yellow-400/70 mt-1">
+                {detectedName ? `Detectamos "${detectedName}" pero no hay resultados. Corrige el nombre abajo.` : 'No detectamos el nombre. Escríbelo manualmente abajo.'}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {(phase === 'preview' || phase === 'results' || phase === 'no-results') && (
+          <div className="flex gap-2">
+            <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && manualSearch()}
+              placeholder="Nombre de la carta…"
+              className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50"
+              autoFocus={phase === 'no-results'} />
+            <button onClick={manualSearch} className="bg-blue-600 hover:bg-blue-500 rounded-xl px-4 flex items-center justify-center transition-colors">
+              <Search className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {detectedName && phase === 'results' && (
+          <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 rounded-xl px-3 py-2">
+            <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+            <span className="text-xs text-blue-300">Detectado: <strong className="text-white">{detectedName}</strong></span>
+          </div>
+        )}
+
+        {phase === 'results' && results.length > 0 && (
           <>
-            {results.length === 0 ? (
-              <div className="text-center py-8 text-gray-500 text-sm">
-                No se encontraron cartas. Prueba editando el nombre.
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-3">
-                {results.map((card) => (
-                  <Card key={card.id} className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+            <p className="text-xs text-gray-500">{results.length} resultado{results.length !== 1 ? 's' : ''}</p>
+            <div className="grid grid-cols-2 gap-3">
+              {results.map((card) => (
+                <div key={card.id} className="bg-[#111118] border border-white/8 rounded-2xl overflow-hidden">
+                  <div className="relative">
                     <img src={card.images.small} alt={card.name} className="w-full aspect-[2/3] object-cover" />
-                    <div className="p-2 space-y-1">
-                      <p className="text-xs font-semibold truncate">{card.name}</p>
-                      <p className="text-xs text-gray-400 truncate">{card.set.name}</p>
-                      {card.rarity && <p className="text-xs text-yellow-500 truncate">{card.rarity}</p>}
-                      <button
-                        onClick={() => addCard(card)}
-                        disabled={addedIds.has(card.id)}
-                        className={cx(
-                          'w-full mt-1 rounded-lg py-1.5 text-xs font-medium flex items-center justify-center gap-1 transition-colors',
-                          addedIds.has(card.id)
-                            ? 'bg-green-800 text-green-300 cursor-default'
-                            : 'bg-blue-600 hover:bg-blue-500 text-white',
-                        )}
-                      >
-                        {addedIds.has(card.id) ? (
-                          <><CheckCircle2 className="w-3 h-3" /> Añadida</>
-                        ) : (
-                          <><Plus className="w-3 h-3" /> Añadir</>
-                        )}
-                      </button>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            )}
+                    {addedIds.has(card.id) && (
+                      <div className="absolute inset-0 bg-green-500/20 flex items-center justify-center">
+                        <CheckCircle2 className="w-8 h-8 text-green-400" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-2.5 space-y-1.5">
+                    <p className="text-xs font-bold truncate">{card.name}</p>
+                    <p className="text-[10px] text-gray-500 truncate">{card.set.name}</p>
+                    {card.rarity && <p className={cx('text-[10px] truncate font-medium', getRarityColor(card.rarity))}>{card.rarity}</p>}
+                    {card.cardmarket?.prices?.averageSellPrice && <p className="text-[10px] text-green-400 font-medium">€{card.cardmarket.prices.averageSellPrice.toFixed(2)}</p>}
+                    {!card.cardmarket?.prices?.averageSellPrice && getTCGPlayerPrice(card) && <p className="text-[10px] text-green-400 font-medium">${getTCGPlayerPrice(card)?.toFixed(2)}</p>}
+                    <button onClick={() => addCard(card)} disabled={addedIds.has(card.id)}
+                      className={cx('w-full mt-1 rounded-xl py-2 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all',
+                        addedIds.has(card.id) ? 'bg-green-500/20 text-green-400 cursor-default' : 'bg-blue-600 hover:bg-blue-500 text-white active:scale-95')}>
+                      {addedIds.has(card.id) ? <><CheckCircle2 className="w-3 h-3" />Añadida</> : <><Plus className="w-3 h-3" />Añadir</>}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </>
         )}
 
-        {/* ---- Action buttons ---- */}
         <div className="space-y-3 pt-2">
           {phase === 'idle' && (
-            <Button size="md" fullWidth onClick={openCamera} className="bg-blue-600 hover:bg-blue-500 rounded-2xl py-4">
-              <Camera className="w-5 h-5 mr-2" />
-              Escanear carta
-            </Button>
+            <div className="space-y-3">
+              {showTutorial && (
+                <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4 space-y-3">
+                  <p className="text-sm font-semibold text-blue-300">📷 Cómo escanear una carta</p>
+                  <div className="space-y-2 text-xs text-gray-400">
+                    {[
+                      ['1.', 'Toca "Escanear carta" abajo'],
+                      ['2.', 'Se abrirá el selector de archivos. Toca los tres puntos ⋮ arriba a la derecha'],
+                      ['3.', 'Selecciona "Cámara" para hacer una foto directamente'],
+                      ['4.', 'O elige una foto existente de tu galería'],
+                    ].map(([n, text]) => (
+                      <div key={n} className="flex items-start gap-2">
+                        <span className="text-blue-400 font-bold shrink-0">{n}</span>
+                        <span>{text}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <button onClick={openCamera}
+                disabled={!canScan}
+                className={cx('w-full rounded-2xl py-4 font-semibold flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform',
+                  canScan ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-blue-900/40' : 'bg-white/5 text-gray-500 cursor-not-allowed')}>
+                <Camera className="w-5 h-5" />
+                {canScan ? 'Escanear carta' : 'Límite alcanzado'}
+              </button>
+            </div>
           )}
-
           {phase === 'preview' && (
             <div className="flex gap-3">
-              <Button size="md" fullWidth onClick={analyzeCard} className="bg-blue-600 hover:bg-blue-500 rounded-2xl">
-                <Sparkles className="w-4 h-4 mr-2" />
-                Analizar con IA
-              </Button>
-              <Button size="md" variant="outline" onClick={openCamera} className="rounded-2xl px-4">
-                <RefreshCw className="w-4 h-4" />
-              </Button>
+              <button onClick={analyzeCard}
+                className="flex-1 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-2xl py-3.5 font-semibold flex items-center justify-center gap-2 shadow-lg shadow-blue-900/40 active:scale-95 transition-transform">
+                <Sparkles className="w-4 h-4" />Identificar carta
+              </button>
+              <button onClick={openCamera} className="bg-white/8 border border-white/10 rounded-2xl px-4 flex items-center justify-center">
+                <RefreshCw className="w-4 h-4 text-gray-400" />
+              </button>
             </div>
           )}
-
-          {phase === 'results' && (
+          {(phase === 'results' || phase === 'no-results') && (
             <div className="flex gap-3">
-              <Button size="md" fullWidth onClick={openCamera} className="bg-blue-600 hover:bg-blue-500 rounded-2xl">
-                <Camera className="w-4 h-4 mr-2" />
-                Escanear otra
-              </Button>
-              <Button size="md" variant="outline" onClick={reset} className="rounded-2xl px-4">
-                <X className="w-4 h-4" />
-              </Button>
+              <button onClick={openCamera}
+                className="flex-1 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-2xl py-3.5 font-semibold flex items-center justify-center gap-2 active:scale-95 transition-transform">
+                <Camera className="w-4 h-4" />Escanear otra
+              </button>
+              <button onClick={reset} className="bg-white/8 border border-white/10 rounded-2xl px-4 flex items-center justify-center">
+                <X className="w-4 h-4 text-gray-400" />
+              </button>
             </div>
           )}
-
           {phase === 'error' && (
-            <Button size="md" fullWidth onClick={openCamera} className="bg-blue-600 hover:bg-blue-500 rounded-2xl">
-              <Camera className="w-4 h-4 mr-2" />
-              Intentar de nuevo
-            </Button>
+            <button onClick={openCamera}
+              className="w-full bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-2xl py-3.5 font-semibold flex items-center justify-center gap-2 active:scale-95 transition-transform">
+              <Camera className="w-4 h-4" />Intentar de nuevo
+            </button>
           )}
         </div>
+
+        {phase === 'idle' && (
+          <p className="text-center text-[11px] text-gray-600 pb-2">
+            Fotografía la carta con buena luz · Sin reflejos · Una sola carta
+          </p>
+        )}
       </div>
 
-      {/* Hidden file input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        onChange={handleFileChange}
-        className="hidden"
-      />
+      <input ref={fileInputRef} type="file" accept="image/*" capture="environment" onChange={handleFileChange} className="hidden" />
     </div>
   );
 }
