@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Share2, LogOut, Globe, Coins, BarChart2, Trophy, Zap, Users, Bell, Flame } from 'lucide-react';
+import { Share2, LogOut, Globe, Coins, BarChart2, Trophy, Zap, Users, Bell, Flame, Gift, Copy, Check } from 'lucide-react';
 import { useUserStore } from '@/store';
 import { useI18n } from '@/i18n';
 import { useCurrency } from '@/hooks/use-currency';
@@ -33,6 +33,8 @@ export function ProfilePage() {
   const [unreadNotifs, setUnreadNotifs] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
   const [followersCount, setFollowersCount] = useState(0);
+  const [referralCount, setReferralCount] = useState(0);
+  const [copied, setCopied] = useState(false);
 
   const totalCards = cards.reduce((s, c) => s + c.quantity, 0);
   const uniqueCards = cards.length;
@@ -42,6 +44,10 @@ export function ProfilePage() {
   const levelName = getLevelName(xpData.level);
   const savedLang = localStorage.getItem('i18n-locale') ?? 'es';
 
+  const referralLink = telegramUser?.id
+    ? `https://t.me/CollectIQ_bot/app?startapp=ref_${telegramUser.id}`
+    : '';
+
   useEffect(() => {
     if (!telegramUser?.id) return;
     loadSocialStats();
@@ -49,17 +55,26 @@ export function ProfilePage() {
 
   const loadSocialStats = async () => {
     if (!telegramUser?.id) return;
-    const [{ count: notifs }, { count: following }, { count: followers }] = await Promise.all([
+    const [{ count: notifs }, { count: following }, { count: followers }, { count: referrals }] = await Promise.all([
       supabase.from('user_notifications').select('*', { count: 'exact', head: true })
         .eq('telegram_user_id', telegramUser.id).eq('read', false),
       supabase.from('user_follows').select('*', { count: 'exact', head: true })
         .eq('follower_id', telegramUser.id),
       supabase.from('user_follows').select('*', { count: 'exact', head: true })
         .eq('following_id', telegramUser.id),
+      supabase.from('referrals').select('*', { count: 'exact', head: true })
+        .eq('referrer_id', telegramUser.id).eq('completed', true),
     ]);
     setUnreadNotifs(notifs ?? 0);
     setFollowingCount(following ?? 0);
     setFollowersCount(followers ?? 0);
+    setReferralCount(referrals ?? 0);
+  };
+
+  const handleCopyReferral = () => {
+    navigator.clipboard.writeText(referralLink);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const handleShare = () => {
@@ -187,6 +202,38 @@ export function ProfilePage() {
             <p className="text-[10px] text-gray-500 uppercase tracking-wider">{label}</p>
           </div>
         ))}
+      </div>
+
+      {/* Sistema de referidos */}
+      <div className="bg-gradient-to-br from-green-600/10 to-blue-600/10 border border-green-500/20 rounded-2xl p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Gift size={16} className="text-green-400" />
+          <p className="text-sm font-bold text-white">Invita amigos</p>
+          {referralCount > 0 && (
+            <span className="ml-auto text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-bold">
+              {referralCount} completados
+            </span>
+          )}
+        </div>
+        <div className="space-y-1">
+          <p className="text-xs text-gray-400">Tu amigo añade 10 cartas y ambos ganáis:</p>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="bg-white/5 rounded-xl p-2 text-center">
+              <p className="text-lg">🎁</p>
+              <p className="text-xs font-bold text-green-400">Tú: +10 escaneos</p>
+            </div>
+            <div className="bg-white/5 rounded-xl p-2 text-center">
+              <p className="text-lg">⭐</p>
+              <p className="text-xs font-bold text-yellow-400">Él: 12h GO gratis</p>
+            </div>
+          </div>
+        </div>
+        <button onClick={handleCopyReferral}
+          className={'w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-all active:scale-95 ' + (
+            copied ? 'bg-green-500/20 border border-green-500/30 text-green-400' : 'bg-white/5 border border-white/10 text-gray-300'
+          )}>
+          {copied ? <><Check size={14} />¡Enlace copiado!</> : <><Copy size={14} />Copiar enlace de invitación</>}
+        </button>
       </div>
 
       {/* Herramientas */}
