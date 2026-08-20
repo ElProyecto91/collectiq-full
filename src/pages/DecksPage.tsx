@@ -31,6 +31,8 @@ export function DecksPage() {
   const [decks, setDecks] = useState<Deck[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+const [isPremium, setIsPremium] = useState(false);
+const [showPaywall, setShowPaywall] = useState(false);
   const [exportingId, setExportingId] = useState<string | null>(null);
   const [commentsOpen, setCommentsOpen] = useState<string | null>(null);
   const [comments, setComments] = useState<DeckComment[]>([]);
@@ -39,9 +41,15 @@ export function DecksPage() {
   const [sendingComment, setSendingComment] = useState(false);
 
   useEffect(() => {
-    if (!telegramUser?.id) return;
-    loadDecks();
-  }, [telegramUser?.id]);
+  if (!telegramUser?.id) return;
+  loadDecks();
+  supabase.from('user_premium').select('plan, expires_at')
+    .eq('telegram_user_id', telegramUser.id).maybeSingle()
+    .then(({ data }) => {
+      const isExpired = data?.expires_at ? new Date(data.expires_at) < new Date() : true;
+      setIsPremium(data?.plan === 'go' && !isExpired);
+    });
+}, [telegramUser?.id]);
 
   const loadDecks = async () => {
     if (!telegramUser?.id) return;
