@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { InstallPWA } from '@/components/InstallPWA';
 import { useNavigate } from 'react-router-dom';
 import { Compass, Heart, LayoutGrid, ScanLine, TrendingUp, User, DollarSign, Trophy } from 'lucide-react';
 
