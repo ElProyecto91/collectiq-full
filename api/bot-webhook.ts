@@ -5,11 +5,11 @@ const SUPABASE_SERVICE_KEY = (globalThis as any).process?.env?.SUPABASE_SERVICE_
 const BOT_TOKEN = (globalThis as any).process?.env?.TELEGRAM_BOT_TOKEN ?? '';
 const WEBHOOK_SECRET = (globalThis as any).process?.env?.TELEGRAM_WEBHOOK_SECRET ?? '';
 
-async function sendMessage(chatId: number, text: string) {
+async function sendMessage(chatId: number, text: string, replyMarkup?: any) {
   await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
+    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML', reply_markup: replyMarkup }),
   });
 }
 
@@ -88,7 +88,7 @@ async function registerReferral(referrerId: number, referredId: number, referred
 export default async function handler(req: Request) {
   if (req.method !== 'POST') return new Response('OK', { status: 200 });
 
-  // ✅ Verificar firma de Telegram
+  // Verificar firma de Telegram
   const secretHeader = req.headers.get('X-Telegram-Bot-Api-Secret-Token');
   if (WEBHOOK_SECRET && secretHeader !== WEBHOOK_SECRET) {
     return new Response('Unauthorized', { status: 401 });
@@ -97,13 +97,13 @@ export default async function handler(req: Request) {
   try {
     const update = await req.json();
 
-    // — Pago pendiente —
+    // Pago pendiente
     if (update.pre_checkout_query) {
       await answerPreCheckoutQuery(update.pre_checkout_query.id, true);
       return new Response('OK', { status: 200 });
     }
 
-    // — Pago completado —
+    // Pago completado
     if (update.message?.successful_payment) {
       const payment = update.message.successful_payment;
       const userId = update.message.from.id;
@@ -118,16 +118,15 @@ export default async function handler(req: Request) {
       const expiresAt = await activateGO(telegramUserId, starsPaid);
 
       await sendMessage(userId,
-        `⭐ <b>¡Bienvenido a CollectIQ GO!</b>\n\n` +
-        `Tu plan está activo hasta el <b>${new Date(expiresAt).toLocaleDateString('es-ES')}</b>.\n\n` +
-        `Disfruta de escaneos ilimitados y todas las funciones premium. 🚀\n\n` +
-        `Abre la app: https://t.me/CollectIQ_bot/app`
+        '<b>Bienvenido a CollectIQ GO!</b>\n\n' +
+        'Tu plan esta activo hasta el <b>' + new Date(expiresAt).toLocaleDateString('es-ES') + '</b>.\n\n' +
+        'Disfruta de escaneos ilimitados y todas las funciones premium.\n\n' +
+        'Abre la app: https://t.me/CollectIQ_bot/app'
       );
 
       return new Response('OK', { status: 200 });
     }
 
-    // — Mensaje normal —
     const message = update.message;
     if (!message) return new Response('OK', { status: 200 });
 
@@ -135,51 +134,45 @@ export default async function handler(req: Request) {
     const user = message.from;
     const startParam = message.text?.split(' ')?.[1] ?? '';
 
+    // Mensaje de bienvenida /start
+    if (message.text === '/start' || (message.text?.startsWith('/start') && !startParam.startsWith('ref_'))) {
+      await sendMessage(chatId,
+        '<b>CollectIQ - Tu coleccion, reinventada.</b>\n\n' +
+        'Gestiona, analiza y comparte tu coleccion de cartas TCG como un profesional.\n\n' +
+        '<b>Lo que puedes hacer:</b>\n' +
+        'Escanea cartas con IA en segundos\n' +
+        'Consulta precios de mercado en tiempo real\n' +
+        'Analiza el valor y ROI de tu coleccion\n' +
+        'Crea mazos y compartellos con la comunidad\n' +
+        'Guarda una wishlist con alertas de precio\n' +
+        'Completa misiones y sube de nivel\n' +
+        'Organiza por sets, rarezas y ubicacion fisica\n' +
+        'Conecta con otros coleccionistas\n\n' +
+        'Pulsa el boton para abrir la app:',
+        {
+          inline_keyboard: [[
+            { text: 'Abrir CollectIQ', web_app: { url: 'https://collectiq-full.vercel.app' } }
+          ]]
+        }
+      );
+      return new Response('OK', { status: 200 });
+    }
+
     // Detectar referido
     if (startParam.startsWith('ref_')) {
       const referrerId = parseInt(startParam.replace('ref_', ''));
       if (!isNaN(referrerId) && isValidUser(user)) {
         await registerReferral(referrerId, user.id, user);
         await sendMessage(chatId,
-  `👋 <b>¡Bienvenido a CollectIQ!</b>\n\n` +
-  `Has sido invitado por un amigo. Añade <b>10 cartas</b> a tu colección y recibirás <b>6 horas de CollectIQ GO gratis</b>. 🎁\n\n` +
-  `Abre la app: https://t.me/CollectIQ_bot/app`
-);
-return new Response('OK', { status: 200 });
+          '<b>Bienvenido a CollectIQ!</b>\n\n' +
+          'Has sido invitado por un amigo. Anade <b>10 cartas</b> a tu coleccion y tu amigo recibira recompensas.\n\n' +
+          'Abre la app: https://t.me/CollectIQ_bot/app'
+        );
+        return new Response('OK', { status: 200 });
       }
     }
-// Mensaje de bienvenida
-if (message.text === '/start' || (message.text?.startsWith('/start') && !startParam.startsWith('ref_'))) {
-  await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: chatId,
-      parse_mode: 'HTML',
-      text:
-        `🃏 <b>CollectIQ — Tu colección, reinventada.</b>\n\n` +
-`Gestiona, analiza y comparte tu colección de cartas TCG como un profesional.\n\n` +
-`⚡ <b>Lo que puedes hacer:</b>\n` +
-`🔍 Escanea cartas con IA en segundos\n` +
-`💰 Consulta precios de mercado en tiempo real\n` +
-`📊 Analiza el valor y ROI de tu colección\n` +
-`🏆 Crea mazos y compártelos con la comunidad\n` +
-`❤️ Guarda una wishlist con alertas de precio\n` +
-`🎯 Completa misiones y sube de nivel\n` +
-`📦 Organiza por sets, rarezas y ubicación física\n` +
-`🤝 Conecta con otros coleccionistas\n\n` +
-`🚀 <b>¿Listo para empezar?</b>\n👇 Pulsa el botón para abrir la app:`,
-      reply_markup: {
-        inline_keyboard: [[
-          { text: '🚀 Abrir CollectIQ', web_app: { url: 'https://collectiq-full.vercel.app' } }
-        ]]
-      }
-    }),
-  });
-  return new Response('OK', { status: 200 });
-}
 
-    // Generar código de acceso normal
+    // Generar codigo de acceso
     const array = new Uint8Array(3);
     crypto.getRandomValues(array);
     const code = Array.from(array)
@@ -209,9 +202,10 @@ if (message.text === '/start' || (message.text?.startsWith('/start') && !startPa
     });
 
     await sendMessage(chatId,
-      `🔑 <b>Tu código de acceso CollectIQ:</b>\n\n<code>${code}</code>\n\n` +
-      `Introdúcelo en la app para iniciar sesión.\n` +
-      `⏰ Válido durante 5 minutos.`
+      '<b>Tu codigo de acceso CollectIQ:</b>\n\n' +
+      '<code>' + code + '</code>\n\n' +
+      'Introducelo en la app para iniciar sesion.\n' +
+      'Valido durante 5 minutos.'
     );
 
     return new Response('OK', { status: 200 });
