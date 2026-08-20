@@ -106,7 +106,6 @@ export default function ScannerPage() {
   const [accumulated, setAccumulated] = useState(getAccumulatedScans());
   const [isPremium, setIsPremium] = useState<boolean | null>(null);
   const [watchingAd, setWatchingAd] = useState(false);
-  const [adCountdown, setAdCountdown] = useState(0);
 
   const { mutate: createItem } = useCreateCollectionItem();
   const telegramUser = useUserStore((s) => s.telegramUser);
@@ -132,22 +131,23 @@ export default function ScannerPage() {
   const watchAd = useCallback(() => {
     if (watchingAd) return;
     setWatchingAd(true);
-    setAdCountdown(5);
-    const interval = setInterval(() => {
-      setAdCountdown(prev => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          const newAccumulated = accumulated + AD_BONUS_SCANS;
-          setAccumulated(newAccumulated);
-          setAccumulatedScans(newAccumulated);
-          setWatchingAd(false);
-          setStatusMsg('🎉 +' + AD_BONUS_SCANS + ' escaneo añadido');
-          setTimeout(() => setStatusMsg(''), 3000);
-          return 0;
-        }
-        return prev - 1;
+
+    // SDK Monetag real
+    (window as any).show_11612154?.()
+      .then(() => {
+        const newAccumulated = accumulated + AD_BONUS_SCANS;
+        setAccumulated(newAccumulated);
+        setAccumulatedScans(newAccumulated);
+        setStatusMsg('🎉 +' + AD_BONUS_SCANS + ' escaneo añadido');
+        setTimeout(() => setStatusMsg(''), 3000);
+      })
+      .catch(() => {
+        setStatusMsg('❌ Anuncio no completado. Inténtalo de nuevo.');
+        setTimeout(() => setStatusMsg(''), 3000);
+      })
+      .finally(() => {
+        setWatchingAd(false);
       });
-    }, 1000);
   }, [watchingAd, accumulated]);
 
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -334,7 +334,7 @@ export default function ScannerPage() {
             <button onClick={watchAd} disabled={watchingAd}
               className="flex items-center gap-1.5 bg-green-500/10 border border-green-500/20 text-green-400 rounded-xl px-3 py-2 text-xs font-bold active:scale-95 transition-transform disabled:opacity-50">
               {watchingAd
-                ? <><Loader2 size={12} className="animate-spin" />{adCountdown}s</>
+                ? <><Loader2 size={12} className="animate-spin" />Cargando...</>
                 : <><Tv size={12} />+1 escaneo</>}
             </button>
           </div>
@@ -384,7 +384,7 @@ export default function ScannerPage() {
             <button onClick={watchAd} disabled={watchingAd}
               className="w-full flex items-center justify-center gap-2 bg-green-500/10 border border-green-500/20 text-green-400 rounded-xl py-3 text-sm font-bold active:scale-95 transition-transform disabled:opacity-50">
               {watchingAd
-                ? <><Loader2 size={14} className="animate-spin" />Viendo anuncio... {adCountdown}s</>
+                ? <><Loader2 size={14} className="animate-spin" />Cargando anuncio...</>
                 : <><Tv size={14} />Ver anuncio → +1 escaneo</>}
             </button>
           </div>
