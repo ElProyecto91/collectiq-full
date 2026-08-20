@@ -168,8 +168,7 @@ if (message.text === '/start' || (message.text?.startsWith('/start') && !startPa
 `🎯 Completa misiones y sube de nivel\n` +
 `📦 Organiza por sets, rarezas y ubicación física\n` +
 `🤝 Conecta con otros coleccionistas\n\n` +
-`🚀 <b>¿Listo para empezar?</b>`,
-        `👇 Pulsa el botón para abrir la app:`,
+`🚀 <b>¿Listo para empezar?</b>\n👇 Pulsa el botón para abrir la app:`,
       reply_markup: {
         inline_keyboard: [[
           { text: '🚀 Abrir CollectIQ', web_app: { url: 'https://collectiq-full.vercel.app' } }
