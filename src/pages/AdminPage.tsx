@@ -295,10 +295,7 @@ export function AdminPage() {
     {opt.label}
   </button>
 ))}
-                            className="flex-1 py-2 rounded-xl bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-xs font-bold active:scale-95">
-                            {months}m
-                          </button>
-                        ))}
+                            
                         <button onClick={() => setGiftingId(null)}
                           className="px-3 py-2 rounded-xl bg-white/5 text-gray-400 text-xs">
                           ✕
