@@ -13,6 +13,24 @@ async function sendMessage(chatId: number, text: string) {
   });
 }
 
+async function addScans(telegramUserId: number, amount: number) {
+  const today = new Date().toISOString().split('T')[0];
+  await fetch(`${SUPABASE_URL}/rest/v1/user_scans`, {
+    method: 'POST',
+    headers: {
+      'apikey': SUPABASE_SERVICE_KEY,
+      'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'resolution=merge-duplicates',
+    },
+    body: JSON.stringify({
+      telegram_user_id: telegramUserId,
+      scan_date: today,
+      scans_accumulated: amount,
+    }),
+  });
+}
+
 export default async function handler(req: Request) {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
 
@@ -72,55 +90,7 @@ export default async function handler(req: Request) {
     const referrerRange = referrerCountRes.headers.get('content-range') ?? '';
     const referrerCount = parseInt(referrerRange.split('/')[1] ?? '0');
 
-    if (referrerCount >= MAX_REFERRALS_PER_USER) {
-      // Marcar como completado pero sin recompensa para el referrer
-      await fetch(`${SUPABASE_URL}/rest/v1/referrals?id=eq.${referral.id}`, {
-        method: 'PATCH',
-        headers: {
-          'apikey': SUPABASE_SERVICE_KEY,
-          'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          completed: true,
-          reward_given: true,
-          completed_at: new Date().toISOString(),
-          cards_added: realCount,
-        }),
-      });
-
-      // El referido sigue recibiendo su GO aunque el referrer haya llegado al límite
-      const expiresAt = new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString();
-      await fetch(`${SUPABASE_URL}/rest/v1/user_premium`, {
-        method: 'POST',
-        headers: {
-          'apikey': SUPABASE_SERVICE_KEY,
-          'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
-          'Content-Type': 'application/json',
-          'Prefer': 'resolution=merge-duplicates',
-        },
-        body: JSON.stringify({
-          telegram_user_id: telegramUserId,
-          plan: 'go',
-          expires_at: expiresAt,
-          stars_paid: 0,
-          updated_at: new Date().toISOString(),
-        }),
-      });
-
-      await sendMessage(telegramUserId,
-        `🎁 <b>¡Has desbloqueado tu recompensa!</b>\n\n` +
-        `Has añadido 10 cartas a tu colección.\n` +
-        `<b>6 horas de CollectIQ GO</b> activadas. ✨\n\n` +
-        `Abre la app: https://t.me/CollectIQ_bot/app`
-      );
-
-      return new Response(JSON.stringify({ ok: true, rewarded: true, referrerLimitReached: true }), {
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Actualizar contador
+    // Actualizar contador de cartas
     await fetch(`${SUPABASE_URL}/rest/v1/referrals?id=eq.${referral.id}`, {
       method: 'PATCH',
       headers: {
@@ -148,72 +118,84 @@ export default async function handler(req: Request) {
         }),
       });
 
-      // 2. Dar 6h GO al referred
-      const expiresAt = new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString();
-      await fetch(`${SUPABASE_URL}/rest/v1/user_premium`, {
-        method: 'POST',
-        headers: {
-          'apikey': SUPABASE_SERVICE_KEY,
-          'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
-          'Content-Type': 'application/json',
-          'Prefer': 'resolution=merge-duplicates',
-        },
-        body: JSON.stringify({
-          telegram_user_id: telegramUserId,
-          plan: 'go',
-          expires_at: expiresAt,
-          stars_paid: 0,
-          updated_at: new Date().toISOString(),
-        }),
-      });
+      // 2. Dar +10 escaneos al referred (tu amigo)
+      await addScans(telegramUserId, 10);
 
       // 3. Notificar al referred
       await sendMessage(telegramUserId,
         `🎁 <b>¡Has desbloqueado tu recompensa!</b>\n\n` +
         `Has añadido 10 cartas a tu colección.\n` +
-        `<b>6 horas de CollectIQ GO</b> activadas. ✨\n\n` +
+        `<b>+10 escaneos extra</b> añadidos a tu cuenta. 🎴\n\n` +
         `Abre la app: https://t.me/CollectIQ_bot/app`
       );
 
-      // 4. Dar +10 escaneos al referrer
-      await fetch(`${SUPABASE_URL}/rest/v1/user_notifications`, {
-        method: 'POST',
-        headers: {
-          'apikey': SUPABASE_SERVICE_KEY,
-          'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          telegram_user_id: referral.referrer_id,
-          type: 'referral_reward',
-          title: '🎉 ¡Recompensa de referido!',
-          body: 'Tu amigo ha añadido 10 cartas. ¡Has ganado +10 escaneos! (' + (referrerCount + 1) + '/' + MAX_REFERRALS_PER_USER + ' referidos)',
-          data: { scans: 10 },
-          read: false,
-        }),
-      });
+      // 4. Dar 6h GO al referrer (tú) solo si no ha llegado al límite
+      if (referrerCount < MAX_REFERRALS_PER_USER) {
+        const now = new Date();
+        // Si ya tiene GO activo, extender 6h
+        const currentGoRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/user_premium?telegram_user_id=eq.${referral.referrer_id}&select=plan,expires_at`,
+          { headers: { 'apikey': SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}` } }
+        );
+        const currentGo = await currentGoRes.json();
+        const current = currentGo?.[0];
 
-      // 5. Dar escaneos al referrer via API
-      await fetch(`${SUPABASE_URL}/rest/v1/rpc/add_scans`, {
-        method: 'POST',
-        headers: {
-          'apikey': SUPABASE_SERVICE_KEY,
-          'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          p_telegram_user_id: referral.referrer_id,
-          p_amount: 10,
-        }),
-      });
+        let expiresAt: string;
+        if (current?.plan === 'go' && current?.expires_at && new Date(current.expires_at) > now) {
+          expiresAt = new Date(new Date(current.expires_at).getTime() + 6 * 60 * 60 * 1000).toISOString();
+        } else {
+          expiresAt = new Date(now.getTime() + 6 * 60 * 60 * 1000).toISOString();
+        }
 
-      // 6. Notificar al referrer
-      await sendMessage(referral.referrer_id,
-        `🎉 <b>¡Tu amigo ha completado el reto!</b>\n\n` +
-        `Has ganado <b>+10 escaneos</b> por tu invitación. 🎴\n` +
-        `Referidos completados: ${referrerCount + 1}/${MAX_REFERRALS_PER_USER}\n\n` +
-        `Abre la app para usarlos: https://t.me/CollectIQ_bot/app`
-      );
+        await fetch(`${SUPABASE_URL}/rest/v1/user_premium`, {
+          method: 'POST',
+          headers: {
+            'apikey': SUPABASE_SERVICE_KEY,
+            'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'resolution=merge-duplicates',
+          },
+          body: JSON.stringify({
+            telegram_user_id: referral.referrer_id,
+            plan: 'go',
+            expires_at: expiresAt,
+            stars_paid: 0,
+            updated_at: new Date().toISOString(),
+          }),
+        });
+
+        // 5. Notificar al referrer
+        await sendMessage(referral.referrer_id,
+          `🎉 <b>¡Tu amigo ha completado el reto!</b>\n\n` +
+          `Has ganado <b>6 horas de CollectIQ GO</b> por tu invitación. ⭐\n` +
+          `Referidos completados: ${referrerCount + 1}/${MAX_REFERRALS_PER_USER}\n\n` +
+          `Abre la app para disfrutarlo: https://t.me/CollectIQ_bot/app`
+        );
+
+        // 6. Notificación interna al referrer
+        await fetch(`${SUPABASE_URL}/rest/v1/user_notifications`, {
+          method: 'POST',
+          headers: {
+            'apikey': SUPABASE_SERVICE_KEY,
+            'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            telegram_user_id: referral.referrer_id,
+            type: 'referral_reward',
+            title: '🎉 ¡Recompensa de referido!',
+            body: `Tu amigo completó el reto. ¡Has ganado 6h GO! (${referrerCount + 1}/${MAX_REFERRALS_PER_USER} referidos)`,
+            data: { hours: 6 },
+            read: false,
+          }),
+        });
+      } else {
+        // Referrer llegó al límite — solo notificar
+        await sendMessage(referral.referrer_id,
+          `ℹ️ <b>Tu amigo completó el reto</b>, pero ya has alcanzado el límite de ${MAX_REFERRALS_PER_USER} referidos recompensados.\n\n` +
+          `Gracias por difundir CollectIQ. 🙌`
+        );
+      }
 
       return new Response(JSON.stringify({ ok: true, rewarded: true }), {
         headers: { 'Content-Type': 'application/json' },
