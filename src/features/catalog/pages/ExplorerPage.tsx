@@ -271,6 +271,13 @@ export function ExplorerPage() {
       totalCards: newTotal, uniqueCards: newUnique, totalDecks: totalDecks ?? 0,
       completedSets: 0, totalVotes: 0, totalFavorites: collectionCards.filter(c => c.favorite).length,
     });
+
+    // Verificar referido
+    fetch('/api/check-referral', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ telegramUserId: telegramUser.id, totalCards: newTotal }),
+    });
   };
 
   const handleWishlist = async (card: PokemonCard) => {
@@ -313,7 +320,15 @@ export function ExplorerPage() {
         });
         added++;
       }
-      if (added > 0) await updateMission('add_card');
+      if (added > 0) {
+        await updateMission('add_card');
+        const newTotal = collectionCards.reduce((s, c) => s + c.quantity, 0) + added;
+        fetch('/api/check-referral', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ telegramUserId: telegramUser.id, totalCards: newTotal }),
+        });
+      }
       setStatusMsg(`✅ ${added} cartas del set añadidas`);
       setTimeout(() => setStatusMsg(''), 3000);
     } catch {
