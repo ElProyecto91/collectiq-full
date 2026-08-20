@@ -133,7 +133,6 @@ export default function ScannerPage() {
     if (watchingAd) return;
     setWatchingAd(true);
     setAdCountdown(5);
-    // SIMULACIÓN — reemplazar con SDK Monetag cuando esté aprobado
     const interval = setInterval(() => {
       setAdCountdown(prev => {
         if (prev <= 1) {
@@ -208,7 +207,6 @@ export default function ScannerPage() {
         throw new Error('pokétcg_error');
       }
 
-      // Solo descontamos si la búsqueda fue exitosa
       if (!isPremium) {
         if (accumulated > 0) {
           const newAcc = accumulated - 1;
@@ -267,6 +265,17 @@ export default function ScannerPage() {
     setStatusMsg(`✅ ${card.name} añadida a tu colección`);
     setTimeout(() => setStatusMsg(''), 3000);
     await updateMission('add_card');
+
+    // Verificar referido
+    const { count: totalCards } = await supabase
+      .from('collection_items')
+      .select('*', { count: 'exact', head: true })
+      .eq('telegram_user_id', telegramUser.id);
+    fetch('/api/check-referral', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ telegramUserId: telegramUser.id, totalCards: (totalCards ?? 0) + 1 }),
+    });
   };
 
   const reset = () => {
@@ -291,7 +300,7 @@ export default function ScannerPage() {
         </div>
       </div>
 
-      {/* Barra de estado — siempre visible */}
+      {/* Barra de estado */}
       <div className="mx-4 mb-3">
         {isPremium === null && (
           <div className="bg-[#111118] border border-white/8 rounded-2xl p-3 animate-pulse">
