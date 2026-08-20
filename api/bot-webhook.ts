@@ -148,6 +148,32 @@ export default async function handler(req: Request) {
 return new Response('OK', { status: 200 });
       }
     }
+// Mensaje de bienvenida
+if (message.text === '/start' || (message.text?.startsWith('/start') && !startParam.startsWith('ref_'))) {
+  await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      chat_id: chatId,
+      parse_mode: 'HTML',
+      text:
+        `👋 <b>¡Bienvenido a CollectIQ!</b>\n\n` +
+        `La app para gestionar tu colección de cartas Pokémon TCG. 🎴\n\n` +
+        `✨ <b>¿Qué puedes hacer?</b>\n` +
+        `🔍 Escanear cartas con IA\n` +
+        `📊 Consultar precios de mercado\n` +
+        `🏆 Compartir mazos con la comunidad\n` +
+        `📈 Ver el valor de tu colección\n\n` +
+        `👇 Pulsa el botón para abrir la app:`,
+      reply_markup: {
+        inline_keyboard: [[
+          { text: '🚀 Abrir CollectIQ', web_app: { url: 'https://collectiq-full.vercel.app' } }
+        ]]
+      }
+    }),
+  });
+  return new Response('OK', { status: 200 });
+}
 
     // Generar código de acceso normal
     const array = new Uint8Array(3);
