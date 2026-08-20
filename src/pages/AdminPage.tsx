@@ -124,25 +124,26 @@ export function AdminPage() {
     }
   };
 
-  const giveGO = async (userId: number, months: number = 1) => {
-    const expiresAt = new Date(Date.now() + months * 30 * 24 * 60 * 60 * 1000).toISOString();
-    const { error } = await supabase.from('user_premium').upsert({
-      telegram_user_id: userId,
-      plan: 'go',
-      expires_at: expiresAt,
-      stars_paid: 0,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'telegram_user_id' });
+  const giveGO = async (userId: number, months: number = 1, days: number = 0) => {
+  const ms = (months * 30 * 24 * 60 * 60 * 1000) + (days * 24 * 60 * 60 * 1000);
+  const expiresAt = new Date(Date.now() + ms).toISOString();
+  const { error } = await supabase.from('user_premium').upsert({
+    telegram_user_id: userId,
+    plan: 'go',
+    expires_at: expiresAt,
+    stars_paid: 0,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'telegram_user_id' });
 
-    if (!error) {
-      setStatusMsg('✅ GO activado para ' + userId + ' hasta ' + new Date(expiresAt).toLocaleDateString('es-ES'));
-      setUsers(prev => prev.map(u => u.telegram_user_id === userId ? { ...u, isPremium: true, premiumExpires: expiresAt } : u));
-    } else {
-      setStatusMsg('❌ Error: ' + error.message);
-    }
-    setTimeout(() => setStatusMsg(''), 4000);
-    setGiftingId(null);
-  };
+  if (!error) {
+    setStatusMsg('✅ GO activado para ' + userId + ' hasta ' + new Date(expiresAt).toLocaleDateString('es-ES'));
+    setUsers(prev => prev.map(u => u.telegram_user_id === userId ? { ...u, isPremium: true, premiumExpires: expiresAt } : u));
+  } else {
+    setStatusMsg('❌ Error: ' + error.message);
+  }
+  setTimeout(() => setStatusMsg(''), 4000);
+  setGiftingId(null);
+};
 
   const giveGOByInput = async () => {
     const userId = parseInt(giftInput.trim());
@@ -280,8 +281,20 @@ export function AdminPage() {
                   <div className="flex gap-2">
                     {giftingId === user.telegram_user_id ? (
                       <>
-                        {[1, 3, 6, 12].map(months => (
-                          <button key={months} onClick={() => giveGO(user.telegram_user_id, months)}
+                        {[
+  { label: '1d', months: 0, days: 1 },
+  { label: '3d', months: 0, days: 3 },
+  { label: '7d', months: 0, days: 7 },
+  { label: '1m', months: 1, days: 0 },
+  { label: '3m', months: 3, days: 0 },
+  { label: '6m', months: 6, days: 0 },
+  { label: '12m', months: 12, days: 0 },
+].map(opt => (
+  <button key={opt.label} onClick={() => giveGO(user.telegram_user_id, opt.months, opt.days)}
+    className="flex-1 py-2 rounded-xl bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-xs font-bold active:scale-95">
+    {opt.label}
+  </button>
+))}
                             className="flex-1 py-2 rounded-xl bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-xs font-bold active:scale-95">
                             {months}m
                           </button>
