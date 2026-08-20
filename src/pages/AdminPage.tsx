@@ -38,13 +38,25 @@ export function AdminPage() {
   const [statusMsg, setStatusMsg] = useState('');
 
   useEffect(() => {
-    if (!telegramUser?.id) return;
-    if (telegramUser.id !== ADMIN_ID) {
-      navigate('/');
-      return;
-    }
-    loadData();
-  }, [telegramUser?.id]);
+  if (!telegramUser?.id) return;
+  if (telegramUser.id !== ADMIN_ID) {
+    navigate('/');
+    return;
+  }
+
+  // Verificar en servidor que es admin real
+  fetch('/api/admin-verify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ telegramUserId: telegramUser.id }),
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok) navigate('/');
+      else loadData();
+    })
+    .catch(() => navigate('/'));
+}, [telegramUser?.id]);
 
   const loadData = async () => {
     setIsLoading(true);
