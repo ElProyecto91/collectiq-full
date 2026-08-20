@@ -16,18 +16,12 @@ async function answerPreCheckoutQuery(preCheckoutQueryId: string, ok: boolean, e
   await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/answerPreCheckoutQuery`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      pre_checkout_query_id: preCheckoutQueryId,
-      ok,
-      error_message: errorMessage,
-    }),
+    body: JSON.stringify({ pre_checkout_query_id: preCheckoutQueryId, ok, error_message: errorMessage }),
   });
 }
 
 async function activateGO(telegramUserId: number, starsPaid: number) {
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-
-  // Buscar si ya tiene GO para sumar stars
   const existing = await fetch(
     `${SUPABASE_URL}/rest/v1/user_premium?telegram_user_id=eq.${telegramUserId}&select=stars_paid`,
     { headers: { 'apikey': SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}` } }
@@ -55,6 +49,71 @@ async function activateGO(telegramUserId: number, starsPaid: number) {
   return expiresAt;
 }
 
+async function activateGO12h(telegramUserId: number) {
+  // 12h GO gratis para el referido
+  const expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString();
+  const existing = await fetch(
+    `${SUPABASE_URL}/rest/v1/user_premium?telegram_user_id=eq.${telegramUserId}&select=expires_at,plan`,
+    { headers: { 'apikey': SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}` } }
+  );
+  const existingData = await existing.json();
+  const current = existingData?.[0];
+
+  // Si ya tiene GO activo, extender 12h
+  let finalExpiry = expiresAt;
+  if (current?.plan === 'go' && current?.expires_at) {
+    const currentExpiry = new Date(current.expires_at);
+    if (currentExpiry > new Date()) {
+      finalExpiry = new Date(currentExpiry.getTime() + 12 * 60 * 60 * 1000).toISOString();
+    }
+  }
+
+  await fetch(`${SUPABASE_URL}/rest/v1/user_premium`, {
+    method: 'POST',
+    headers: {
+      'apikey': SUPABASE_SERVICE_KEY,
+      'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'resolution=merge-duplicates',
+    },
+    body: JSON.stringify({
+      telegram_user_id: telegramUserId,
+      plan: 'go',
+      expires_at: finalExpiry,
+      stars_paid: 0,
+      updated_at: new Date().toISOString(),
+    }),
+  });
+}
+
+async function registerReferral(referrerId: number, referredId: number) {
+  // Evitar auto-referidos y duplicados
+  if (referrerId === referredId) return;
+
+  const existing = await fetch(
+    `${SUPABASE_URL}/rest/v1/referrals?referred_id=eq.${referredId}&select=id`,
+    { headers: { 'apikey': SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}` } }
+  );
+  const existingData = await existing.json();
+  if (existingData?.length > 0) return; // Ya tiene referido registrado
+
+  await fetch(`${SUPABASE_URL}/rest/v1/referrals`, {
+    method: 'POST',
+    headers: {
+      'apikey': SUPABASE_SERVICE_KEY,
+      'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      referrer_id: referrerId,
+      referred_id: referredId,
+      completed: false,
+      cards_added: 0,
+      reward_given: false,
+    }),
+  });
+}
+
 export default async function handler(req: Request) {
   if (req.method !== 'POST') return new Response('OK', { status: 200 });
 
@@ -63,8 +122,7 @@ export default async function handler(req: Request) {
 
     // — Pago pendiente de confirmación —
     if (update.pre_checkout_query) {
-      const query = update.pre_checkout_query;
-      await answerPreCheckoutQuery(query.id, true);
+      await answerPreCheckoutQuery(update.pre_checkout_query.id, true);
       return new Response('OK', { status: 200 });
     }
 
@@ -92,13 +150,29 @@ export default async function handler(req: Request) {
       return new Response('OK', { status: 200 });
     }
 
-    // — Mensaje normal — generar código de acceso —
+    // — Mensaje normal —
     const message = update.message;
     if (!message) return new Response('OK', { status: 200 });
 
     const chatId = message.chat.id;
     const user = message.from;
+    const startParam = message.text?.split(' ')?.[1] ?? '';
 
+    // Detectar referido
+    if (startParam.startsWith('ref_')) {
+      const referrerId = parseInt(startParam.replace('ref_', ''));
+      if (!isNaN(referrerId)) {
+        await registerReferral(referrerId, user.id);
+        await sendMessage(chatId,
+          `👋 <b>¡Bienvenido a CollectIQ!</b>\n\n` +
+          `Has sido invitado por un amigo. Añade <b>10 cartas</b> a tu colección y recibirás <b>12 horas de CollectIQ GO gratis</b>. 🎁\n\n` +
+          `Abre la app: https://t.me/CollectIQ_bot/app`
+        );
+        return new Response('OK', { status: 200 });
+      }
+    }
+
+    // Generar código de acceso normal
     const array = new Uint8Array(3);
     crypto.getRandomValues(array);
     const code = Array.from(array)
@@ -134,7 +208,7 @@ export default async function handler(req: Request) {
     );
 
     return new Response('OK', { status: 200 });
-  } catch (err) {
+  } catch {
     return new Response('OK', { status: 200 });
   }
 }
