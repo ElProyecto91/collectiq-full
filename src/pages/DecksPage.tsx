@@ -185,6 +185,25 @@ const handleCreateDeck = () => {
 
   return (
     <div className="space-y-4 pt-3 pb-24 px-4">
+{showPaywall && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-6"
+    onClick={() => setShowPaywall(false)}>
+    <div className="w-full max-w-sm bg-[#111118] border border-white/10 rounded-2xl p-6 space-y-4 text-center"
+      onClick={e => e.stopPropagation()}>
+      <p className="text-3xl">🔒</p>
+      <p className="text-lg font-bold text-white">Límite de mazos</p>
+      <p className="text-sm text-gray-400">Con el plan gratuito puedes tener <strong className="text-white">1 mazo activo</strong>. Activa GO para crear mazos ilimitados.</p>
+      <button onClick={() => { setShowPaywall(false); navigate('/premium'); }}
+        className="w-full py-3 rounded-xl bg-gradient-to-r from-yellow-500 to-orange-500 text-black text-sm font-black active:scale-95 transition-transform">
+        ⭐ Activar GO
+      </button>
+      <button onClick={() => setShowPaywall(false)}
+        className="w-full py-2 rounded-xl bg-white/5 text-gray-400 text-sm active:scale-95 transition-transform">
+        Cancelar
+      </button>
+    </div>
+  </div>
+)}
 
       {/* Modal comentarios */}
       {commentsOpen && (
