@@ -157,7 +157,7 @@ if (message.text === '/start' || (message.text?.startsWith('/start') && !startPa
       chat_id: chatId,
       parse_mode: 'HTML',
       text:
-        ``🃏 <b>CollectIQ — Tu colección, reinventada.</b>\n\n` +
+        `🃏 <b>CollectIQ — Tu colección, reinventada.</b>\n\n` +
 `Gestiona, analiza y comparte tu colección de cartas TCG como un profesional.\n\n` +
 `⚡ <b>Lo que puedes hacer:</b>\n` +
 `🔍 Escanea cartas con IA en segundos\n` +
