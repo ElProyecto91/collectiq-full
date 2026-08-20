@@ -113,9 +113,9 @@ export default function ScannerPage() {
   const { updateMission } = useMissions();
 
   useEffect(() => {
-    if (!sessionLoaded) return; // Esperar a que cargue la sesión
+    if (!sessionLoaded) return;
     if (!telegramUser?.id) {
-      setIsPremium(false); // Sin usuario = FREE
+      setIsPremium(false);
       return;
     }
     supabase.from('user_premium').select('plan, expires_at')
@@ -302,6 +302,13 @@ export default function ScannerPage() {
             <h1 className="text-lg font-bold leading-tight">Escanear carta</h1>
           </div>
         </div>
+      </div>
+
+      {/* DEBUG — quitar después */}
+      <div className="mx-4 mb-2 bg-red-500 p-2 rounded-xl">
+        <p className="text-white text-[10px]">
+          sessionLoaded: {String(sessionLoaded)} | userId: {String(telegramUser?.id ?? 'null')} | isPremium: {String(isPremium)}
+        </p>
       </div>
 
       {/* Barra de estado */}
