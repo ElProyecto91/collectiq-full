@@ -3,6 +3,7 @@ export const config = { runtime: 'edge' };
 const SUPABASE_URL = 'https://ajuinjefipjrnbimcdxz.supabase.co';
 const SUPABASE_SERVICE_KEY = (globalThis as any).process?.env?.SUPABASE_SERVICE_ROLE_KEY ?? '';
 const BOT_TOKEN = (globalThis as any).process?.env?.TELEGRAM_BOT_TOKEN ?? '';
+const WEBHOOK_SECRET = (globalThis as any).process?.env?.TELEGRAM_WEBHOOK_SECRET ?? '';
 
 async function sendMessage(chatId: number, text: string) {
   await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
@@ -50,21 +51,15 @@ async function activateGO(telegramUserId: number, starsPaid: number) {
 }
 
 function isValidUser(user: any): boolean {
-  // Rechazar bots
   if (user?.is_bot) return false;
-  // Rechazar si no tiene nombre ni username
   if (!user?.first_name && !user?.username) return false;
   return true;
 }
 
 async function registerReferral(referrerId: number, referredId: number, referredUser: any) {
-  // Evitar auto-referidos
   if (referrerId === referredId) return;
-
-  // Validar que el referido es un usuario real
   if (!isValidUser(referredUser)) return;
 
-  // Verificar que no tiene ya un referidor
   const existing = await fetch(
     `${SUPABASE_URL}/rest/v1/referrals?referred_id=eq.${referredId}&select=id`,
     { headers: { 'apikey': SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}` } }
@@ -92,6 +87,12 @@ async function registerReferral(referrerId: number, referredId: number, referred
 
 export default async function handler(req: Request) {
   if (req.method !== 'POST') return new Response('OK', { status: 200 });
+
+  // ✅ Verificar firma de Telegram
+  const secretHeader = req.headers.get('X-Telegram-Bot-Api-Secret-Token');
+  if (WEBHOOK_SECRET && secretHeader !== WEBHOOK_SECRET) {
+    return new Response('Unauthorized', { status: 401 });
+  }
 
   try {
     const update = await req.json();
