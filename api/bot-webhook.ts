@@ -157,13 +157,18 @@ if (message.text === '/start' || (message.text?.startsWith('/start') && !startPa
       chat_id: chatId,
       parse_mode: 'HTML',
       text:
-        `👋 <b>¡Bienvenido a CollectIQ!</b>\n\n` +
-        `La app para gestionar tu colección de cartas Pokémon TCG. 🎴\n\n` +
-        `✨ <b>¿Qué puedes hacer?</b>\n` +
-        `🔍 Escanear cartas con IA\n` +
-        `📊 Consultar precios de mercado\n` +
-        `🏆 Compartir mazos con la comunidad\n` +
-        `📈 Ver el valor de tu colección\n\n` +
+        ``🃏 <b>CollectIQ — Tu colección, reinventada.</b>\n\n` +
+`Gestiona, analiza y comparte tu colección de cartas TCG como un profesional.\n\n` +
+`⚡ <b>Lo que puedes hacer:</b>\n` +
+`🔍 Escanea cartas con IA en segundos\n` +
+`💰 Consulta precios de mercado en tiempo real\n` +
+`📊 Analiza el valor y ROI de tu colección\n` +
+`🏆 Crea mazos y compártelos con la comunidad\n` +
+`❤️ Guarda una wishlist con alertas de precio\n` +
+`🎯 Completa misiones y sube de nivel\n` +
+`📦 Organiza por sets, rarezas y ubicación física\n` +
+`🤝 Conecta con otros coleccionistas\n\n` +
+`🚀 <b>¿Listo para empezar?</b>`,
         `👇 Pulsa el botón para abrir la app:`,
       reply_markup: {
         inline_keyboard: [[
