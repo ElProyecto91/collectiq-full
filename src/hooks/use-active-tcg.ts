@@ -46,7 +46,7 @@ export const TCG_OPTIONS: TCGOption[] = [
     key: 'magic',
     label: 'Magic',
     color: '#9B59B6',
-    available: true,
+    available: false,
     icon: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path d="M12 2L14.5 9H22L16 13.5L18.5 21L12 16.5L5.5 21L8 13.5L2 9H9.5L12 2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
     </svg>`,
@@ -55,7 +55,7 @@ export const TCG_OPTIONS: TCGOption[] = [
     key: 'one-piece',
     label: 'One Piece',
     color: '#E74C3C',
-    available: true,
+    available: false,
     icon: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path d="M12 3C10 3 8 4 8 6C8 8 10 9 12 9C14 9 16 8 16 6C16 4 14 3 12 3Z" stroke="currentColor" stroke-width="1.5"/>
       <path d="M12 9V21" stroke="currentColor" stroke-width="1.5"/>
