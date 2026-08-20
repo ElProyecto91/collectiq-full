@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Share2, LogOut, Globe, Coins, BarChart2, Trophy, Zap, Users, Bell, Flame, Gift, Copy, Check } from 'lucide-react';
+import { Share2, LogOut, Globe, Coins, BarChart2, Trophy, Zap, Users, Bell, Flame, Gift, Copy, Check, Download } from 'lucide-react';
 import { useUserStore } from '@/store';
 import { useI18n } from '@/i18n';
 import { useCurrency } from '@/hooks/use-currency';
@@ -11,6 +11,7 @@ import { useMissions, DAILY_MISSIONS } from '@/hooks/use-missions';
 import { usePremium } from '@/hooks/use-premium';
 import { AchievementToast } from '@/components/AchievementToast';
 import { GOBadge, GOName } from '@/components/GOBadge';
+import { InstallPWA } from '@/components/InstallPWA';
 import { supabase } from '@/lib/supabase';
 
 const CURRENCIES = ['EUR', 'USD', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'BRL', 'MXN', 'PLN'];
@@ -35,6 +36,7 @@ export function ProfilePage() {
   const [followersCount, setFollowersCount] = useState(0);
   const [referralCount, setReferralCount] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [showInstall, setShowInstall] = useState(false);
 
   const totalCards = cards.reduce((s, c) => s + c.quantity, 0);
   const uniqueCards = cards.length;
@@ -94,9 +96,19 @@ export function ProfilePage() {
     window.location.href = '/login';
   };
 
+  const tools = [
+    { icon: <Trophy size={16} className="text-yellow-400" />, bg: 'bg-yellow-500/20', label: 'Logros', desc: unlockedAchievements.length + ' de 11 desbloqueados', route: '/achievements' },
+    { icon: <Flame size={16} className="text-orange-400" />, bg: 'bg-orange-500/20', label: 'Misiones diarias', desc: completedCount + '/' + DAILY_MISSIONS.length + ' completadas hoy', route: '/missions' },
+    { icon: <Users size={16} className="text-blue-400" />, bg: 'bg-blue-500/20', label: 'Amigos', desc: followingCount + ' siguiendo · ' + followersCount + ' seguidores', route: '/friends' },
+    { icon: <BarChart2 size={16} className="text-purple-400" />, bg: 'bg-purple-500/20', label: 'Estadisticas', desc: 'Valor, ROI y evolucion', route: '/stats' },
+    { icon: <Zap size={16} className="text-yellow-400" />, bg: 'bg-yellow-500/20', label: 'CollectIQ GO', desc: premium.isGO ? '✓ Plan activo' : 'Desbloquea todo el potencial', route: '/premium' },
+    { icon: <Download size={16} className="text-blue-400" />, bg: 'bg-blue-500/20', label: 'Descargar app', desc: 'Instala CollectIQ en tu dispositivo', route: 'install' },
+  ];
+
   return (
     <div className="space-y-4 pt-3 pb-24 px-4">
 
+      {showInstall && <InstallPWA onClose={() => setShowInstall(false)} />}
       <AchievementToast achievement={newAchievement} onDone={() => {}} />
 
       <div className="flex items-center justify-between">
@@ -211,7 +223,7 @@ export function ProfilePage() {
           <p className="text-sm font-bold text-white">Invita amigos</p>
           {referralCount > 0 && (
             <span className="ml-auto text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-bold">
-              {referralCount} completados
+              {referralCount}/5 completados
             </span>
           )}
         </div>
@@ -240,14 +252,9 @@ export function ProfilePage() {
       {/* Herramientas */}
       <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-2">
         <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Herramientas</p>
-        {[
-          { icon: <Trophy size={16} className="text-yellow-400" />, bg: 'bg-yellow-500/20', label: 'Logros', desc: unlockedAchievements.length + ' de 11 desbloqueados', route: '/achievements' },
-          { icon: <Flame size={16} className="text-orange-400" />, bg: 'bg-orange-500/20', label: 'Misiones diarias', desc: completedCount + '/' + DAILY_MISSIONS.length + ' completadas hoy', route: '/missions' },
-          { icon: <Users size={16} className="text-blue-400" />, bg: 'bg-blue-500/20', label: 'Amigos', desc: followingCount + ' siguiendo · ' + followersCount + ' seguidores', route: '/friends' },
-          { icon: <BarChart2 size={16} className="text-purple-400" />, bg: 'bg-purple-500/20', label: 'Estadisticas', desc: 'Valor, ROI y evolucion', route: '/stats' },
-          { icon: <Zap size={16} className="text-yellow-400" />, bg: 'bg-yellow-500/20', label: 'CollectIQ GO', desc: premium.isGO ? '✓ Plan activo' : 'Desbloquea todo el potencial', route: '/premium' },
-        ].map(item => (
-          <button key={item.route} onClick={() => navigate(item.route)}
+        {tools.map(item => (
+          <button key={item.label}
+            onClick={() => item.route === 'install' ? setShowInstall(true) : navigate(item.route)}
             className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3 active:scale-95 transition-transform">
             <div className={'w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ' + item.bg}>
               {item.icon}
