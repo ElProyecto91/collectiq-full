@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { InstallPWA } from '@/components/InstallPWA';
 import { useNavigate } from 'react-router-dom';
-import { Compass, Heart, LayoutGrid, ScanLine, TrendingUp, User, DollarSign, Trophy } from 'lucide-react';
+import { Compass, Heart, LayoutGrid, ScanLine, TrendingUp, User, DollarSign, Trophy, Download } from 'lucide-react';
 
 import { Avatar, Button, Card, StatTile } from '@/components/ui';
 import { useDisplayName, useTelegram, useCollectionStats, useCollectionList, useCurrency } from '@/hooks';
@@ -145,11 +145,21 @@ export function HomePage() {
         </section>
       )}
 
-      {isTelegram === false && (
-        <p className="pb-2 text-center text-xs text-ink-faint">
-          {t.home.webFallback}
-        </p>
-      )}
+      {showInstall && <InstallPWA onClose={() => setShowInstall(false)} />}
+
+<div className="pb-4 flex justify-center">
+  <button onClick={() => setShowInstall(true)}
+    className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-xs text-gray-400 active:scale-95 transition-transform">
+    <Download size={13} />
+    Descargar app
+  </button>
+</div>
+
+{isTelegram === false && (
+  <p className="pb-2 text-center text-xs text-ink-faint">
+    {t.home.webFallback}
+  </p>
+)}
     </div>
   );
 }
