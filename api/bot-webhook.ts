@@ -49,53 +49,28 @@ async function activateGO(telegramUserId: number, starsPaid: number) {
   return expiresAt;
 }
 
-async function activateGO12h(telegramUserId: number) {
-  // 12h GO gratis para el referido
-  const expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString();
-  const existing = await fetch(
-    `${SUPABASE_URL}/rest/v1/user_premium?telegram_user_id=eq.${telegramUserId}&select=expires_at,plan`,
-    { headers: { 'apikey': SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}` } }
-  );
-  const existingData = await existing.json();
-  const current = existingData?.[0];
-
-  // Si ya tiene GO activo, extender 12h
-  let finalExpiry = expiresAt;
-  if (current?.plan === 'go' && current?.expires_at) {
-    const currentExpiry = new Date(current.expires_at);
-    if (currentExpiry > new Date()) {
-      finalExpiry = new Date(currentExpiry.getTime() + 12 * 60 * 60 * 1000).toISOString();
-    }
-  }
-
-  await fetch(`${SUPABASE_URL}/rest/v1/user_premium`, {
-    method: 'POST',
-    headers: {
-      'apikey': SUPABASE_SERVICE_KEY,
-      'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'resolution=merge-duplicates',
-    },
-    body: JSON.stringify({
-      telegram_user_id: telegramUserId,
-      plan: 'go',
-      expires_at: finalExpiry,
-      stars_paid: 0,
-      updated_at: new Date().toISOString(),
-    }),
-  });
+function isValidUser(user: any): boolean {
+  // Rechazar bots
+  if (user?.is_bot) return false;
+  // Rechazar si no tiene nombre ni username
+  if (!user?.first_name && !user?.username) return false;
+  return true;
 }
 
-async function registerReferral(referrerId: number, referredId: number) {
-  // Evitar auto-referidos y duplicados
+async function registerReferral(referrerId: number, referredId: number, referredUser: any) {
+  // Evitar auto-referidos
   if (referrerId === referredId) return;
 
+  // Validar que el referido es un usuario real
+  if (!isValidUser(referredUser)) return;
+
+  // Verificar que no tiene ya un referidor
   const existing = await fetch(
     `${SUPABASE_URL}/rest/v1/referrals?referred_id=eq.${referredId}&select=id`,
     { headers: { 'apikey': SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}` } }
   );
   const existingData = await existing.json();
-  if (existingData?.length > 0) return; // Ya tiene referido registrado
+  if (existingData?.length > 0) return;
 
   await fetch(`${SUPABASE_URL}/rest/v1/referrals`, {
     method: 'POST',
@@ -110,6 +85,7 @@ async function registerReferral(referrerId: number, referredId: number) {
       completed: false,
       cards_added: 0,
       reward_given: false,
+      referred_registered_at: new Date().toISOString(),
     }),
   });
 }
@@ -120,7 +96,7 @@ export default async function handler(req: Request) {
   try {
     const update = await req.json();
 
-    // — Pago pendiente de confirmación —
+    // — Pago pendiente —
     if (update.pre_checkout_query) {
       await answerPreCheckoutQuery(update.pre_checkout_query.id, true);
       return new Response('OK', { status: 200 });
@@ -161,8 +137,8 @@ export default async function handler(req: Request) {
     // Detectar referido
     if (startParam.startsWith('ref_')) {
       const referrerId = parseInt(startParam.replace('ref_', ''));
-      if (!isNaN(referrerId)) {
-        await registerReferral(referrerId, user.id);
+      if (!isNaN(referrerId) && isValidUser(user)) {
+        await registerReferral(referrerId, user.id, user);
         await sendMessage(chatId,
           `👋 <b>¡Bienvenido a CollectIQ!</b>\n\n` +
           `Has sido invitado por un amigo. Añade <b>10 cartas</b> a tu colección y recibirás <b>12 horas de CollectIQ GO gratis</b>. 🎁\n\n` +
