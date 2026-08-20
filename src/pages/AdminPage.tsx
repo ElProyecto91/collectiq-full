@@ -278,7 +278,6 @@ export function AdminPage() {
                     </p>
                   )}
 
-                  <div className="flex gap-2">
                     <div className="flex gap-2 flex-wrap">
   {giftingId === user.telegram_user_id ? (
     <>
