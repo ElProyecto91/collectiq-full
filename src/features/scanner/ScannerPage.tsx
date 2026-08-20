@@ -96,12 +96,6 @@ function getRarityColor(rarity?: string): string {
   return 'text-gray-400';
 }
 
-function getTodayKey() { return 'scans_' + new Date().toISOString().split('T')[0]; }
-function getScansToday(): number { return parseInt(localStorage.getItem(getTodayKey()) ?? '0'); }
-function incrementScansToday() { localStorage.setItem(getTodayKey(), String(getScansToday() + 1)); }
-function getAccumulatedScans(): number { return parseInt(localStorage.getItem('scans_accumulated') ?? '0'); }
-function setAccumulatedScans(n: number) { localStorage.setItem('scans_accumulated', String(n)); }
-
 export default function ScannerPage() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -117,9 +111,11 @@ export default function ScannerPage() {
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const [statusMsg, setStatusMsg] = useState('');
   const [progress, setProgress] = useState(0);
-  const [scansToday, setScansToday] = useState(getScansToday());
-  const [accumulated, setAccumulated] = useState(getAccumulatedScans());
+
+  const [scansUsed, setScansUsed] = useState(0);
+  const [scansAccumulated, setScansAccumulated] = useState(0);
   const [isPremium, setIsPremium] = useState<boolean | null>(null);
+  const [scansLoaded, setScansLoaded] = useState(false);
   const [watchingAd, setWatchingAd] = useState(false);
 
   const { mutate: createItem } = useCreateCollectionItem();
@@ -131,28 +127,48 @@ export default function ScannerPage() {
     if (!sessionLoaded) return;
     if (!telegramUser?.id) {
       setIsPremium(false);
+      setScansLoaded(true);
       return;
     }
-    supabase.from('user_premium').select('plan, expires_at')
-      .eq('telegram_user_id', telegramUser.id).maybeSingle()
-      .then(({ data }) => {
-        const isExpired = data?.expires_at ? new Date(data.expires_at) < new Date() : true;
-        setIsPremium(data?.plan === 'go' && !isExpired);
-      });
+
+    // Cargar estado premium y escaneos en paralelo
+    Promise.all([
+      supabase.from('user_premium').select('plan, expires_at')
+        .eq('telegram_user_id', telegramUser.id).maybeSingle(),
+      fetch(`/api/scans?userId=${telegramUser.id}`)
+        .then(r => r.json()),
+    ]).then(([premiumRes, scansRes]) => {
+      const data = premiumRes.data;
+      const isExpired = data?.expires_at ? new Date(data.expires_at) < new Date() : true;
+      setIsPremium(data?.plan === 'go' && !isExpired);
+      setScansUsed(scansRes.scansUsed ?? 0);
+      setScansAccumulated(scansRes.scansAccumulated ?? 0);
+      setScansLoaded(true);
+    });
   }, [telegramUser?.id, sessionLoaded]);
 
-  const totalScansAvailable = DAILY_SCAN_LIMIT + accumulated;
-  const canScan = isPremium === true || (isPremium !== null && scansToday < totalScansAvailable);
-  const remainingScans = Math.max(0, totalScansAvailable - scansToday);
+  const totalScansAvailable = DAILY_SCAN_LIMIT + scansAccumulated;
+  const canScan = isPremium === true || (scansLoaded && scansUsed < totalScansAvailable);
+  const remainingScans = Math.max(0, totalScansAvailable - scansUsed);
+
+  const updateScans = useCallback(async (action: string, amount?: number) => {
+    if (!telegramUser?.id) return;
+    const res = await fetch('/api/scans', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ telegramUserId: telegramUser.id, action, amount }),
+    });
+    const data = await res.json();
+    setScansUsed(data.scansUsed ?? 0);
+    setScansAccumulated(data.scansAccumulated ?? 0);
+  }, [telegramUser?.id]);
 
   const watchAd = useCallback(() => {
     if (watchingAd) return;
     setWatchingAd(true);
     (window as any).show_11612154?.()
-      .then(() => {
-        const newAccumulated = accumulated + AD_BONUS_SCANS;
-        setAccumulated(newAccumulated);
-        setAccumulatedScans(newAccumulated);
+      .then(async () => {
+        await updateScans('add_accumulated', AD_BONUS_SCANS);
         setStatusMsg('🎉 +' + AD_BONUS_SCANS + ' escaneo añadido');
         setTimeout(() => setStatusMsg(''), 3000);
       })
@@ -160,10 +176,8 @@ export default function ScannerPage() {
         setStatusMsg('❌ Anuncio no completado. Inténtalo de nuevo.');
         setTimeout(() => setStatusMsg(''), 3000);
       })
-      .finally(() => {
-        setWatchingAd(false);
-      });
-  }, [watchingAd, accumulated]);
+      .finally(() => setWatchingAd(false));
+  }, [watchingAd, updateScans]);
 
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -219,16 +233,9 @@ export default function ScannerPage() {
         throw new Error('pokétcg_error');
       }
 
-      // Solo descontamos si la búsqueda fue exitosa
+      // Solo descontamos si la búsqueda fue exitosa y no es premium
       if (!isPremium) {
-        if (accumulated > 0) {
-          const newAcc = accumulated - 1;
-          setAccumulated(newAcc);
-          setAccumulatedScans(newAcc);
-        } else {
-          incrementScansToday();
-          setScansToday(getScansToday());
-        }
+        await updateScans('use');
       }
 
       setProgress(100);
@@ -246,7 +253,7 @@ export default function ScannerPage() {
       }
       setPhase('error');
     }
-  }, [currentFile, accumulated, isPremium]);
+  }, [currentFile, isPremium, updateScans]);
 
   const manualSearch = useCallback(async () => {
     if (!searchQuery.trim()) return;
@@ -322,12 +329,12 @@ export default function ScannerPage() {
 
       {/* Barra de estado */}
       <div className="mx-4 mb-3">
-        {!sessionLoaded && (
+        {(!sessionLoaded || !scansLoaded) && (
           <div className="bg-[#111118] border border-white/8 rounded-2xl p-3 animate-pulse">
             <div className="h-4 bg-white/10 rounded w-1/2" />
           </div>
         )}
-        {sessionLoaded && isPremium === true && (
+        {sessionLoaded && scansLoaded && isPremium === true && (
           <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-2xl p-3 flex items-center gap-2">
             <Zap size={16} className="text-yellow-400" />
             <p className="text-xs font-bold" style={{
@@ -338,7 +345,7 @@ export default function ScannerPage() {
             }}>CollectIQ GO · Escaneos ilimitados ✨</p>
           </div>
         )}
-        {sessionLoaded && isPremium === false && (
+        {sessionLoaded && scansLoaded && isPremium === false && (
           <div className="bg-[#111118] border border-white/8 rounded-2xl p-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Zap size={16} className="text-blue-400" />
@@ -347,7 +354,7 @@ export default function ScannerPage() {
                   {remainingScans} escaneo{remainingScans !== 1 ? 's' : ''} disponible{remainingScans !== 1 ? 's' : ''}
                 </p>
                 <p className="text-[10px] text-gray-500">
-                  {scansToday}/{DAILY_SCAN_LIMIT} diarios · {accumulated} extra
+                  {scansUsed}/{DAILY_SCAN_LIMIT} diarios · {scansAccumulated} extra
                 </p>
               </div>
             </div>
@@ -357,11 +364,6 @@ export default function ScannerPage() {
                 ? <><Loader2 size={12} className="animate-spin" />Cargando...</>
                 : <><Tv size={12} />+1 escaneo</>}
             </button>
-          </div>
-        )}
-        {sessionLoaded && isPremium === null && (
-          <div className="bg-[#111118] border border-white/8 rounded-2xl p-3 animate-pulse">
-            <div className="h-4 bg-white/10 rounded w-1/2" />
           </div>
         )}
       </div>
@@ -413,7 +415,7 @@ export default function ScannerPage() {
           </div>
         )}
 
-        {sessionLoaded && isPremium === false && !canScan && phase === 'idle' && (
+        {sessionLoaded && scansLoaded && isPremium === false && !canScan && phase === 'idle' && (
           <div className="bg-orange-500/10 border border-orange-500/30 rounded-2xl p-4 space-y-3">
             <p className="text-sm font-bold text-orange-300">⚡ Límite diario alcanzado</p>
             <p className="text-xs text-orange-400/80">Has usado tus {DAILY_SCAN_LIMIT} escaneos de hoy. Ve un anuncio para conseguir más o hazte GO para escaneos ilimitados.</p>
@@ -549,16 +551,16 @@ export default function ScannerPage() {
               )}
               <button
                 onClick={openCamera}
-                disabled={!sessionLoaded || (!canScan && isPremium === false)}
+                disabled={!sessionLoaded || !scansLoaded || (!canScan && isPremium === false)}
                 className={cx(
                   'w-full rounded-2xl py-4 font-semibold flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform',
-                  !sessionLoaded ? 'bg-white/5 text-gray-500' :
+                  !sessionLoaded || !scansLoaded ? 'bg-white/5 text-gray-500' :
                   canScan ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-blue-900/40' :
                   'bg-white/5 text-gray-500 cursor-not-allowed'
                 )}
               >
                 <Camera className="w-5 h-5" />
-                {!sessionLoaded ? 'Cargando...' : canScan ? 'Escanear carta' : 'Límite alcanzado'}
+                {!sessionLoaded || !scansLoaded ? 'Cargando...' : canScan ? 'Escanear carta' : 'Límite alcanzado'}
               </button>
             </div>
           )}
