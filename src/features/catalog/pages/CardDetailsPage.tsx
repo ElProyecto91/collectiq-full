@@ -1,11 +1,12 @@
 import { useNavigate, useParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Plus, CheckCircle2, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Plus, CheckCircle2, ExternalLink, TrendingUp, TrendingDown } from 'lucide-react';
 import { cx } from '@/utils';
 import { useCreateCollectionItem, useCollectionItem } from '@/hooks/use-collection';
 import { useUserStore } from '@/store';
 import { useCurrency } from '@/hooks/use-currency';
 import { useI18n } from '@/i18n';
+import { supabase } from '@/lib/supabase';
 
 interface Attack { name: string; cost: string[]; damage: string; text: string; }
 interface Ability { name: string; text: string; type: string; }
@@ -20,6 +21,11 @@ interface PokemonCardDetail {
   tcgplayer?: { prices?: { normal?: { market?: number }; holofoil?: { market?: number }; reverseHolofoil?: { market?: number } } };
   legalities?: { standard?: string; expanded?: string; unlimited?: string };
   nationalPokedexNumbers?: number[];
+}
+
+interface PriceHistory {
+  price: number;
+  date: string;
 }
 
 const TYPE_COLORS: Record<string, string> = {
@@ -45,6 +51,46 @@ function EnergyCost({ cost }: { cost: string[] }) {
   );
 }
 
+function MiniPriceChart({ history }: { history: PriceHistory[] }) {
+  if (history.length < 2) return null;
+  const values = history.map(h => h.price);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const width = 280;
+  const height = 50;
+  const pad = 4;
+  const points = history.map((h, i) => {
+    const x = pad + (i / (history.length - 1)) * (width - pad * 2);
+    const y = height - pad - ((h.price - min) / range) * (height - pad * 2);
+    return `${x},${y}`;
+  }).join(' ');
+  const isUp = values[values.length - 1] >= values[0];
+  const diff = values[values.length - 1] - values[0];
+  const pct = values[0] > 0 ? ((diff / values[0]) * 100).toFixed(1) : '0';
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-gray-500">Historial de precio</p>
+        <div className={'flex items-center gap-1 text-xs font-bold ' + (isUp ? 'text-green-400' : 'text-red-400')}>
+          {isUp ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+          {isUp ? '+' : ''}{pct}%
+        </div>
+      </div>
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-12">
+        <polyline points={points} fill="none"
+          stroke={isUp ? '#22c55e' : '#ef4444'}
+          strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      <div className="flex justify-between text-[10px] text-gray-600">
+        <span>{new Date(history[0].date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}</span>
+        <span>{new Date(history[history.length - 1].date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}</span>
+      </div>
+    </div>
+  );
+}
+
 const POKEMON_API_KEY = import.meta.env.VITE_POKEMONTCG_API_KEY ?? '';
 
 export function CardDetailsPage() {
@@ -54,6 +100,7 @@ export function CardDetailsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [added, setAdded] = useState(false);
+  const [priceHistory, setPriceHistory] = useState<PriceHistory[]>([]);
 
   const { mutate: createItem } = useCreateCollectionItem();
   const { data: existingItem } = useCollectionItem(cardId);
@@ -68,7 +115,30 @@ export function CardDetailsPage() {
       .then(r => r.json())
       .then(json => { setCard(json.data); setIsLoading(false); })
       .catch(() => { setError('No se pudo cargar esta carta.'); setIsLoading(false); });
+
+    // Cargar historial de precio
+    supabase.from('card_price_history')
+      .select('price, date')
+      .eq('card_id', cardId)
+      .order('date', { ascending: true })
+      .limit(30)
+      .then(({ data }) => setPriceHistory(data ?? []));
   }, [cardId]);
+
+  useEffect(() => {
+    // Guardar precio actual en historial si tenemos datos
+    if (!card || !cardId) return;
+    const price = card.cardmarket?.prices?.averageSellPrice ?? card.tcgplayer?.prices?.holofoil?.market ?? card.tcgplayer?.prices?.normal?.market;
+    if (!price) return;
+    const today = new Date().toISOString().split('T')[0];
+    supabase.from('card_price_history')
+      .select('id').eq('card_id', cardId).eq('date', today).maybeSingle()
+      .then(({ data }) => {
+        if (!data) {
+          supabase.from('card_price_history').insert({ card_id: cardId, price, date: today });
+        }
+      });
+  }, [card, cardId]);
 
   const handleAdd = () => {
     if (!card || !telegramUser?.id) return;
@@ -193,40 +263,47 @@ export function CardDetailsPage() {
           </div>
         )}
 
-        {/* Precios */}
-        {(cardmarketPrice || tcgPrice) && (
+        {/* Precios + historial */}
+        {(cardmarketPrice || tcgPrice || priceHistory.length > 0) && (
           <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
             <p className="text-xs text-green-400 font-bold uppercase tracking-wider">Precios de mercado</p>
-            <div className="grid grid-cols-2 gap-3">
-              {cardmarketPrice && (
-                <div className="bg-white/5 rounded-xl p-3 text-center">
-                  <p className="text-[10px] text-gray-500 mb-1">Cardmarket</p>
-                  <p className="text-lg font-bold text-green-400">{formatPrice(cardmarketPrice)}</p>
-                </div>
-              )}
-              {tcgPrice && (
-                <div className="bg-white/5 rounded-xl p-3 text-center">
-                  <p className="text-[10px] text-gray-500 mb-1">TCGPlayer</p>
-                  <p className="text-lg font-bold text-green-400">{formatPrice(tcgPrice)}</p>
-                </div>
-              )}
-              {trendPrice && (
-                <div className="bg-white/5 rounded-xl p-3 text-center">
-                  <p className="text-[10px] text-gray-500 mb-1">Tendencia</p>
-                  <p className="text-lg font-bold text-blue-400">{formatPrice(trendPrice)}</p>
-                </div>
-              )}
-              {lowPrice && (
-                <div className="bg-white/5 rounded-xl p-3 text-center">
-                  <p className="text-[10px] text-gray-500 mb-1">Precio mínimo</p>
-                  <p className="text-lg font-bold text-yellow-400">{formatPrice(lowPrice)}</p>
-                </div>
-              )}
-            </div>
+            {(cardmarketPrice || tcgPrice) && (
+              <div className="grid grid-cols-2 gap-3">
+                {cardmarketPrice && (
+                  <div className="bg-white/5 rounded-xl p-3 text-center">
+                    <p className="text-[10px] text-gray-500 mb-1">Cardmarket</p>
+                    <p className="text-lg font-bold text-green-400">{formatPrice(cardmarketPrice)}</p>
+                  </div>
+                )}
+                {tcgPrice && (
+                  <div className="bg-white/5 rounded-xl p-3 text-center">
+                    <p className="text-[10px] text-gray-500 mb-1">TCGPlayer</p>
+                    <p className="text-lg font-bold text-green-400">{formatPrice(tcgPrice)}</p>
+                  </div>
+                )}
+                {trendPrice && (
+                  <div className="bg-white/5 rounded-xl p-3 text-center">
+                    <p className="text-[10px] text-gray-500 mb-1">Tendencia</p>
+                    <p className="text-lg font-bold text-blue-400">{formatPrice(trendPrice)}</p>
+                  </div>
+                )}
+                {lowPrice && (
+                  <div className="bg-white/5 rounded-xl p-3 text-center">
+                    <p className="text-[10px] text-gray-500 mb-1">Precio mínimo</p>
+                    <p className="text-lg font-bold text-yellow-400">{formatPrice(lowPrice)}</p>
+                  </div>
+                )}
+              </div>
+            )}
+            {priceHistory.length >= 2 && (
+              <div className="border-t border-white/8 pt-3">
+                <MiniPriceChart history={priceHistory} />
+              </div>
+            )}
           </div>
         )}
 
-        {/* Comprar en Cardmarket — siempre visible */}
+        {/* Comprar en Cardmarket */}
         <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-2">
           <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Comprar carta</p>
           <a href={cardmarketUrl} target="_blank" rel="noopener noreferrer"
