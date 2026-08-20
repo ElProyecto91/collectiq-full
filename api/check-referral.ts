@@ -19,6 +19,21 @@ export default async function handler(req: Request) {
     const { telegramUserId, totalCards } = await req.json();
     if (!telegramUserId) return new Response(JSON.stringify({ error: 'Missing telegramUserId' }), { status: 400 });
 
+    // Verificar que el totalCards real en Supabase coincide
+    const realCountRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/collection_items?telegram_user_id=eq.${telegramUserId}&select=id`,
+      { headers: { 'apikey': SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`, 'Prefer': 'count=exact', 'Range': '0-0' } }
+    );
+    const contentRange = realCountRes.headers.get('content-range') ?? '';
+    const realCount = parseInt(contentRange.split('/')[1] ?? '0');
+
+    // Si el count enviado no coincide con el real, ignorar
+    if (Math.abs(realCount - totalCards) > 5) {
+      return new Response(JSON.stringify({ ok: true, rewarded: false, reason: 'count_mismatch' }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     // Buscar referido pendiente
     const refRes = await fetch(
       `${SUPABASE_URL}/rest/v1/referrals?referred_id=eq.${telegramUserId}&completed=eq.false&reward_given=eq.false&select=*`,
@@ -29,7 +44,26 @@ export default async function handler(req: Request) {
 
     const referral = referrals[0];
 
-    // Actualizar contador de cartas
+    // Verificar antigüedad mínima de 48h
+    const registeredAt = new Date(referral.referred_registered_at ?? referral.created_at);
+    const hoursSinceRegistration = (Date.now() - registeredAt.getTime()) / (1000 * 60 * 60);
+    if (hoursSinceRegistration < 48) {
+      // Actualizar contador pero no dar recompensa aún
+      await fetch(`${SUPABASE_URL}/rest/v1/referrals?id=eq.${referral.id}`, {
+        method: 'PATCH',
+        headers: {
+          'apikey': SUPABASE_SERVICE_KEY,
+          'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ cards_added: realCount }),
+      });
+      return new Response(JSON.stringify({ ok: true, rewarded: false, reason: 'too_new', hoursLeft: Math.ceil(48 - hoursSinceRegistration) }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Actualizar contador
     await fetch(`${SUPABASE_URL}/rest/v1/referrals?id=eq.${referral.id}`, {
       method: 'PATCH',
       headers: {
@@ -37,11 +71,11 @@ export default async function handler(req: Request) {
         'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ cards_added: totalCards }),
+      body: JSON.stringify({ cards_added: realCount }),
     });
 
-    // Si alcanza 10 cartas y no se ha dado recompensa
-    if (totalCards >= 10 && !referral.reward_given) {
+    // Si tiene 10+ cartas reales y lleva 48h+
+    if (realCount >= 10 && !referral.reward_given) {
 
       // 1. Marcar como completado
       await fetch(`${SUPABASE_URL}/rest/v1/referrals?id=eq.${referral.id}`, {
@@ -77,8 +111,15 @@ export default async function handler(req: Request) {
         }),
       });
 
-      // 3. Dar +10 escaneos acumulados al referrer (via notificación al frontend)
-      // Guardamos en user_notifications para que el frontend lo procese
+      // 3. Notificar al referred
+      await sendMessage(telegramUserId,
+        `🎁 <b>¡Has desbloqueado tu recompensa!</b>\n\n` +
+        `Has añadido 10 cartas a tu colección.\n` +
+        `<b>12 horas de CollectIQ GO</b> activadas. ✨\n\n` +
+        `Abre la app: https://t.me/CollectIQ_bot/app`
+      );
+
+      // 4. Dar +10 escaneos al referrer via notificación
       await fetch(`${SUPABASE_URL}/rest/v1/user_notifications`, {
         method: 'POST',
         headers: {
@@ -96,15 +137,7 @@ export default async function handler(req: Request) {
         }),
       });
 
-      // 4. Notificar al referred por Telegram
-      await sendMessage(telegramUserId,
-        `🎁 <b>¡Has desbloqueado tu recompensa!</b>\n\n` +
-        `Has añadido 10 cartas a tu colección.\n` +
-        `<b>12 horas de CollectIQ GO</b> activadas. ✨\n\n` +
-        `Abre la app para disfrutarlo: https://t.me/CollectIQ_bot/app`
-      );
-
-      // 5. Notificar al referrer por Telegram
+      // 5. Notificar al referrer
       await sendMessage(referral.referrer_id,
         `🎉 <b>¡Tu amigo ha completado el reto!</b>\n\n` +
         `Has ganado <b>+10 escaneos</b> por tu invitación. 🎴\n\n` +
@@ -116,7 +149,7 @@ export default async function handler(req: Request) {
       });
     }
 
-    return new Response(JSON.stringify({ ok: true, rewarded: false, progress: totalCards }), {
+    return new Response(JSON.stringify({ ok: true, rewarded: false, progress: realCount }), {
       headers: { 'Content-Type': 'application/json' },
     });
 
