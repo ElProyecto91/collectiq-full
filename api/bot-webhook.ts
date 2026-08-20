@@ -141,11 +141,11 @@ export default async function handler(req: Request) {
       if (!isNaN(referrerId) && isValidUser(user)) {
         await registerReferral(referrerId, user.id, user);
         await sendMessage(chatId,
-          ``👋 <b>¡Bienvenido a CollectIQ!</b>\n\n` +
-`Has sido invitado por un amigo. Añade <b>10 cartas</b> a tu colección y recibirás <b>6 horas de CollectIQ GO gratis</b>. 🎁\n\n` +
-          `Abre la app: https://t.me/CollectIQ_bot/app`
-        );
-        return new Response('OK', { status: 200 });
+  `👋 <b>¡Bienvenido a CollectIQ!</b>\n\n` +
+  `Has sido invitado por un amigo. Añade <b>10 cartas</b> a tu colección y recibirás <b>6 horas de CollectIQ GO gratis</b>. 🎁\n\n` +
+  `Abre la app: https://t.me/CollectIQ_bot/app`
+);
+return new Response('OK', { status: 200 });
       }
     }
 
