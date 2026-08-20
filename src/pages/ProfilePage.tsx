@@ -219,15 +219,16 @@ export function ProfilePage() {
           <p className="text-xs text-gray-400">Tu amigo añade 10 cartas y ambos ganáis:</p>
           <div className="grid grid-cols-2 gap-2">
             <div className="bg-white/5 rounded-xl p-2 text-center">
-              <p className="text-lg">🎁</p>
-              <p className="text-xs font-bold text-green-400">Tú: +10 escaneos</p>
+              <p className="text-lg">⭐</p>
+              <p className="text-xs font-bold text-yellow-400">Tú: 6h GO gratis</p>
             </div>
             <div className="bg-white/5 rounded-xl p-2 text-center">
-              <p className="text-lg">⭐</p>
-              <p className="text-xs font-bold text-yellow-400">Él: 12h GO gratis</p>
+              <p className="text-lg">🎁</p>
+              <p className="text-xs font-bold text-green-400">Tu amigo: +10 escaneos</p>
             </div>
           </div>
         </div>
+        <p className="text-[10px] text-gray-500">Máximo 5 referidos · {referralCount}/5 completados</p>
         <button onClick={handleCopyReferral}
           className={'w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-all active:scale-95 ' + (
             copied ? 'bg-green-500/20 border border-green-500/30 text-green-400' : 'bg-white/5 border border-white/10 text-gray-300'
