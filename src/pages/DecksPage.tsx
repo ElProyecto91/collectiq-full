@@ -31,8 +31,8 @@ export function DecksPage() {
   const [decks, setDecks] = useState<Deck[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-const [isPremium, setIsPremium] = useState(false);
-const [showPaywall, setShowPaywall] = useState(false);
+  const [isPremium, setIsPremium] = useState(false);
+  const [showPaywall, setShowPaywall] = useState(false);
   const [exportingId, setExportingId] = useState<string | null>(null);
   const [commentsOpen, setCommentsOpen] = useState<string | null>(null);
   const [comments, setComments] = useState<DeckComment[]>([]);
