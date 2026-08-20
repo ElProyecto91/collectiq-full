@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Download, Smartphone, Apple, Chrome } from 'lucide-react';
+import { X, Download, Smartphone, Apple, Monitor } from 'lucide-react';
 
 interface InstallPWAProps {
   onClose: () => void;
@@ -58,7 +58,7 @@ export function InstallPWA({ onClose }: InstallPWAProps) {
           {([
             { key: 'android', label: 'Android', icon: <Smartphone size={14} /> },
             { key: 'ios', label: 'iPhone/iPad', icon: <Apple size={14} /> },
-            { key: 'desktop', label: 'Ordenador', icon: <Chrome size={14} /> },
+            { key: 'desktop', label: 'Ordenador', icon: <Monitor size={14} /> },
           ] as { key: Platform; label: string; icon: React.ReactNode }[]).map(p => (
             <button key={p.key} onClick={() => setPlatform(p.key)}
               className={'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-medium border transition-all ' + (
