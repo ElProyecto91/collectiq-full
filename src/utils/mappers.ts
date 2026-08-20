@@ -94,6 +94,8 @@ export function mapCollectionItem(row: CollectionItemRow): CollectionItem {
     inSleeve: row.in_sleeve ?? false,
     inBinder: row.in_binder ?? false,
     customPhoto: row.custom_photo ?? null,
+    storageLocation: (row as any).storage_location ?? null,
+    sleeveType: (row as any).sleeve_type ?? null,
   };
 }
 
@@ -151,6 +153,8 @@ export function toCollectionItemRow(input: CollectionItemInput) {
     in_sleeve: input.inSleeve ?? false,
     in_binder: input.inBinder ?? false,
     custom_photo: input.customPhoto ?? null,
+    storage_location: (input as any).storageLocation ?? null,
+    sleeve_type: (input as any).sleeveType ?? null,
   };
 }
 
@@ -182,6 +186,8 @@ export function toCollectionItemUpdateRow(input: Partial<CollectionItemInput>) {
   if (input.rarity !== undefined) row.rarity = input.rarity;
   if (input.marketPrice !== undefined) row.market_price = input.marketPrice;
   if (input.tcgplayerPrice !== undefined) row.tcgplayer_price = input.tcgplayerPrice;
+  if ((input as any).storageLocation !== undefined) row.storage_location = (input as any).storageLocation;
+  if ((input as any).sleeveType !== undefined) row.sleeve_type = (input as any).sleeveType;
 
   return row;
 }
