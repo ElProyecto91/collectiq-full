@@ -230,7 +230,7 @@ const handleCreateDeck = () => {
           <h1 className="text-2xl font-bold text-white">Mis Mazos</h1>
           <p className="text-sm text-gray-500">Crea y comparte tus mazos.</p>
         </div>
-        <button onClick={() => navigate('/decks/new')}
+        <button onClick={handleCreateDeck}
           className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center active:scale-95 transition-transform">
           <Plus size={18} className="text-white" />
         </button>
