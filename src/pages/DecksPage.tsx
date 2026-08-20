@@ -63,6 +63,13 @@ export function DecksPage() {
       setIsLoading(false);
     }
   };
+const handleCreateDeck = () => {
+  if (!isPremium && decks.length >= 1) {
+    setShowPaywall(true);
+    return;
+  }
+  navigate('/decks/new');
+};
 
   const handleDelete = async (deckId: string) => {
     if (deletingId !== deckId) { setDeletingId(deckId); return; }
