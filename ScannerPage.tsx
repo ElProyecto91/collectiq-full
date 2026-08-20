@@ -109,19 +109,22 @@ export default function ScannerPage() {
 
   const { mutate: createItem } = useCreateCollectionItem();
   const telegramUser = useUserStore((s) => s.telegramUser);
+  const sessionLoaded = useUserStore((s) => s.sessionLoaded);
   const { updateMission } = useMissions();
 
   useEffect(() => {
-    // Sin usuario no hacemos nada — esperamos a que inicie sesión
-    if (!telegramUser?.id) return;
-
+    if (!sessionLoaded) return; // Esperar a que cargue la sesión
+    if (!telegramUser?.id) {
+      setIsPremium(false); // Sin usuario = FREE
+      return;
+    }
     supabase.from('user_premium').select('plan, expires_at')
       .eq('telegram_user_id', telegramUser.id).maybeSingle()
       .then(({ data }) => {
         const isExpired = data?.expires_at ? new Date(data.expires_at) < new Date() : true;
         setIsPremium(data?.plan === 'go' && !isExpired);
       });
-  }, [telegramUser?.id]);
+  }, [telegramUser?.id, sessionLoaded]);
 
   const totalScansAvailable = DAILY_SCAN_LIMIT + accumulated;
   const canScan = isPremium === true || (isPremium !== null && scansToday < totalScansAvailable);
@@ -130,8 +133,6 @@ export default function ScannerPage() {
   const watchAd = useCallback(() => {
     if (watchingAd) return;
     setWatchingAd(true);
-
-    // SDK Monetag real
     (window as any).show_11612154?.()
       .then(() => {
         const newAccumulated = accumulated + AD_BONUS_SCANS;
@@ -305,17 +306,22 @@ export default function ScannerPage() {
 
       {/* Barra de estado */}
       <div className="mx-4 mb-3">
-        {!telegramUser?.id && (
-          <div className="bg-[#111118] border border-white/8 rounded-2xl p-3">
-            <p className="text-xs text-gray-500 text-center">Inicia sesión para ver tus escaneos</p>
-          </div>
-        )}
-        {telegramUser?.id && isPremium === null && (
+        {!sessionLoaded && (
           <div className="bg-[#111118] border border-white/8 rounded-2xl p-3 animate-pulse">
             <div className="h-4 bg-white/10 rounded w-1/2" />
           </div>
         )}
-        {telegramUser?.id && isPremium === true && (
+        {sessionLoaded && !telegramUser?.id && (
+          <div className="bg-[#111118] border border-white/8 rounded-2xl p-3">
+            <p className="text-xs text-gray-500 text-center">Inicia sesión para ver tus escaneos</p>
+          </div>
+        )}
+        {sessionLoaded && telegramUser?.id && isPremium === null && (
+          <div className="bg-[#111118] border border-white/8 rounded-2xl p-3 animate-pulse">
+            <div className="h-4 bg-white/10 rounded w-1/2" />
+          </div>
+        )}
+        {sessionLoaded && telegramUser?.id && isPremium === true && (
           <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-2xl p-3 flex items-center gap-2">
             <Zap size={16} className="text-yellow-400" />
             <p className="text-xs font-bold" style={{
@@ -326,7 +332,7 @@ export default function ScannerPage() {
             }}>CollectIQ GO · Escaneos ilimitados ✨</p>
           </div>
         )}
-        {telegramUser?.id && isPremium === false && (
+        {sessionLoaded && telegramUser?.id && isPremium === false && (
           <div className="bg-[#111118] border border-white/8 rounded-2xl p-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Zap size={16} className="text-blue-400" />
@@ -385,7 +391,7 @@ export default function ScannerPage() {
           <div className="bg-blue-500/10 border border-blue-500/30 rounded-2xl px-4 py-3 text-sm text-blue-300 text-center">{statusMsg}</div>
         )}
 
-        {telegramUser?.id && isPremium === false && !canScan && phase === 'idle' && (
+        {sessionLoaded && telegramUser?.id && isPremium === false && !canScan && phase === 'idle' && (
           <div className="bg-orange-500/10 border border-orange-500/30 rounded-2xl p-4 space-y-3">
             <p className="text-sm font-bold text-orange-300">⚡ Límite diario alcanzado</p>
             <p className="text-xs text-orange-400/80">Has usado tus {DAILY_SCAN_LIMIT} escaneos de hoy. Ve un anuncio para conseguir más o hazte GO para escaneos ilimitados.</p>
@@ -494,14 +500,16 @@ export default function ScannerPage() {
                 </div>
               )}
               <button onClick={openCamera}
-                disabled={!telegramUser?.id || (!canScan && isPremium !== null)}
+                disabled={!sessionLoaded || (!canScan && isPremium !== null && !!telegramUser?.id)}
                 className={cx('w-full rounded-2xl py-4 font-semibold flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform',
+                  !sessionLoaded ? 'bg-white/5 text-gray-500' :
                   !telegramUser?.id ? 'bg-white/5 text-gray-500 cursor-not-allowed' :
                   isPremium === null ? 'bg-white/5 text-gray-500' :
                   canScan ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-blue-900/40' :
                   'bg-white/5 text-gray-500 cursor-not-allowed')}>
                 <Camera className="w-5 h-5" />
-                {!telegramUser?.id ? 'Inicia sesión' :
+                {!sessionLoaded ? 'Cargando...' :
+                  !telegramUser?.id ? 'Inicia sesión' :
                   isPremium === null ? 'Cargando...' :
                   canScan ? 'Escanear carta' : 'Límite alcanzado'}
               </button>
