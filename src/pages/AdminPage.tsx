@@ -279,44 +279,44 @@ export function AdminPage() {
                   )}
 
                   <div className="flex gap-2">
-                    {giftingId === user.telegram_user_id ? (
-                      <>
-                        {[
-  { label: '1d', months: 0, days: 1 },
-  { label: '3d', months: 0, days: 3 },
-  { label: '7d', months: 0, days: 7 },
-  { label: '1m', months: 1, days: 0 },
-  { label: '3m', months: 3, days: 0 },
-  { label: '6m', months: 6, days: 0 },
-  { label: '12m', months: 12, days: 0 },
-].map(opt => (
-  <button key={opt.label} onClick={() => giveGO(user.telegram_user_id, opt.months, opt.days)}
-    className="flex-1 py-2 rounded-xl bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-xs font-bold active:scale-95">
-    {opt.label}
-  </button>
-))}
-                            
-                        <button onClick={() => setGiftingId(null)}
-                          className="px-3 py-2 rounded-xl bg-white/5 text-gray-400 text-xs">
-                          ✕
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button onClick={() => setGiftingId(user.telegram_user_id)}
-                          className="flex-1 py-2 rounded-xl bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-xs font-medium active:scale-95">
-                          <Gift size={12} className="inline mr-1" />
-                          Dar GO
-                        </button>
-                        {user.isPremium && (
-                          <button onClick={() => revokeGO(user.telegram_user_id)}
-                            className="flex-1 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium active:scale-95">
-                            Revocar GO
-                          </button>
-                        )}
-                      </>
-                    )}
-                  </div>
+                    <div className="flex gap-2 flex-wrap">
+  {giftingId === user.telegram_user_id ? (
+    <>
+      {[
+        { label: '1d', months: 0, days: 1 },
+        { label: '3d', months: 0, days: 3 },
+        { label: '7d', months: 0, days: 7 },
+        { label: '1m', months: 1, days: 0 },
+        { label: '3m', months: 3, days: 0 },
+        { label: '6m', months: 6, days: 0 },
+        { label: '12m', months: 12, days: 0 },
+      ].map(opt => (
+        <button key={opt.label} onClick={() => giveGO(user.telegram_user_id, opt.months, opt.days)}
+          className="flex-1 py-2 rounded-xl bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-xs font-bold active:scale-95">
+          {opt.label}
+        </button>
+      ))}
+      <button onClick={() => setGiftingId(null)}
+        className="px-3 py-2 rounded-xl bg-white/5 text-gray-400 text-xs">
+        ✕
+      </button>
+    </>
+  ) : (
+    <>
+      <button onClick={() => setGiftingId(user.telegram_user_id)}
+        className="flex-1 py-2 rounded-xl bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-xs font-medium active:scale-95">
+        <Gift size={12} className="inline mr-1" />
+        Dar GO
+      </button>
+      {user.isPremium && (
+        <button onClick={() => revokeGO(user.telegram_user_id)}
+          className="flex-1 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium active:scale-95">
+          Revocar GO
+        </button>
+      )}
+    </>
+  )}
+</div>
                 </div>
               );
             })}
