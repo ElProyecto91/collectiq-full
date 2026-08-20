@@ -125,21 +125,23 @@ export function AdminPage() {
   };
 
   const giveGO = async (userId: number, months: number = 1, days: number = 0) => {
-  const ms = (months * 30 * 24 * 60 * 60 * 1000) + (days * 24 * 60 * 60 * 1000);
-  const expiresAt = new Date(Date.now() + ms).toISOString();
-  const { error } = await supabase.from('user_premium').upsert({
-    telegram_user_id: userId,
-    plan: 'go',
-    expires_at: expiresAt,
-    stars_paid: 0,
-    updated_at: new Date().toISOString(),
-  }, { onConflict: 'telegram_user_id' });
-
-  if (!error) {
-    setStatusMsg('✅ GO activado para ' + userId + ' hasta ' + new Date(expiresAt).toLocaleDateString('es-ES'));
-    setUsers(prev => prev.map(u => u.telegram_user_id === userId ? { ...u, isPremium: true, premiumExpires: expiresAt } : u));
+  if (!telegramUser?.id) return;
+  const res = await fetch('/api/admin-give-go', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      telegramUserId: telegramUser.id,
+      targetUserId: userId,
+      months,
+      days,
+    }),
+  });
+  const data = await res.json();
+  if (data.ok) {
+    setStatusMsg('✅ GO activado para ' + userId + ' hasta ' + new Date(data.expiresAt).toLocaleDateString('es-ES'));
+    setUsers(prev => prev.map(u => u.telegram_user_id === userId ? { ...u, isPremium: true, premiumExpires: data.expiresAt } : u));
   } else {
-    setStatusMsg('❌ Error: ' + error.message);
+    setStatusMsg('❌ Error al activar GO');
   }
   setTimeout(() => setStatusMsg(''), 4000);
   setGiftingId(null);
