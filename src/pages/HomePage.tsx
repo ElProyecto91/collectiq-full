@@ -12,6 +12,7 @@ import type { ReactNode } from 'react';
 export function HomePage() {
   const navigate = useNavigate();
   const { isTelegram } = useTelegram();
+  const [showInstall, setShowInstall] = useState(false);
   const name = useDisplayName();
   const telegramUser = useUserStore((s) => s.telegramUser);
   const { data: stats, isLoading } = useCollectionStats();
