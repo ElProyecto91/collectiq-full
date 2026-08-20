@@ -88,6 +88,12 @@ export function useTelegram() {
         };
         setTelegramUser(normalized);
         setSessionLoaded(true);
+// Bonus de bienvenida para nuevos usuarios
+fetch('/api/welcome-bonus', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ telegramUserId: tgUser.id }),
+});
 
         // Si viene desde la PWA, generar código
         if (startParam === 'pwa') {
