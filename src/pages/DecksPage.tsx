@@ -264,7 +264,7 @@ const handleCreateDeck = () => {
             <p className="text-white font-semibold">Aun no tienes mazos</p>
             <p className="text-sm text-gray-500 mt-1">Crea tu primer mazo de 60 cartas.</p>
           </div>
-          onClick={handleCreateDeck}
+          <button onClick={handleCreateDeck}
             className="bg-blue-600 text-white rounded-2xl px-6 py-3 font-semibold flex items-center gap-2 active:scale-95 transition-transform">
             <Plus size={18} />Crear mazo
           </button>
