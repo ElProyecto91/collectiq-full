@@ -12,6 +12,12 @@ export function AppLayout() {
   const telegramUser = useUserStore((s) => s.telegramUser);
   const sessionLoaded = useUserStore((s) => s.sessionLoaded);
 
+const { track } = useAnalytics();
+
+useEffect(() => {
+  track('page_view', { page: location.pathname });
+}, [location.pathname]);
+
   useEffect(() => {
     const onboardingDone = localStorage.getItem('collectiq-onboarding-done');
     if (!onboardingDone) {
