@@ -1,6 +1,7 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useEffect } from 'react';
 import { BottomNav } from './BottomNav';
+import { useAnalytics } from '@/hooks/use-analytics';
 import { useUserStore } from '@/store';
 import { isInsideTelegram } from '@/lib/telegram';
 
