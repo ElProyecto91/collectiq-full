@@ -14,7 +14,6 @@ import { GOBadge, GOName } from '@/components/GOBadge';
 import { InstallPWA } from '@/components/InstallPWA';
 import { supabase } from '@/lib/supabase';
 import { useAnalytics } from '@/hooks/use-analytics';
-import { supabase } from '@/lib/supabase';
 
 const CURRENCIES = ['EUR', 'USD', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'BRL', 'MXN', 'PLN'];
 const LANGUAGES = [
