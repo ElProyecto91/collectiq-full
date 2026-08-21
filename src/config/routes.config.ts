@@ -28,7 +28,26 @@ export type NavItem = {
   /** lucide-react icon component reference (resolved in the nav bar). */
   icon: 'Home' | 'LayoutGrid' | 'Compass' | 'Users' | 'User';
 };
-
+export const RoutePaths = {
+  Home: '/',
+  Collection: '/collection',
+  Explorer: '/explorer',
+  CardDetails: '/explorer/card/:cardId',
+  Wishlist: '/wishlist',
+  Profile: '/profile',
+  Scanner: '/scanner',
+  Community: '/community',
+  Decks: '/decks',
+  DeckDetail: '/decks/:deckId',
+  // Hub multi-coleccionable
+  Hub: '/hub',
+  // Funko
+  FunkoHome: '/funko',
+  FunkoScanner: '/funko/scanner',
+  FunkoExplorer: '/funko/explorer',
+  FunkoWishlist: '/funko/wishlist',
+  FunkoDetail: '/funko/:id',
+} as const;
 export const NAV_ITEMS: readonly NavItem[] = [
   { id: 'home',       labelKey: 'nav.home',       path: RoutePaths.Home,       icon: 'Home' },
   { id: 'collection', labelKey: 'nav.collection',  path: RoutePaths.Collection, icon: 'LayoutGrid' },
