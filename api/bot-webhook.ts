@@ -134,29 +134,7 @@ export default async function handler(req: Request) {
     const user = message.from;
     const startParam = message.text?.split(' ')?.[1] ?? '';
 
-    // Mensaje de bienvenida /start
-    if (message.text === '/start' || (message.text?.startsWith('/start') && !startParam.startsWith('ref_'))) {
-      await sendMessage(chatId,
-        '<b>CollectIQ - Tu coleccion, reinventada.</b>\n\n' +
-        'Gestiona, analiza y comparte tu coleccion de cartas TCG como un profesional.\n\n' +
-        '<b>Lo que puedes hacer:</b>\n' +
-        'Escanea cartas con IA en segundos\n' +
-        'Consulta precios de mercado en tiempo real\n' +
-        'Analiza el valor y ROI de tu coleccion\n' +
-        'Crea mazos y compartellos con la comunidad\n' +
-        'Guarda una wishlist con alertas de precio\n' +
-        'Completa misiones y sube de nivel\n' +
-        'Organiza por sets, rarezas y ubicacion fisica\n' +
-        'Conecta con otros coleccionistas\n\n' +
-        'Pulsa el boton para abrir la app:',
-        {
-          inline_keyboard: [[
-            { text: 'Abrir CollectIQ', web_app: { url: 'https://collectiq-full.vercel.app' } }
-          ]]
-        }
-      );
-      return new Response('OK', { status: 200 });
-    }
+    
 
     // Detectar referido
     if (startParam.startsWith('ref_')) {
