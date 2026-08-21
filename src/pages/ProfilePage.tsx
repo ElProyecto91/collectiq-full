@@ -13,6 +13,8 @@ import { AchievementToast } from '@/components/AchievementToast';
 import { GOBadge, GOName } from '@/components/GOBadge';
 import { InstallPWA } from '@/components/InstallPWA';
 import { supabase } from '@/lib/supabase';
+import { useAnalytics } from '@/hooks/use-analytics';
+import { supabase } from '@/lib/supabase';
 
 const CURRENCIES = ['EUR', 'USD', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'BRL', 'MXN', 'PLN'];
 const LANGUAGES = [
@@ -37,6 +39,7 @@ export function ProfilePage() {
   const [referralCount, setReferralCount] = useState(0);
   const [copied, setCopied] = useState(false);
   const [showInstall, setShowInstall] = useState(false);
+  const { track } = useAnalytics();
 
   const totalCards = cards.reduce((s, c) => s + c.quantity, 0);
   const uniqueCards = cards.length;
@@ -76,6 +79,7 @@ export function ProfilePage() {
   const handleCopyReferral = () => {
     navigator.clipboard.writeText(referralLink);
     setCopied(true);
+track('referral_link_copied');
     setTimeout(() => setCopied(false), 2000);
   };
 
