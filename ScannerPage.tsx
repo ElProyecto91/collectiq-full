@@ -10,6 +10,7 @@ import { useCreateCollectionItem } from '@/hooks/use-collection';
 import { useUserStore } from '@/store';
 import { supabase } from '@/lib/supabase';
 import { useMissions } from '@/hooks/use-missions';
+import { useAnalytics } from '@/hooks/use-analytics';
 
 interface PokemonCard {
   id: string; name: string; number: string; rarity?: string;
@@ -111,6 +112,7 @@ export default function ScannerPage() {
   const telegramUser = useUserStore((s) => s.telegramUser);
   const sessionLoaded = useUserStore((s) => s.sessionLoaded);
   const { updateMission } = useMissions();
+  const { track } = useAnalytics();
 
   useEffect(() => {
     if (!sessionLoaded) return;
@@ -139,6 +141,7 @@ export default function ScannerPage() {
         setAccumulated(newAccumulated);
         setAccumulatedScans(newAccumulated);
         setStatusMsg('🎉 +' + AD_BONUS_SCANS + ' escaneo añadido');
+track('ad_watched', { result: 'completed' });
         setTimeout(() => setStatusMsg(''), 3000);
       })
       .catch(() => {
@@ -181,6 +184,7 @@ export default function ScannerPage() {
 
   const analyzeCard = useCallback(async () => {
     if (!currentFile || !canScan) return;
+    track('scan_started');
     setPhase('analyzing');
     setProgress(20);
     setStatusMsg('Enviando imagen a Gemini…');
@@ -250,9 +254,11 @@ export default function ScannerPage() {
       setProgress(100);
       setResults(cards);
       setPhase(cards.length === 0 ? 'no-results' : 'results');
+track(cards.length === 0 ? 'scan_no_results' : 'scan_success', { cardName: usedName, resultsCount: cards.length });
     } catch {
       setErrorMsg('La base de datos oficial de Pokémon está caída. Inténtalo de nuevo en unos minutos.');
       setPhase('error');
+track('scan_failed', { error: msg });
     }
   }, [searchQuery]);
 
@@ -270,6 +276,8 @@ export default function ScannerPage() {
     setStatusMsg(`✅ ${card.name} añadida a tu colección`);
     setTimeout(() => setStatusMsg(''), 3000);
     await updateMission('add_card');
+
+track('card_added', { cardName: card.name, setName: card.set.name });
 
     const { count: totalCards } = await supabase
       .from('collection_items')
