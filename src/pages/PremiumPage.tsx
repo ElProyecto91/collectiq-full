@@ -2,7 +2,6 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Check, Zap, Star, Tv, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import { usePremium, GO_PRICE_STARS } from '@/hooks/use-premium';
-import { usePremium, GO_PRICE_STARS } from '@/hooks/use-premium';
 import { useAnalytics } from '@/hooks/use-analytics';
 import { useUserStore } from '@/store';
 
@@ -65,16 +64,16 @@ export function PremiumPage() {
 
       const data = await res.json();
       if (!data.invoiceLink) throw new Error(data.error ?? 'Error al crear el pago');
-track('go_purchase_started', { stars: GO_PRICE_STARS });
-tg.openInvoice(data.invoiceLink, (status: string) => {
+
+      track('go_purchase_started', { stars: GO_PRICE_STARS });
       tg.openInvoice(data.invoiceLink, (status: string) => {
         setIsPaying(false);
         if (status === 'paid') {
           tg.showAlert('✅ ¡Pago completado! Tu plan GO estará activo en unos segundos. Reinicia la app para verlo.');
-track('go_purchase_completed', { stars: GO_PRICE_STARS });
+          track('go_purchase_completed', { stars: GO_PRICE_STARS });
         } else if (status === 'cancelled') {
           setPayError('Pago cancelado.');
-track('go_purchase_cancelled');
+          track('go_purchase_cancelled');
         } else if (status === 'failed') {
           setPayError('El pago falló. Inténtalo de nuevo.');
         }
