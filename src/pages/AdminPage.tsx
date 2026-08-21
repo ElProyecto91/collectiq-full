@@ -369,6 +369,8 @@ export function AdminPage() {
               </div>
             </div>
 
+            <FunkoImporter adminId={telegramUser?.id ?? 0} />
+
             {/* Buscador */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
@@ -468,6 +470,52 @@ export function AdminPage() {
           </>
         )}
       </div>
+    </div>
+  );
+}
+function FunkoImporter({ adminId }: { adminId: number }) {
+  const [importing, setImporting] = useState(false);
+  const [progress, setProgress] = useState('');
+  const [done, setDone] = useState(false);
+
+  const runImport = async () => {
+    setImporting(true);
+    setProgress('Iniciando importación...');
+    let offset = 0;
+    let total = 0;
+    while (true) {
+      const res = await fetch('/api/funko-import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminId, offset, limit: 500 }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setProgress('❌ Error: ' + (data.error ?? 'desconocido'));
+        setImporting(false);
+        return;
+      }
+      total += data.imported;
+      setProgress(`✅ Importados ${total} de ${data.total} Funkos...`);
+      if (data.done) break;
+      offset = data.nextOffset;
+      await new Promise(r => setTimeout(r, 500));
+    }
+    setProgress(`✅ Importación completa — ${total} Funkos en catálogo`);
+    setImporting(false);
+    setDone(true);
+  };
+
+  return (
+    <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
+      <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">🎭 Catálogo Funko</p>
+      {progress && <p className="text-xs text-blue-300">{progress}</p>}
+      {!done && (
+        <button onClick={runImport} disabled={importing}
+          className="w-full py-2.5 rounded-xl bg-purple-600 text-white text-sm font-bold active:scale-95 transition-transform disabled:opacity-50">
+          {importing ? 'Importando...' : 'Importar 23.000 Funkos'}
+        </button>
+      )}
     </div>
   );
 }
