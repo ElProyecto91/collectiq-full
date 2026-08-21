@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUserStore } from '@/store';
 import { supabase } from '@/lib/supabase';
-import { Users, Zap, BarChart2, Gift, Search, ArrowLeft } from 'lucide-react';
+import { Users, Zap, BarChart2, Gift, Search, ArrowLeft, TrendingUp } from 'lucide-react';
 
 const ADMIN_ID = 1299079722;
 
@@ -26,37 +26,86 @@ interface GlobalStats {
   premiumUsers: number;
 }
 
+interface AnalyticsStats {
+  totalEvents: number;
+  pageViews: number;
+  scanStarted: number;
+  scanSuccess: number;
+  scanFailed: number;
+  cardAdded: number;
+  goPurchaseStarted: number;
+  goPurchaseCompleted: number;
+  goPurchaseCancelled: number;
+  adWatched: number;
+  referralCopied: number;
+  byPlatform: { platform: string; count: number }[];
+  conversionRate: number;
+}
+
 export function AdminPage() {
   const navigate = useNavigate();
   const telegramUser = useUserStore((s) => s.telegramUser);
   const [users, setUsers] = useState<UserStats[]>([]);
   const [globalStats, setGlobalStats] = useState<GlobalStats | null>(null);
+  const [analyticsStats, setAnalyticsStats] = useState<AnalyticsStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'users' | 'analytics'>('users');
   const [search, setSearch] = useState('');
   const [giftingId, setGiftingId] = useState<number | null>(null);
   const [giftInput, setGiftInput] = useState('');
   const [statusMsg, setStatusMsg] = useState('');
 
   useEffect(() => {
-  if (!telegramUser?.id) return;
-  if (telegramUser.id !== ADMIN_ID) {
-    navigate('/');
-    return;
-  }
-
-  // Verificar en servidor que es admin real
-  fetch('/api/admin-verify', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ telegramUserId: telegramUser.id }),
-  })
-    .then(r => r.json())
-    .then(data => {
-      if (!data.ok) navigate('/');
-      else loadData();
+    if (!telegramUser?.id) return;
+    if (telegramUser.id !== ADMIN_ID) { navigate('/'); return; }
+    fetch('/api/admin-verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ telegramUserId: telegramUser.id }),
     })
-    .catch(() => navigate('/'));
-}, [telegramUser?.id]);
+      .then(r => r.json())
+      .then(data => { if (!data.ok) navigate('/'); else { loadData(); loadAnalytics(); } })
+      .catch(() => navigate('/'));
+  }, [telegramUser?.id]);
+
+  const loadAnalytics = async () => {
+    const since = new Date();
+    since.setDate(since.getDate() - 30);
+
+    const { data } = await supabase
+      .from('analytics_events')
+      .select('event_name, platform, is_premium')
+      .gte('created_at', since.toISOString())
+      .eq('app_id', 'collectiq');
+
+    if (!data) return;
+
+    const count = (name: string) => data.filter(e => e.event_name === name).length;
+    const started = count('go_purchase_started');
+    const completed = count('go_purchase_completed');
+
+    const platformMap: Record<string, number> = {};
+    data.forEach(e => {
+      const p = e.platform ?? 'unknown';
+      platformMap[p] = (platformMap[p] ?? 0) + 1;
+    });
+
+    setAnalyticsStats({
+      totalEvents: data.length,
+      pageViews: count('page_view'),
+      scanStarted: count('scan_started'),
+      scanSuccess: count('scan_success'),
+      scanFailed: count('scan_failed'),
+      cardAdded: count('card_added'),
+      goPurchaseStarted: started,
+      goPurchaseCompleted: completed,
+      goPurchaseCancelled: count('go_purchase_cancelled'),
+      adWatched: count('ad_watched'),
+      referralCopied: count('referral_link_copied'),
+      byPlatform: Object.entries(platformMap).map(([platform, count]) => ({ platform, count })),
+      conversionRate: started > 0 ? Math.round((completed / started) * 100) : 0,
+    });
+  };
 
   const loadData = async () => {
     setIsLoading(true);
@@ -69,7 +118,6 @@ export function AdminPage() {
 
       if (!rawSessions) return;
 
-      // Deduplicar — quedarse solo con la sesión más reciente por usuario
       const seen = new Set<number>();
       const sessions = rawSessions.filter(s => {
         if (seen.has(s.telegram_user_id)) return false;
@@ -79,7 +127,6 @@ export function AdminPage() {
 
       const userStats = await Promise.all(sessions.map(async session => {
         const ud = session.user_data ?? {};
-
         const [
           { count: totalCards },
           { count: totalDecks },
@@ -92,9 +139,7 @@ export function AdminPage() {
           supabase.from('user_premium').select('plan, expires_at').eq('telegram_user_id', session.telegram_user_id).maybeSingle(),
         ]);
 
-        const isExpired = premiumData?.expires_at
-          ? new Date(premiumData.expires_at) < new Date()
-          : true;
+        const isExpired = premiumData?.expires_at ? new Date(premiumData.expires_at) < new Date() : true;
 
         return {
           telegram_user_id: session.telegram_user_id,
@@ -110,7 +155,6 @@ export function AdminPage() {
       }));
 
       setUsers(userStats);
-
       setGlobalStats({
         totalUsers: sessions.length,
         totalCards: userStats.reduce((s, u) => s + u.totalCards, 0),
@@ -118,34 +162,28 @@ export function AdminPage() {
         totalScans: userStats.reduce((s, u) => s + u.totalScans, 0),
         premiumUsers: userStats.filter(u => u.isPremium).length,
       });
-
     } finally {
       setIsLoading(false);
     }
   };
 
   const giveGO = async (userId: number, months: number = 1, days: number = 0) => {
-  if (!telegramUser?.id) return;
-  const res = await fetch('/api/admin-give-go', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      telegramUserId: telegramUser.id,
-      targetUserId: userId,
-      months,
-      days,
-    }),
-  });
-  const data = await res.json();
-  if (data.ok) {
-    setStatusMsg('✅ GO activado para ' + userId + ' hasta ' + new Date(data.expiresAt).toLocaleDateString('es-ES'));
-    setUsers(prev => prev.map(u => u.telegram_user_id === userId ? { ...u, isPremium: true, premiumExpires: data.expiresAt } : u));
-  } else {
-    setStatusMsg('❌ Error al activar GO');
-  }
-  setTimeout(() => setStatusMsg(''), 4000);
-  setGiftingId(null);
-};
+    if (!telegramUser?.id) return;
+    const res = await fetch('/api/admin-give-go', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ telegramUserId: telegramUser.id, targetUserId: userId, months, days }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      setStatusMsg('✅ GO activado para ' + userId + ' hasta ' + new Date(data.expiresAt).toLocaleDateString('es-ES'));
+      setUsers(prev => prev.map(u => u.telegram_user_id === userId ? { ...u, isPremium: true, premiumExpires: data.expiresAt } : u));
+    } else {
+      setStatusMsg('❌ Error al activar GO');
+    }
+    setTimeout(() => setStatusMsg(''), 4000);
+    setGiftingId(null);
+  };
 
   const giveGOByInput = async () => {
     const userId = parseInt(giftInput.trim());
@@ -190,6 +228,18 @@ export function AdminPage() {
           </div>
         )}
 
+        {/* Tabs */}
+        <div className="flex gap-2">
+          <button onClick={() => setActiveTab('users')}
+            className={'flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ' + (activeTab === 'users' ? 'bg-blue-600 text-white' : 'bg-white/5 text-gray-400')}>
+            <Users size={14} className="inline mr-1.5" />Usuarios
+          </button>
+          <button onClick={() => setActiveTab('analytics')}
+            className={'flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ' + (activeTab === 'analytics' ? 'bg-purple-600 text-white' : 'bg-white/5 text-gray-400')}>
+            <TrendingUp size={14} className="inline mr-1.5" />Analytics
+          </button>
+        </div>
+
         {/* Stats globales */}
         {globalStats && (
           <div className="grid grid-cols-2 gap-2">
@@ -210,118 +260,212 @@ export function AdminPage() {
           </div>
         )}
 
-        {/* Dar GO por ID */}
-        <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
-          <p className="text-xs text-gray-400 font-bold uppercase tracking-wider flex items-center gap-2">
-            <Gift size={14} className="text-yellow-400" /> Dar GO por Telegram ID
-          </p>
-          <div className="flex gap-2">
-            <input value={giftInput} onChange={e => setGiftInput(e.target.value)}
-              placeholder="Telegram ID..."
-              className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50" />
-            <button onClick={giveGOByInput}
-              className="px-4 py-2.5 rounded-xl bg-yellow-500 text-black text-sm font-bold active:scale-95 transition-transform">
-              Dar GO
-            </button>
-          </div>
-        </div>
+        {/* TAB ANALYTICS */}
+        {activeTab === 'analytics' && analyticsStats && (
+          <div className="space-y-4">
 
-        {/* Buscador */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-          <input value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar usuario..."
-            className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50" />
-        </div>
-
-        {/* Lista de usuarios */}
-        {isLoading ? (
-          <div className="text-center py-8 text-gray-500 text-sm">Cargando usuarios...</div>
-        ) : (
-          <div className="space-y-2">
-            <p className="text-xs text-gray-500">{filtered.length} usuarios</p>
-            {filtered.map(user => {
-              const displayName = user.first_name ?? user.username ?? 'Usuario';
-              return (
-                <div key={user.telegram_user_id}
-                  className={'bg-[#111118] border rounded-2xl p-4 space-y-3 ' + (user.isPremium ? 'border-yellow-500/20' : 'border-white/8')}>
-                  <div className="flex items-center gap-3">
-                    <div className={'w-10 h-10 rounded-full flex items-center justify-center shrink-0 ' + (user.isPremium ? 'bg-yellow-500/20' : 'bg-blue-600/20')}>
-                      <span className={'font-bold text-sm ' + (user.isPremium ? 'text-yellow-400' : 'text-blue-400')}>
-                        {displayName[0].toUpperCase()}
-                      </span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-bold text-white truncate">{displayName}</p>
-                        {user.isPremium && <span className="text-[9px] bg-yellow-500 text-black font-black px-1.5 py-0.5 rounded-full shrink-0">GO</span>}
-                      </div>
-                      {user.username && <p className="text-xs text-gray-500">@{user.username}</p>}
-                      <p className="text-[10px] text-gray-600">{user.telegram_user_id}</p>
-                    </div>
+            {/* Escaneos */}
+            <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
+              <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Escaneos — últimos 30 días</p>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { label: 'Iniciados', value: analyticsStats.scanStarted, color: 'text-blue-400' },
+                  { label: 'Éxito', value: analyticsStats.scanSuccess, color: 'text-green-400' },
+                  { label: 'Fallidos', value: analyticsStats.scanFailed, color: 'text-red-400' },
+                ].map(item => (
+                  <div key={item.label} className="bg-white/5 rounded-xl p-3 text-center">
+                    <p className={'text-xl font-bold ' + item.color}>{item.value}</p>
+                    <p className="text-[10px] text-gray-500">{item.label}</p>
                   </div>
+                ))}
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-gray-500">Tasa de éxito</span>
+                <span className="text-green-400 font-bold">
+                  {analyticsStats.scanStarted > 0
+                    ? Math.round((analyticsStats.scanSuccess / analyticsStats.scanStarted) * 100)
+                    : 0}%
+                </span>
+              </div>
+            </div>
 
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { label: 'Cartas', value: user.totalCards, color: 'text-blue-400' },
-                      { label: 'Mazos', value: user.totalDecks, color: 'text-purple-400' },
-                      { label: 'Escaneos', value: user.totalScans, color: 'text-green-400' },
-                    ].map(item => (
-                      <div key={item.label} className="bg-white/5 rounded-xl p-2 text-center">
-                        <p className={'text-sm font-bold ' + item.color}>{item.value}</p>
-                        <p className="text-[9px] text-gray-500">{item.label}</p>
-                      </div>
-                    ))}
+            {/* Monetización */}
+            <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
+              <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Monetización — últimos 30 días</p>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { label: 'Iniciados', value: analyticsStats.goPurchaseStarted, color: 'text-blue-400' },
+                  { label: 'Completados', value: analyticsStats.goPurchaseCompleted, color: 'text-green-400' },
+                  { label: 'Cancelados', value: analyticsStats.goPurchaseCancelled, color: 'text-red-400' },
+                ].map(item => (
+                  <div key={item.label} className="bg-white/5 rounded-xl p-3 text-center">
+                    <p className={'text-xl font-bold ' + item.color}>{item.value}</p>
+                    <p className="text-[10px] text-gray-500">{item.label}</p>
                   </div>
+                ))}
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-gray-500">Conversión GO</span>
+                <span className="text-yellow-400 font-bold">{analyticsStats.conversionRate}%</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-gray-500">Anuncios vistos</span>
+                <span className="text-purple-400 font-bold">{analyticsStats.adWatched}</span>
+              </div>
+            </div>
 
-                  {user.isPremium && user.premiumExpires && (
-                    <p className="text-[10px] text-yellow-500">
-                      GO hasta {new Date(user.premiumExpires).toLocaleDateString('es-ES')}
-                    </p>
-                  )}
-
-                    <div className="flex gap-2 flex-wrap">
-  {giftingId === user.telegram_user_id ? (
-    <>
-      {[
-        { label: '1d', months: 0, days: 1 },
-        { label: '3d', months: 0, days: 3 },
-        { label: '7d', months: 0, days: 7 },
-        { label: '1m', months: 1, days: 0 },
-        { label: '3m', months: 3, days: 0 },
-        { label: '6m', months: 6, days: 0 },
-        { label: '12m', months: 12, days: 0 },
-      ].map(opt => (
-        <button key={opt.label} onClick={() => giveGO(user.telegram_user_id, opt.months, opt.days)}
-          className="flex-1 py-2 rounded-xl bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-xs font-bold active:scale-95">
-          {opt.label}
-        </button>
-      ))}
-      <button onClick={() => setGiftingId(null)}
-        className="px-3 py-2 rounded-xl bg-white/5 text-gray-400 text-xs">
-        ✕
-      </button>
-    </>
-  ) : (
-    <>
-      <button onClick={() => setGiftingId(user.telegram_user_id)}
-        className="flex-1 py-2 rounded-xl bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-xs font-medium active:scale-95">
-        <Gift size={12} className="inline mr-1" />
-        Dar GO
-      </button>
-      {user.isPremium && (
-        <button onClick={() => revokeGO(user.telegram_user_id)}
-          className="flex-1 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium active:scale-95">
-          Revocar GO
-        </button>
-      )}
-    </>
-  )}
-</div>
+            {/* Engagement */}
+            <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
+              <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Engagement — últimos 30 días</p>
+              {[
+                { label: 'Page views', value: analyticsStats.pageViews, color: 'text-blue-400' },
+                { label: 'Cartas añadidas', value: analyticsStats.cardAdded, color: 'text-purple-400' },
+                { label: 'Referidos copiados', value: analyticsStats.referralCopied, color: 'text-green-400' },
+                { label: 'Total eventos', value: analyticsStats.totalEvents, color: 'text-gray-400' },
+              ].map(item => (
+                <div key={item.label} className="flex items-center justify-between">
+                  <span className="text-xs text-gray-500">{item.label}</span>
+                  <span className={'text-sm font-bold ' + item.color}>{item.value.toLocaleString()}</span>
                 </div>
-              );
-            })}
+              ))}
+            </div>
+
+            {/* Por plataforma */}
+            <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
+              <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Por plataforma</p>
+              {analyticsStats.byPlatform.map(item => (
+                <div key={item.platform} className="flex items-center justify-between">
+                  <span className="text-xs text-gray-400 capitalize">{item.platform}</span>
+                  <div className="flex items-center gap-2">
+                    <div className="w-24 bg-white/10 rounded-full h-1.5">
+                      <div className="bg-blue-500 h-1.5 rounded-full"
+                        style={{ width: `${Math.round((item.count / analyticsStats.totalEvents) * 100)}%` }} />
+                    </div>
+                    <span className="text-xs text-white font-bold w-8 text-right">{item.count}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
           </div>
+        )}
+
+        {/* TAB USUARIOS */}
+        {activeTab === 'users' && (
+          <>
+            {/* Dar GO por ID */}
+            <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
+              <p className="text-xs text-gray-400 font-bold uppercase tracking-wider flex items-center gap-2">
+                <Gift size={14} className="text-yellow-400" /> Dar GO por Telegram ID
+              </p>
+              <div className="flex gap-2">
+                <input value={giftInput} onChange={e => setGiftInput(e.target.value)}
+                  placeholder="Telegram ID..."
+                  className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50" />
+                <button onClick={giveGOByInput}
+                  className="px-4 py-2.5 rounded-xl bg-yellow-500 text-black text-sm font-bold active:scale-95 transition-transform">
+                  Dar GO
+                </button>
+              </div>
+            </div>
+
+            {/* Buscador */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+              <input value={search} onChange={e => setSearch(e.target.value)}
+                placeholder="Buscar usuario..."
+                className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50" />
+            </div>
+
+            {/* Lista de usuarios */}
+            {isLoading ? (
+              <div className="text-center py-8 text-gray-500 text-sm">Cargando usuarios...</div>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-xs text-gray-500">{filtered.length} usuarios</p>
+                {filtered.map(user => {
+                  const displayName = user.first_name ?? user.username ?? 'Usuario';
+                  return (
+                    <div key={user.telegram_user_id}
+                      className={'bg-[#111118] border rounded-2xl p-4 space-y-3 ' + (user.isPremium ? 'border-yellow-500/20' : 'border-white/8')}>
+                      <div className="flex items-center gap-3">
+                        <div className={'w-10 h-10 rounded-full flex items-center justify-center shrink-0 ' + (user.isPremium ? 'bg-yellow-500/20' : 'bg-blue-600/20')}>
+                          <span className={'font-bold text-sm ' + (user.isPremium ? 'text-yellow-400' : 'text-blue-400')}>
+                            {displayName[0].toUpperCase()}
+                          </span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-bold text-white truncate">{displayName}</p>
+                            {user.isPremium && <span className="text-[9px] bg-yellow-500 text-black font-black px-1.5 py-0.5 rounded-full shrink-0">GO</span>}
+                          </div>
+                          {user.username && <p className="text-xs text-gray-500">@{user.username}</p>}
+                          <p className="text-[10px] text-gray-600">{user.telegram_user_id}</p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { label: 'Cartas', value: user.totalCards, color: 'text-blue-400' },
+                          { label: 'Mazos', value: user.totalDecks, color: 'text-purple-400' },
+                          { label: 'Escaneos', value: user.totalScans, color: 'text-green-400' },
+                        ].map(item => (
+                          <div key={item.label} className="bg-white/5 rounded-xl p-2 text-center">
+                            <p className={'text-sm font-bold ' + item.color}>{item.value}</p>
+                            <p className="text-[9px] text-gray-500">{item.label}</p>
+                          </div>
+                        ))}
+                      </div>
+
+                      {user.isPremium && user.premiumExpires && (
+                        <p className="text-[10px] text-yellow-500">
+                          GO hasta {new Date(user.premiumExpires).toLocaleDateString('es-ES')}
+                        </p>
+                      )}
+
+                      <div className="flex gap-2 flex-wrap">
+                        {giftingId === user.telegram_user_id ? (
+                          <>
+                            {[
+                              { label: '1d', months: 0, days: 1 },
+                              { label: '3d', months: 0, days: 3 },
+                              { label: '7d', months: 0, days: 7 },
+                              { label: '1m', months: 1, days: 0 },
+                              { label: '3m', months: 3, days: 0 },
+                              { label: '6m', months: 6, days: 0 },
+                              { label: '12m', months: 12, days: 0 },
+                            ].map(opt => (
+                              <button key={opt.label} onClick={() => giveGO(user.telegram_user_id, opt.months, opt.days)}
+                                className="flex-1 py-2 rounded-xl bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-xs font-bold active:scale-95">
+                                {opt.label}
+                              </button>
+                            ))}
+                            <button onClick={() => setGiftingId(null)}
+                              className="px-3 py-2 rounded-xl bg-white/5 text-gray-400 text-xs">
+                              ✕
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button onClick={() => setGiftingId(user.telegram_user_id)}
+                              className="flex-1 py-2 rounded-xl bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-xs font-medium active:scale-95">
+                              <Gift size={12} className="inline mr-1" />Dar GO
+                            </button>
+                            {user.isPremium && (
+                              <button onClick={() => revokeGO(user.telegram_user_id)}
+                                className="flex-1 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium active:scale-95">
+                                Revocar GO
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
