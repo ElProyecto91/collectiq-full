@@ -20,12 +20,12 @@ export default async function handler(req: Request) {
     const batch = allData.slice(offset, offset + limit);
 
     const records = batch.map((item: any) => ({
-      name: item.title ?? 'Unknown',
-      franchise: item.series?.[0] ?? null,
-      series: item.series?.join(', ') ?? null,
-      image_url: item.image ?? null,
-      type: 'pop',
-    }));
+  name: item.title ?? 'Unknown',
+  franchise: item.series?.[0] ?? null,
+  series: item.series?.join(', ') ?? null,
+  image_url: item.imageName ?? null,
+  type: 'pop',
+}));
 
     const res = await fetch(`${SUPABASE_URL}/rest/v1/funko_items`, {
       method: 'POST',
