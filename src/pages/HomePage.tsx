@@ -55,6 +55,19 @@ export function HomePage() {
         </div>
       </header>
 
+      {/* Acceso multi-coleccionable */}
+      <button onClick={() => navigate(RoutePaths.Hub)}
+        className="w-full bg-gradient-to-r from-purple-600/20 to-pink-600/20 border border-purple-500/30 rounded-2xl p-4 flex items-center gap-4 active:scale-95 transition-transform animate-fade-up">
+        <div className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center shrink-0">
+          <span className="text-2xl">🎭</span>
+        </div>
+        <div className="flex-1 text-left">
+          <p className="text-sm font-bold text-white">Funko Pop — ¡Nuevo!</p>
+          <p className="text-xs text-gray-400">Gestiona tu colección Funko</p>
+        </div>
+        <span className="text-gray-400">›</span>
+      </button>
+
       {totalValue > 0 && (
         <div
           onClick={() => navigate(RoutePaths.Collection)}
