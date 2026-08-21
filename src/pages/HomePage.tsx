@@ -5,6 +5,7 @@ import { Compass, Heart, LayoutGrid, ScanLine, TrendingUp, User, DollarSign, Tro
 
 import { Avatar, Button, Card, StatTile } from '@/components/ui';
 import { useDisplayName, useTelegram, useCollectionStats, useCollectionList, useCurrency } from '@/hooks';
+import { FeatureVotes } from '@/components/FeatureVotes';
 import { useUserStore } from '@/store';
 import { RoutePaths } from '@/config';
 import { formatNumber } from '@/utils';
@@ -146,6 +147,8 @@ export function HomePage() {
       )}
 
       {showInstall && <InstallPWA onClose={() => setShowInstall(false)} />}
+
+<FeatureVotes />
 
 <div className="pb-4 flex justify-center">
   <button onClick={() => setShowInstall(true)}
