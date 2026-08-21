@@ -16,8 +16,23 @@ interface PokemonCard {
   id: string; name: string; number: string; rarity?: string;
   images: { small: string; large: string };
   set: { name: string; series: string; total?: number };
-  cardmarket?: { prices?: { averageSellPrice?: number } };
-  tcgplayer?: { prices?: { normal?: { market?: number }; holofoil?: { market?: number } } };
+  cardmarket?: { prices?: { averageSellPrice?: number; reverseHoloSell?: number } };
+  tcgplayer?: { prices?: {
+    normal?: { market?: number };
+    holofoil?: { market?: number };
+    reverseHolofoil?: { market?: number };
+    '1stEditionHolofoil'?: { market?: number };
+  }};
+}
+
+interface VisionResult {
+  text: string;
+  number?: string;
+  set_code?: string;
+  language?: string;
+  variant?: string;
+  name_confidence?: number;
+  variant_confidence?: number;
 }
 
 type ScanPhase = 'idle' | 'preview' | 'analyzing' | 'results' | 'no-results' | 'error';
@@ -35,7 +50,7 @@ async function toBase64(file: File): Promise<string> {
   });
 }
 
-async function extractCardNameWithVision(base64: string): Promise<{ names: string[]; rawText: string }> {
+async function extractCardDataWithVision(base64: string): Promise<VisionResult> {
   const res = await fetch('/api/vision', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -47,18 +62,60 @@ async function extractCardNameWithVision(base64: string): Promise<{ names: strin
   }
   const data = await res.json();
   if (!data.text) throw new Error('No se detectó texto en la imagen');
-  const name = data.text.trim().replace(/^["']|["']$/g, '');
-  return { names: [name], rawText: name };
+  return data as VisionResult;
 }
 
-function getTCGPlayerPrice(card: PokemonCard): number | null {
-  const prices = card.tcgplayer?.prices;
-  if (!prices) return null;
-  return prices.holofoil?.market ?? prices.normal?.market ?? null;
+function getPriceForVariant(card: PokemonCard, variant: string): number | null {
+  const tcg = card.tcgplayer?.prices;
+  const cm = card.cardmarket?.prices;
+
+  if (variant === 'reverse_holo') {
+    return tcg?.reverseHolofoil?.market ?? cm?.reverseHoloSell ?? null;
+  }
+  if (variant === 'holo' || variant === 'full_art' || variant === 'secret_rare') {
+    return tcg?.holofoil?.market ?? cm?.averageSellPrice ?? null;
+  }
+  if (variant === 'first_edition') {
+    return tcg?.['1stEditionHolofoil']?.market ?? tcg?.holofoil?.market ?? null;
+  }
+  // normal / promo / default
+  return cm?.averageSellPrice ?? tcg?.normal?.market ?? tcg?.holofoil?.market ?? null;
 }
 
-async function searchPokemonTCG(name: string, retries = 3): Promise<PokemonCard[]> {
-  const url = `https://api.pokemontcg.io/v2/cards?q=name:"${encodeURIComponent(name)}"&pageSize=20&orderBy=-set.releaseDate`;
+function getVariantLabel(variant: string): string {
+  const labels: Record<string, string> = {
+    normal: 'Normal',
+    holo: 'Holo',
+    reverse_holo: 'Reverse Holo',
+    full_art: 'Full Art',
+    secret_rare: 'Secret Rare',
+    promo: 'Promo',
+    first_edition: '1ª Edición',
+  };
+  return labels[variant] ?? variant;
+}
+
+function getLanguageLabel(lang: string): string {
+  const labels: Record<string, string> = {
+    en: '🇬🇧', ja: '🇯🇵', ko: '🇰🇷', zh: '🇨🇳',
+    fr: '🇫🇷', de: '🇩🇪', es: '🇪🇸', it: '🇮🇹', pt: '🇵🇹',
+  };
+  return labels[lang] ?? '🌐';
+}
+
+function getRarityColor(rarity?: string): string {
+  if (!rarity) return 'text-gray-400';
+  const r = rarity.toLowerCase();
+  if (r.includes('secret') || r.includes('hyper')) return 'text-yellow-300';
+  if (r.includes('ultra') || r.includes('rainbow')) return 'text-purple-400';
+  if (r.includes('rare')) return 'text-blue-400';
+  return 'text-gray-400';
+}
+
+async function searchPokemonTCG(name: string, number?: string, retries = 3): Promise<PokemonCard[]> {
+  let query = `name:"${encodeURIComponent(name)}"`;
+  if (number) query += ` number:${encodeURIComponent(number)}`;
+  const url = `https://api.pokemontcg.io/v2/cards?q=${query}&pageSize=20&orderBy=-set.releaseDate`;
   for (let i = 0; i < retries; i++) {
     try {
       const res = await fetch(url, { headers: { 'X-Api-Key': POKEMON_API_KEY } });
@@ -72,15 +129,6 @@ async function searchPokemonTCG(name: string, retries = 3): Promise<PokemonCard[
     }
   }
   return [];
-}
-
-function getRarityColor(rarity?: string): string {
-  if (!rarity) return 'text-gray-400';
-  const r = rarity.toLowerCase();
-  if (r.includes('secret') || r.includes('hyper')) return 'text-yellow-300';
-  if (r.includes('ultra') || r.includes('rainbow')) return 'text-purple-400';
-  if (r.includes('rare')) return 'text-blue-400';
-  return 'text-gray-400';
 }
 
 function getTodayKey() { return 'scans_' + new Date().toISOString().split('T')[0]; }
@@ -97,6 +145,10 @@ export default function ScannerPage() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [currentFile, setCurrentFile] = useState<File | null>(null);
   const [detectedName, setDetectedName] = useState('');
+  const [detectedVariant, setDetectedVariant] = useState('normal');
+  const [detectedLanguage, setDetectedLanguage] = useState('en');
+  const [nameConfidence, setNameConfidence] = useState(0);
+  const [variantConfidence, setVariantConfidence] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState<PokemonCard[]>([]);
   const [errorMsg, setErrorMsg] = useState('');
@@ -116,10 +168,7 @@ export default function ScannerPage() {
 
   useEffect(() => {
     if (!sessionLoaded) return;
-    if (!telegramUser?.id) {
-      setIsPremium(false);
-      return;
-    }
+    if (!telegramUser?.id) { setIsPremium(false); return; }
     supabase.from('user_premium').select('plan, expires_at')
       .eq('telegram_user_id', telegramUser.id).maybeSingle()
       .then(({ data }) => {
@@ -141,16 +190,14 @@ export default function ScannerPage() {
         setAccumulated(newAccumulated);
         setAccumulatedScans(newAccumulated);
         setStatusMsg('🎉 +' + AD_BONUS_SCANS + ' escaneo añadido');
-track('ad_watched', { result: 'completed' });
+        track('ad_watched', { result: 'completed' });
         setTimeout(() => setStatusMsg(''), 3000);
       })
       .catch(() => {
         setStatusMsg('❌ Anuncio no completado. Inténtalo de nuevo.');
         setTimeout(() => setStatusMsg(''), 3000);
       })
-      .finally(() => {
-        setWatchingAd(false);
-      });
+      .finally(() => setWatchingAd(false));
   }, [watchingAd, accumulated]);
 
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -162,6 +209,10 @@ track('ad_watched', { result: 'completed' });
     setPhase('preview');
     setResults([]);
     setDetectedName('');
+    setDetectedVariant('normal');
+    setDetectedLanguage('en');
+    setNameConfidence(0);
+    setVariantConfidence(0);
     setSearchQuery('');
     setErrorMsg('');
     setStatusMsg('');
@@ -190,12 +241,24 @@ track('ad_watched', { result: 'completed' });
     setStatusMsg('Enviando imagen a Gemini…');
     try {
       const base64 = await toBase64(currentFile);
-      setProgress(50);
+      setProgress(40);
       setStatusMsg('Identificando la carta…');
-      const { names } = await extractCardNameWithVision(base64);
-      setProgress(70);
+      const visionData = await extractCardDataWithVision(base64);
+      setProgress(60);
 
-      if (names.length === 0 || !names[0]) {
+      const cardName = visionData.text?.trim();
+      const cardNumber = visionData.number ?? undefined;
+      const variant = visionData.variant ?? 'normal';
+      const language = visionData.language ?? 'en';
+      const nameConf = visionData.name_confidence ?? 0;
+      const variantConf = visionData.variant_confidence ?? 0;
+
+      setDetectedVariant(variant);
+      setDetectedLanguage(language);
+      setNameConfidence(nameConf);
+      setVariantConfidence(variantConf);
+
+      if (!cardName) {
         setDetectedName('');
         setSearchQuery('');
         setResults([]);
@@ -207,11 +270,16 @@ track('ad_watched', { result: 'completed' });
       let usedName = '';
 
       try {
-        for (const name of names) {
-          setStatusMsg(`Buscando "${name}"…`);
-          cards = await searchPokemonTCG(name);
-          if (cards.length > 0) { usedName = name; break; }
+        setStatusMsg(`Buscando "${cardName}"…`);
+        // Primero buscar con número si lo tenemos (más preciso)
+        if (cardNumber) {
+          cards = await searchPokemonTCG(cardName, cardNumber);
         }
+        // Si no encontró con número, buscar solo por nombre
+        if (cards.length === 0) {
+          cards = await searchPokemonTCG(cardName);
+        }
+        if (cards.length > 0) usedName = cardName;
       } catch {
         throw new Error('pokétcg_error');
       }
@@ -228,13 +296,21 @@ track('ad_watched', { result: 'completed' });
       }
 
       setProgress(100);
-      setDetectedName(usedName || names[0]);
-      setSearchQuery(usedName || names[0]);
+      setDetectedName(usedName || cardName);
+      setSearchQuery(usedName || cardName);
       setResults(cards);
       setPhase(cards.length === 0 ? 'no-results' : 'results');
+      track(cards.length === 0 ? 'scan_no_results' : 'scan_success', {
+        cardName: usedName,
+        resultsCount: cards.length,
+        language,
+        variant,
+        nameConfidence: nameConf,
+      });
 
     } catch (err: any) {
       const msg = err?.message ?? '';
+      track('scan_failed', { error: msg });
       if (msg === 'pokétcg_error' || msg.includes('fetch') || msg.includes('500') || msg.includes('503') || msg.includes('PokéTCG')) {
         setErrorMsg('La base de datos oficial de Pokémon está caída. Inténtalo de nuevo en unos minutos. No se ha descontado ningún escaneo.');
       } else {
@@ -254,30 +330,32 @@ track('ad_watched', { result: 'completed' });
       setProgress(100);
       setResults(cards);
       setPhase(cards.length === 0 ? 'no-results' : 'results');
-track(cards.length === 0 ? 'scan_no_results' : 'scan_success', { cardName: usedName, resultsCount: cards.length });
-    } catch {
+      track(cards.length === 0 ? 'scan_no_results' : 'scan_success', { cardName: searchQuery, resultsCount: cards.length });
+    } catch (err: any) {
+      const msg = err?.message ?? '';
+      track('scan_failed', { error: msg });
       setErrorMsg('La base de datos oficial de Pokémon está caída. Inténtalo de nuevo en unos minutos.');
       setPhase('error');
-track('scan_failed', { error: msg });
     }
   }, [searchQuery]);
 
   const addCard = async (card: PokemonCard) => {
     if (!telegramUser?.id) return;
+    const price = getPriceForVariant(card, detectedVariant);
     createItem({
       cardId: card.id, tcg: 'pokemon', telegramUserId: telegramUser.id,
       cardName: card.name, setName: card.set.name, cardNumber: card.number,
       rarity: card.rarity ?? null, imageUrl: card.images.small, quantity: 1,
       favorite: false, setTotal: card.set.total ?? null,
-      marketPrice: card.cardmarket?.prices?.averageSellPrice ?? null,
-      tcgplayerPrice: getTCGPlayerPrice(card), currency: 'EUR',
+      marketPrice: price ?? card.cardmarket?.prices?.averageSellPrice ?? null,
+      tcgplayerPrice: getPriceForVariant(card, detectedVariant) ?? null,
+      currency: 'EUR',
     });
     setAddedIds(prev => new Set(prev).add(card.id));
     setStatusMsg(`✅ ${card.name} añadida a tu colección`);
     setTimeout(() => setStatusMsg(''), 3000);
     await updateMission('add_card');
-
-track('card_added', { cardName: card.name, setName: card.set.name });
+    track('card_added', { cardName: card.name, setName: card.set.name, variant: detectedVariant, language: detectedLanguage });
 
     const { count: totalCards } = await supabase
       .from('collection_items')
@@ -294,6 +372,8 @@ track('card_added', { cardName: card.name, setName: card.set.name });
     setPhase('idle'); setPreviewUrl(null); setCurrentFile(null);
     setDetectedName(''); setSearchQuery(''); setResults([]);
     setErrorMsg(''); setStatusMsg(''); setProgress(0);
+    setDetectedVariant('normal'); setDetectedLanguage('en');
+    setNameConfidence(0); setVariantConfidence(0);
   };
 
   return (
@@ -310,13 +390,6 @@ track('card_added', { cardName: card.name, setName: card.set.name });
             <h1 className="text-lg font-bold leading-tight">Escanear carta</h1>
           </div>
         </div>
-      </div>
-
-      {/* DEBUG — quitar después */}
-      <div className="mx-4 mb-2 bg-red-500 p-2 rounded-xl">
-        <p className="text-white text-[10px]">
-          sessionLoaded: {String(sessionLoaded)} | userId: {String(telegramUser?.id ?? 'null')} | isPremium: {String(isPremium)}
-        </p>
       </div>
 
       {/* Barra de estado */}
@@ -455,9 +528,48 @@ track('card_added', { cardName: card.name, setName: card.set.name });
         )}
 
         {detectedName && phase === 'results' && (
-          <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 rounded-xl px-3 py-2">
-            <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-            <span className="text-xs text-blue-300">Detectado: <strong className="text-white">{detectedName}</strong></span>
+          <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 rounded-xl px-3 py-2 flex-wrap">
+            <Sparkles className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+            <span className="text-xs text-blue-300">
+              {getLanguageLabel(detectedLanguage)} <strong className="text-white">{detectedName}</strong>
+            </span>
+            <span className="ml-auto text-[10px] bg-white/10 rounded-lg px-2 py-0.5 text-gray-300">
+              {getVariantLabel(detectedVariant)}
+            </span>
+            {nameConfidence > 0 && (
+              <span className={cx('text-[10px] rounded-lg px-2 py-0.5',
+                nameConfidence >= 85 ? 'bg-green-500/20 text-green-400' :
+                nameConfidence >= 60 ? 'bg-yellow-500/20 text-yellow-400' :
+                'bg-red-500/20 text-red-400')}>
+                {nameConfidence}% ID
+              </span>
+            )}
+            {variantConfidence > 0 && (
+              <span className={cx('text-[10px] rounded-lg px-2 py-0.5',
+                variantConfidence >= 85 ? 'bg-green-500/20 text-green-400' :
+                variantConfidence >= 60 ? 'bg-yellow-500/20 text-yellow-400' :
+                'bg-red-500/20 text-red-400')}>
+                {variantConfidence}% variante
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Selector manual de variante si confianza baja */}
+        {phase === 'results' && variantConfidence > 0 && variantConfidence < 75 && (
+          <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3 space-y-2">
+            <p className="text-xs text-yellow-300 font-medium">⚠️ No estamos seguros de la variante. ¿Cuál es?</p>
+            <div className="flex gap-2 flex-wrap">
+              {['normal', 'holo', 'reverse_holo', 'promo', 'first_edition'].map(v => (
+                <button key={v} onClick={() => setDetectedVariant(v)}
+                  className={cx('px-3 py-1.5 rounded-xl text-xs font-medium border transition-all',
+                    detectedVariant === v
+                      ? 'bg-blue-500/20 border-blue-500/30 text-blue-300'
+                      : 'bg-white/5 border-white/10 text-gray-400')}>
+                  {getVariantLabel(v)}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
@@ -465,30 +577,35 @@ track('card_added', { cardName: card.name, setName: card.set.name });
           <>
             <p className="text-xs text-gray-500">{results.length} resultado{results.length !== 1 ? 's' : ''}</p>
             <div className="grid grid-cols-2 gap-3">
-              {results.map((card) => (
-                <div key={card.id} className="bg-[#111118] border border-white/8 rounded-2xl overflow-hidden">
-                  <div className="relative">
-                    <img src={card.images.small} alt={card.name} className="w-full aspect-[2/3] object-cover" />
-                    {addedIds.has(card.id) && (
-                      <div className="absolute inset-0 bg-green-500/20 flex items-center justify-center">
-                        <CheckCircle2 className="w-8 h-8 text-green-400" />
-                      </div>
-                    )}
+              {results.map((card) => {
+                const price = getPriceForVariant(card, detectedVariant);
+                return (
+                  <div key={card.id} className="bg-[#111118] border border-white/8 rounded-2xl overflow-hidden">
+                    <div className="relative">
+                      <img src={card.images.small} alt={card.name} className="w-full aspect-[2/3] object-cover" />
+                      {addedIds.has(card.id) && (
+                        <div className="absolute inset-0 bg-green-500/20 flex items-center justify-center">
+                          <CheckCircle2 className="w-8 h-8 text-green-400" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-2.5 space-y-1.5">
+                      <p className="text-xs font-bold truncate">{card.name}</p>
+                      <p className="text-[10px] text-gray-500 truncate">{card.set.name}</p>
+                      {card.rarity && <p className={cx('text-[10px] truncate font-medium', getRarityColor(card.rarity))}>{card.rarity}</p>}
+                      {price
+                        ? <p className="text-[10px] text-green-400 font-medium">€{price.toFixed(2)} <span className="text-gray-500">({getVariantLabel(detectedVariant)})</span></p>
+                        : <p className="text-[10px] text-gray-500">Sin precio</p>
+                      }
+                      <button onClick={() => addCard(card)} disabled={addedIds.has(card.id)}
+                        className={cx('w-full mt-1 rounded-xl py-2 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all',
+                          addedIds.has(card.id) ? 'bg-green-500/20 text-green-400 cursor-default' : 'bg-blue-600 hover:bg-blue-500 text-white active:scale-95')}>
+                        {addedIds.has(card.id) ? <><CheckCircle2 className="w-3 h-3" />Añadida</> : <><Plus className="w-3 h-3" />Añadir</>}
+                      </button>
+                    </div>
                   </div>
-                  <div className="p-2.5 space-y-1.5">
-                    <p className="text-xs font-bold truncate">{card.name}</p>
-                    <p className="text-[10px] text-gray-500 truncate">{card.set.name}</p>
-                    {card.rarity && <p className={cx('text-[10px] truncate font-medium', getRarityColor(card.rarity))}>{card.rarity}</p>}
-                    {card.cardmarket?.prices?.averageSellPrice && <p className="text-[10px] text-green-400 font-medium">€{card.cardmarket.prices.averageSellPrice.toFixed(2)}</p>}
-                    {!card.cardmarket?.prices?.averageSellPrice && getTCGPlayerPrice(card) && <p className="text-[10px] text-green-400 font-medium">${getTCGPlayerPrice(card)?.toFixed(2)}</p>}
-                    <button onClick={() => addCard(card)} disabled={addedIds.has(card.id)}
-                      className={cx('w-full mt-1 rounded-xl py-2 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all',
-                        addedIds.has(card.id) ? 'bg-green-500/20 text-green-400 cursor-default' : 'bg-blue-600 hover:bg-blue-500 text-white active:scale-95')}>
-                      {addedIds.has(card.id) ? <><CheckCircle2 className="w-3 h-3" />Añadida</> : <><Plus className="w-3 h-3" />Añadir</>}
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </>
         )}
@@ -562,7 +679,7 @@ track('card_added', { cardName: card.name, setName: card.set.name });
 
         {phase === 'idle' && (
           <p className="text-center text-[11px] text-gray-600 pb-2">
-            Fotografía la carta con buena luz · Sin reflejos · Una sola carta
+            Fotografía la carta con buena luz · Sin reflejos · Una sola carta · Cualquier idioma
           </p>
         )}
       </div>
