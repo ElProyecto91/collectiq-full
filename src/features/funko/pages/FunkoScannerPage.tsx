@@ -49,7 +49,7 @@ async function searchFunkoByName(name: string): Promise<FunkoResult[]> {
   return data ?? [];
 }
 
-async function identifyFunkoWithAI(base64: string): Promise<{ name: string; franchise?: string; number?: string; confidence: number }> {
+async function identifyFunkoWithAI(base64: string): Promise<{ name: string; franchise?: string; number?: string; confidence: number; is_funko?: boolean }> {
   const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY ?? '';
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
