@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useUserStore } from '@/store';
+import { usePremium } from '@/hooks/use-premium';
 
 const APP_ID = 'collectiq';
+const APP_VERSION = '1.0.0';
 
 function generateSessionId(): string {
   return Math.random().toString(36).substring(2) + Date.now().toString(36);
@@ -25,6 +27,7 @@ function getPlatform(): string {
 
 export function useAnalytics() {
   const telegramUser = useUserStore((s) => s.telegramUser);
+  const { premium } = usePremium();
   const sessionId = useRef(getSessionId());
   const platform = useRef(getPlatform());
 
@@ -37,11 +40,13 @@ export function useAnalytics() {
         telegramUserId: telegramUser?.id ?? null,
         sessionId: sessionId.current,
         eventName,
-        properties: properties ?? {},
         platform: platform.current,
+        appVersion: APP_VERSION,
+        isPremium: premium.isGO ?? false,
+        properties: properties ?? {},
       }),
-    }).catch(() => {}); // Silent fail — no queremos que un error de analytics rompa la app
-  }, [telegramUser?.id]);
+    }).catch(() => {});
+  }, [telegramUser?.id, premium.isGO]);
 
   return { track };
 }
