@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { X, Download, Smartphone, Apple, Monitor } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { X, Download, Smartphone, Apple, Monitor, ExternalLink } from 'lucide-react';
 
 interface InstallPWAProps {
   onClose: () => void;
@@ -7,8 +7,41 @@ interface InstallPWAProps {
 
 type Platform = 'android' | 'ios' | 'desktop';
 
+const APP_URL = 'https://collectiq-full.vercel.app';
+
+function detectPlatform(): Platform {
+  const ua = navigator.userAgent;
+  if (/iPhone|iPad|iPod/.test(ua)) return 'ios';
+  if (/Android/.test(ua)) return 'android';
+  return 'desktop';
+}
+
 export function InstallPWA({ onClose }: InstallPWAProps) {
-  const [platform, setPlatform] = useState<Platform>('android');
+  const [platform, setPlatform] = useState<Platform>(detectPlatform());
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [installed, setInstalled] = useState(false);
+
+  useEffect(() => {
+    const handler = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    window.addEventListener('appinstalled', () => setInstalled(true));
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const handleInstallNative = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') setInstalled(true);
+    setDeferredPrompt(null);
+  };
+
+  const handleOpenBrowser = () => {
+    window.open(APP_URL, '_blank');
+  };
 
   const steps = {
     android: [
@@ -48,6 +81,28 @@ export function InstallPWA({ onClose }: InstallPWAProps) {
             <X size={16} className="text-white" />
           </button>
         </div>
+
+        {/* Botón instalación nativa (Android/Desktop si disponible) */}
+        {deferredPrompt && !installed && (
+          <button onClick={handleInstallNative}
+            className="w-full py-3.5 rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 text-white text-sm font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-lg shadow-blue-900/40">
+            <Download size={16} />
+            Instalar CollectIQ ahora
+          </button>
+        )}
+
+        {installed && (
+          <div className="w-full py-3 rounded-xl bg-green-500/20 border border-green-500/30 text-green-400 text-sm font-bold text-center">
+            ✅ ¡CollectIQ instalado correctamente!
+          </div>
+        )}
+
+        {/* Botón abrir en navegador */}
+        <button onClick={handleOpenBrowser}
+          className="w-full py-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm font-medium flex items-center justify-center gap-2 active:scale-95 transition-transform">
+          <ExternalLink size={15} className="text-blue-400" />
+          Abrir en el navegador
+        </button>
 
         <p className="text-xs text-gray-400">
           CollectIQ es una Progressive Web App (PWA) — se instala directamente desde el navegador, sin pasar por ninguna tienda de apps.
