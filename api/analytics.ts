@@ -7,7 +7,7 @@ export default async function handler(req: Request) {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
 
   try {
-    const { appId, telegramUserId, sessionId, eventName, properties, platform } = await req.json();
+    const { appId, telegramUserId, sessionId, eventName, properties, platform, appVersion, isPremium } = await req.json();
     if (!eventName) return new Response(JSON.stringify({ error: 'Missing eventName' }), { status: 400 });
 
     await fetch(`${SUPABASE_URL}/rest/v1/analytics_events`, {
@@ -22,8 +22,11 @@ export default async function handler(req: Request) {
         telegram_user_id: telegramUserId ?? null,
         session_id: sessionId ?? null,
         event_name: eventName,
-        properties: properties ?? {},
         platform: platform ?? 'unknown',
+        app_version: appVersion ?? null,
+        is_premium: isPremium ?? false,
+        page: properties?.page ?? null,
+        properties: properties ?? {},
       }),
     });
 
