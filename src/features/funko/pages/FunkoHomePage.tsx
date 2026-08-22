@@ -8,31 +8,31 @@ import type { FunkoCollectionItem } from '@/types/funko';
 
 export function FunkoHomePage() {
   const navigate = useNavigate();
-  const telegramUser = useUserStore((s) => s.telegramUser);
-  const [collection, setCollection] = useState<FunkoCollectionItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+const telegramUser = useUserStore((s) => s.telegramUser);
+const [collection, setCollection] = useState<FunkoCollectionItem[]>([]);
+const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    if (!telegramUser?.id) return;
-    loadCollection();
-  }, [telegramUser?.id]);
+useEffect(() => {
+  if (!telegramUser?.id) return;
+  loadCollection();
+}, [telegramUser?.id]);
 
-  const loadCollection = async () => {
-    if (!telegramUser?.id) return;
-    setIsLoading(true);
-    const { data } = await supabase
-      .from('funko_collection')
-      .select('*, funko_items(*)')
-      .eq('telegram_user_id', telegramUser.id)
-      .order('created_at', { ascending: false });
-    setCollection(data ?? []);
-    setIsLoading(false);
-  };
+const loadCollection = async () => {
+  if (!telegramUser?.id) return;
+  setIsLoading(true);
+  const { data } = await supabase
+    .from('funko_collection')
+    .select('*, funko_items(*)')
+    .eq('telegram_user_id', telegramUser.id)
+    .order('created_at', { ascending: false });
+  setCollection(data ?? []);
+  setIsLoading(false);
+};
 
-  const totalFunkos = collection.reduce((s, f) => s + f.quantity, 0);
-  const totalValue = collection.reduce((s, f) => s + ((f.market_value ?? 0) * f.quantity), 0);
-  const totalInvested = collection.reduce((s, f) => s + ((f.purchase_price ?? 0) * f.quantity), 0);
-  const roi = totalInvested > 0 ? ((totalValue - totalInvested) / totalInvested) * 100 : 0;
+const totalFunkos = collection.reduce((s, f) => s + f.quantity, 0);
+const totalValue = collection.reduce((s, f) => s + ((f.market_value ?? 0) * f.quantity), 0);
+const totalInvested = collection.reduce((s, f) => s + ((f.purchase_price ?? 0) * f.quantity), 0);
+const roi = totalInvested > 0 ? ((totalValue - totalInvested) / totalInvested) * 100 : 0;
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
