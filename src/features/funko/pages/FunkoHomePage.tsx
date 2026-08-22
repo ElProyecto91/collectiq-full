@@ -83,7 +83,7 @@ export function FunkoHomePage() {
             <p className="text-sm font-bold text-white">Wishlist</p>
             <p className="text-[10px] text-gray-400 text-center">Funkos que quieres</p>
           </button>
-          <button
+          <button onClick={() => navigate(RoutePaths.FunkoExplorer)}
             className="bg-gradient-to-r from-green-600/20 to-teal-600/20 border border-green-500/30 rounded-2xl p-4 flex flex-col items-center gap-2 active:scale-95 transition-transform">
             <BarChart2 size={24} className="text-green-400" />
             <p className="text-sm font-bold text-white">Estadísticas</p>
@@ -95,7 +95,7 @@ export function FunkoHomePage() {
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Mi colección</p>
-            <button
+            <button onClick={() => navigate(RoutePaths.FunkoExplorer)}
               className="flex items-center gap-1 text-xs text-purple-400 active:scale-95">
               <Plus size={12} />Añadir
             </button>
