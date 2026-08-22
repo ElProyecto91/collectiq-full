@@ -6,50 +6,92 @@ import { useUserStore } from '@/store';
 import { useDisplayName } from '@/hooks';
 import { supabase } from '@/lib/supabase';
 
+// SVG logos inline — siempre disponibles, sin dependencias externas
+const PokemonLogo = () => (
+  <svg viewBox="0 0 200 70" className="w-24 h-8 object-contain">
+    <text x="0" y="52" fontFamily="Arial Black, sans-serif" fontSize="52" fontWeight="900"
+      fill="#FFCB05" stroke="#3B4CCA" strokeWidth="4" paintOrder="stroke">
+      Pokémon
+    </text>
+  </svg>
+);
+
+const FunkoLogo = () => (
+  <svg viewBox="0 0 180 60" className="w-20 h-8 object-contain">
+    <rect x="2" y="2" width="176" height="56" rx="8" fill="#E31837" />
+    <text x="90" y="42" fontFamily="Arial Black, sans-serif" fontSize="36" fontWeight="900"
+      fill="white" textAnchor="middle">
+      FUNKO
+    </text>
+  </svg>
+);
+
+const YugiohLogo = () => (
+  <svg viewBox="0 0 200 60" className="w-24 h-8 object-contain">
+    <text x="0" y="48" fontFamily="Arial Black, sans-serif" fontSize="40" fontWeight="900"
+      fill="#C41E3A" stroke="#1a1a1a" strokeWidth="2" paintOrder="stroke">
+      Yu-Gi-Oh!
+    </text>
+  </svg>
+);
+
+const OnePieceLogo = () => (
+  <svg viewBox="0 0 200 60" className="w-24 h-8 object-contain">
+    <text x="0" y="44" fontFamily="Arial Black, sans-serif" fontSize="32" fontWeight="900"
+      fill="#D4AF37" stroke="#1a1a1a" strokeWidth="2" paintOrder="stroke">
+      ONE PIECE
+    </text>
+    <text x="2" y="60" fontFamily="Arial, sans-serif" fontSize="14" fontWeight="bold"
+      fill="#D4AF37">
+      CARD GAME
+    </text>
+  </svg>
+);
+
 const COLLECTIONS = [
   {
     key: 'pokemon',
     label: 'Pokémon TCG',
-    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/98/International_Pok%C3%A9mon_logo.svg/800px-International_Pok%C3%A9mon_logo.svg.png',
+    LogoComponent: PokemonLogo,
     desc: 'Cartas, escáner IA, deck builder',
     route: RoutePaths.Collection,
-    bg: 'from-yellow-500/15 to-red-500/15',
+    bg: 'from-yellow-500/15 to-blue-600/15',
     border: 'border-yellow-500/20',
     active: true,
-    color: '#F59E0B',
+    color: '#FFCB05',
   },
   {
     key: 'funko',
     label: 'Funko Pop',
-    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/Funko_logo.svg/800px-Funko_logo.svg.png',
+    LogoComponent: FunkoLogo,
     desc: 'Colección, precios eBay, wishlist',
     route: RoutePaths.FunkoHome,
-    bg: 'from-purple-500/15 to-pink-500/15',
-    border: 'border-purple-500/20',
+    bg: 'from-red-600/15 to-pink-500/15',
+    border: 'border-red-500/20',
     active: true,
-    color: '#A855F7',
+    color: '#E31837',
   },
   {
     key: 'yugioh',
     label: 'Yu-Gi-Oh!',
-    logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/8/8b/Yu-Gi-Oh%21_Logo.svg/800px-Yu-Gi-Oh%21_Logo.svg.png',
+    LogoComponent: YugiohLogo,
     desc: 'Próximamente',
     route: null,
     bg: 'from-blue-500/10 to-indigo-500/10',
     border: 'border-blue-500/10',
     active: false,
-    color: '#3B82F6',
+    color: '#C41E3A',
   },
   {
     key: 'onepiece',
     label: 'One Piece TCG',
-    logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/9/90/One_Piece_Logo.svg/800px-One_Piece_Logo.svg.png',
+    LogoComponent: OnePieceLogo,
     desc: 'Próximamente',
     route: null,
-    bg: 'from-red-500/10 to-orange-500/10',
-    border: 'border-red-500/10',
+    bg: 'from-yellow-500/10 to-red-500/10',
+    border: 'border-yellow-500/10',
     active: false,
-    color: '#EF4444',
+    color: '#D4AF37',
   },
 ];
 
@@ -145,7 +187,7 @@ export function HomePage() {
             <div className="absolute top-0 right-0 w-32 h-32 rounded-full blur-3xl opacity-20"
               style={{ background: defaultCol.color }} />
             <div className="relative z-10">
-              <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center justify-between mb-4">
                 <span className="text-[10px] font-bold text-white/50 uppercase tracking-[0.2em]">MI COLECCIÓN PRINCIPAL</span>
                 <button
                   onClick={e => { e.stopPropagation(); clearDefault(); }}
@@ -153,16 +195,9 @@ export function HomePage() {
                   cambiar
                 </button>
               </div>
-              <div className="flex items-center gap-3 mb-4">
-                <img
-                  src={defaultCol.logo}
-                  alt={defaultCol.label}
-                  className="w-20 h-12 object-contain"
-                  onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                />
-                <div>
-                  <p className="text-xs text-white/50">{defaultCol.desc}</p>
-                </div>
+              <div className="mb-4">
+                <defaultCol.LogoComponent />
+                <p className="text-xs text-white/40 mt-1">{defaultCol.desc}</p>
               </div>
               {defaultCol.key === 'funko' && (
                 <div className="grid grid-cols-2 gap-2">
@@ -199,17 +234,8 @@ export function HomePage() {
               <button
                 onClick={() => navigate(col.route!)}
                 className="flex items-center gap-3 flex-1 min-w-0">
-                <div className="w-14 h-10 flex items-center justify-center shrink-0">
-                  <img
-                    src={col.logo}
-                    alt={col.label}
-                    className="max-w-full max-h-full object-contain"
-                    onError={e => {
-                      const t = e.target as HTMLImageElement;
-                      t.style.display = 'none';
-                      t.parentElement!.innerHTML = `<span class="text-2xl">${col.key === 'pokemon' ? '⚡' : '🎭'}</span>`;
-                    }}
-                  />
+                <div className="w-16 h-10 flex items-center justify-center shrink-0">
+                  <col.LogoComponent />
                 </div>
                 <div className="flex-1 min-w-0 text-left">
                   <p className="text-sm font-bold text-white">{col.label}</p>
@@ -252,12 +278,7 @@ export function HomePage() {
             {comingCollections.map(col => (
               <div key={col.key}
                 className="bg-white/3 border border-white/5 rounded-2xl p-3 flex flex-col items-center gap-2 opacity-40">
-                <img
-                  src={col.logo}
-                  alt={col.label}
-                  className="w-16 h-8 object-contain"
-                  onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                />
+                <col.LogoComponent />
                 <p className="text-[10px] font-bold text-gray-500 text-center">{col.label}</p>
               </div>
             ))}
