@@ -34,6 +34,49 @@ export function FunkoHomePage() {
   const totalInvested = collection.reduce((s, f) => s + ((f.purchase_price ?? 0) * f.quantity), 0);
   const roi = totalInvested > 0 ? ((totalValue - totalInvested) / totalInvested) * 100 : 0;
 
+const exportCSV = async () => {
+    if (!telegramUser?.id) return;
+    const { data } = await supabase
+      .from('funko_collection')
+      .select('*, funko_items(name, franchise, series, number)')
+      .eq('telegram_user_id', telegramUser.id);
+
+    if (!data || data.length === 0) return;
+
+    const headers = ['Nombre', 'Franquicia', 'Serie', 'Número', 'Cantidad', 'Condición', 'Caja', 'Precio pagado', 'Valor mercado', 'ROI%', 'Carpeta', 'Ubicación', 'En venta', 'Intercambio', 'Notas'];
+    const rows = data.map((item: any) => {
+      const roi = item.purchase_price && item.market_value
+        ? (((item.market_value - item.purchase_price) / item.purchase_price) * 100).toFixed(1) + '%'
+        : '';
+      return [
+        item.funko_items?.name ?? item.custom_name ?? '',
+        item.funko_items?.franchise ?? '',
+        item.funko_items?.series ?? '',
+        item.funko_items?.number ?? '',
+        item.quantity,
+        item.condition ?? '',
+        item.box_condition ?? '',
+        item.purchase_price ?? '',
+        item.market_value ?? '',
+        roi,
+        item.folder ?? '',
+        item.location ?? '',
+        item.is_for_sale ? 'Sí' : 'No',
+        item.is_for_trade ? 'Sí' : 'No',
+        item.notes ?? '',
+      ].map(v => `"${v}"`).join(',');
+    });
+
+    const csv = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `collectiq_funkos_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
       <div className="px-4 pt-6 pb-4 flex items-center gap-3">
