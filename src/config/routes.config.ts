@@ -1,8 +1,3 @@
-/**
- * Route path constants.
- * Centralizing paths prevents string drift when navigation changes and gives
- * type-safe imports for every link, redirect, and active-state check.
- */
 export const RoutePaths = {
   Home: '/',
   Collection: '/collection',
@@ -14,17 +9,14 @@ export const RoutePaths = {
   Community: '/community',
   Decks: '/decks',
   DeckDetail: '/decks/:deckId',
-  // Hub multi-coleccionable
   Hub: '/hub',
-  // Funko
   FunkoHome: '/funko',
   FunkoScanner: '/funko/scanner',
   FunkoExplorer: '/funko/explorer',
   FunkoWishlist: '/funko/wishlist',
-  FunkoDetail: '/funko/:id',
-  FunkoStats: '/funko/stats',
   FunkoStats: '/funko/stats',
   FunkoChecklist: '/funko/checklist',
+  FunkoDetail: '/funko/:id',
 } as const;
 
 export type RoutePath = (typeof RoutePaths)[keyof typeof RoutePaths];
