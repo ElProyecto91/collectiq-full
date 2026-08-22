@@ -19,6 +19,7 @@ import { FunkoExplorerPage } from '@/features/funko/pages/FunkoExplorerPage';
 import { FunkoWishlistPage } from '@/features/funko/pages/FunkoWishlistPage';
 import { FunkoDetailPage } from '@/features/funko/pages/FunkoDetailPage';
 import { FunkoStatsPage } from '@/features/funko/pages/FunkoStatsPage';
+import { FunkoChecklistPage } from '@/features/funko/pages/FunkoChecklistPage';
 
 const router = createBrowserRouter([
   {
@@ -43,10 +44,11 @@ const router = createBrowserRouter([
       { path: '/notifications', element: <NotificationsPage /> },
       { path: '/admin', element: <AdminPage /> },
       { path: RoutePaths.FunkoHome, element: <FunkoHomePage /> },
-{ path: RoutePaths.FunkoExplorer, element: <FunkoExplorerPage /> },
-{ path: RoutePaths.FunkoWishlist, element: <FunkoWishlistPage /> },
-{ path: RoutePaths.FunkoStats, element: <FunkoStatsPage /> },
-{ path: RoutePaths.FunkoDetail, element: <FunkoDetailPage /> },
+      { path: RoutePaths.FunkoExplorer, element: <FunkoExplorerPage /> },
+      { path: RoutePaths.FunkoWishlist, element: <FunkoWishlistPage /> },
+      { path: RoutePaths.FunkoStats, element: <FunkoStatsPage /> },
+      { path: RoutePaths.FunkoChecklist, element: <FunkoChecklistPage /> },
+      { path: RoutePaths.FunkoDetail, element: <FunkoDetailPage /> },
     ],
   },
   { path: RoutePaths.Scanner, element: <ScannerPage /> },
