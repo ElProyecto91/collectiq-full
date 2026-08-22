@@ -16,6 +16,8 @@ export const RoutePaths = {
   FunkoWishlist: '/funko/wishlist',
   FunkoStats: '/funko/stats',
   FunkoChecklist: '/funko/checklist',
+  FunkoFolders: '/funko/folders',
+  FunkoEditItem: '/funko/edit/:id',
   FunkoDetail: '/funko/:id',
 } as const;
 
