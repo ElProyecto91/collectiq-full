@@ -181,31 +181,50 @@ export function FunkoDetailPage() {
 
         {/* Sistema ¿Lo tengo? */}
         {inCollection && (
-          <div className="bg-green-500/10 border border-green-500/30 rounded-2xl p-4 space-y-2">
-            <div className="flex items-center gap-2">
-              <Check className="w-4 h-4 text-green-400" />
-              <p className="text-sm font-bold text-green-400">✅ Ya lo tienes</p>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <div className="text-center">
-                <p className="text-lg font-bold text-white">{collectionEntry?.quantity ?? 1}</p>
-                <p className="text-[10px] text-gray-500">Cantidad</p>
-              </div>
-              <div className="text-center">
-                <p className="text-lg font-bold text-white">
-                  {collectionEntry?.purchase_price ? `€${collectionEntry.purchase_price}` : '—'}
-                </p>
-                <p className="text-[10px] text-gray-500">Pagado</p>
-              </div>
-              <div className="text-center">
-                <p className={`text-lg font-bold ${roi !== null ? (roi >= 0 ? 'text-green-400' : 'text-red-400') : 'text-white'}`}>
-                  {roi !== null ? `${roi >= 0 ? '+' : ''}${roi.toFixed(0)}%` : '—'}
-                </p>
-                <p className="text-[10px] text-gray-500">ROI</p>
-              </div>
-            </div>
-          </div>
-        )}
+  <div className="bg-green-500/10 border border-green-500/30 rounded-2xl p-4 space-y-2">
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <Check className="w-4 h-4 text-green-400" />
+        <p className="text-sm font-bold text-green-400">✅ Ya lo tienes</p>
+      </div>
+      <button
+        onClick={async () => {
+          if (!collectionEntry?.id) return;
+          const { error } = await supabase
+            .from('funko_collection')
+            .delete()
+            .eq('id', collectionEntry.id);
+          if (!error) {
+            setInCollection(false);
+            setCollectionEntry(null);
+            setStatusMsg('🗑️ Eliminado de tu colección');
+            setTimeout(() => setStatusMsg(''), 3000);
+          }
+        }}
+        className="w-7 h-7 rounded-lg bg-red-500/10 flex items-center justify-center active:scale-95">
+        <span className="text-red-400 text-xs">✕</span>
+      </button>
+    </div>
+    <div className="grid grid-cols-3 gap-2">
+      <div className="text-center">
+        <p className="text-lg font-bold text-white">{collectionEntry?.quantity ?? 1}</p>
+        <p className="text-[10px] text-gray-500">Cantidad</p>
+      </div>
+      <div className="text-center">
+        <p className="text-lg font-bold text-white">
+          {collectionEntry?.purchase_price ? `€${collectionEntry.purchase_price}` : '—'}
+        </p>
+        <p className="text-[10px] text-gray-500">Pagado</p>
+      </div>
+      <div className="text-center">
+        <p className={`text-lg font-bold ${roi !== null ? (roi >= 0 ? 'text-green-400' : 'text-red-400') : 'text-white'}`}>
+          {roi !== null ? `${roi >= 0 ? '+' : ''}${roi.toFixed(0)}%` : '—'}
+        </p>
+        <p className="text-[10px] text-gray-500">ROI</p>
+      </div>
+    </div>
+  </div>
+)}
 
         {inWishlist && !inCollection && (
           <div className="bg-pink-500/10 border border-pink-500/30 rounded-2xl p-3 flex items-center gap-2">
