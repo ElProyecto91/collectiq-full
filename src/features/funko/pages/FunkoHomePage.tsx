@@ -97,6 +97,22 @@ export function FunkoHomePage() {
               <p className="text-[10px] text-gray-400">Ver qué te falta por franquicia</p>
             </div>
           </button>
+          <button onClick={() => navigate(RoutePaths.FunkoFolders)}
+            className="col-span-2 bg-gradient-to-r from-blue-600/20 to-indigo-600/20 border border-blue-500/30 rounded-2xl p-4 flex items-center justify-center gap-3 active:scale-95 transition-transform">
+            <span className="text-2xl">📁</span>
+            <div className="text-left">
+              <p className="text-sm font-bold text-white">Mis carpetas</p>
+              <p className="text-[10px] text-gray-400">Organiza tu colección</p>
+            </div>
+          </button>
+          <button onClick={exportCSV}
+            className="col-span-2 bg-gradient-to-r from-green-600/20 to-teal-600/20 border border-green-500/30 rounded-2xl p-4 flex items-center justify-center gap-3 active:scale-95 transition-transform">
+            <span className="text-2xl">📥</span>
+            <div className="text-left">
+              <p className="text-sm font-bold text-white">Exportar colección</p>
+              <p className="text-[10px] text-gray-400">Descargar CSV</p>
+            </div>
+          </button>
         </div>
 
         {/* Colección reciente */}
