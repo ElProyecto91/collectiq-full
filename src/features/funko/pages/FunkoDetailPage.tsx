@@ -52,6 +52,7 @@ export function FunkoDetailPage() {
   };
 
   const addToCollection = async () => {
+    alert('userId: ' + telegramUser?.id + ' funkoId: ' + funko?.id);
     if (!telegramUser?.id || !funko) return;
     const { error } = await supabase.from('funko_collection').insert({
       telegram_user_id: telegramUser.id,
