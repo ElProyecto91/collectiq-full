@@ -21,7 +21,7 @@ export default async function handler(req: Request) {
     const ms = (months * 30 * 24 * 60 * 60 * 1000) + (days * 24 * 60 * 60 * 1000);
     const expiresAt = new Date(Date.now() + ms).toISOString();
 
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/user_premium`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/user_premium?on_conflict=telegram_user_id`, {
       method: 'POST',
       headers: {
         'apikey': SUPABASE_SERVICE_KEY,
@@ -39,7 +39,7 @@ export default async function handler(req: Request) {
     });
 
     if (!res.ok) {
-      const err = await res.json();
+      const err = await res.text();
       return new Response(JSON.stringify({ error: err }), { status: 500 });
     }
 
