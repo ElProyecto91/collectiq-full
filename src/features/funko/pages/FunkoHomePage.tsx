@@ -37,7 +37,7 @@ export function FunkoHomePage() {
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
       <div className="px-4 pt-6 pb-4 flex items-center gap-3">
-        onClick={() => navigate(RoutePaths.Home)}
+        <button onClick={() => navigate(RoutePaths.Home)}
           className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center">
           <ArrowLeft className="w-4 h-4" />
         </button>
@@ -140,7 +140,7 @@ export function FunkoHomePage() {
                   </div>
                   <div className="p-2.5 space-y-1">
                     <p className="text-xs font-bold truncate">
-                      {item.custom_name ?? item.funko_items?.name ?? 'Funko'}
+                      {item.custom_name ?? item.funko_items?.name ?? ''}
                     </p>
                     <p className="text-[10px] text-gray-500 truncate">
                       {item.funko_items?.franchise ?? '—'}
