@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Heart, Plus, Check, ShoppingBag } from 'lucide-react';
+import { ArrowLeft, Heart, Plus, Check, ShoppingBag, TrendingUp } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useUserStore } from '@/store';
 
@@ -19,6 +19,16 @@ interface FunkoItem {
   is_limited: boolean;
 }
 
+interface PriceData {
+  price: number;
+  avg: number;
+  min: number;
+  max: number;
+  count: number;
+  confidence: string;
+  currency: string;
+}
+
 export function FunkoDetailPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -28,6 +38,8 @@ export function FunkoDetailPage() {
   const [inCollection, setInCollection] = useState(false);
   const [inWishlist, setInWishlist] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
+  const [priceData, setPriceData] = useState<PriceData | null>(null);
+  const [loadingPrice, setLoadingPrice] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -49,10 +61,20 @@ export function FunkoDetailPage() {
     setInCollection(!!colData);
     setInWishlist(!!wishData);
     setIsLoading(false);
+
+    if (funkoData?.name) {
+      setLoadingPrice(true);
+      fetch(`/api/funko-price?name=${encodeURIComponent(funkoData.name)}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.price) setPriceData(data);
+          setLoadingPrice(false);
+        })
+        .catch(() => setLoadingPrice(false));
+    }
   };
 
   const addToCollection = async () => {
-    alert('userId: ' + telegramUser?.id + ' funkoId: ' + funko?.id);
     if (!telegramUser?.id || !funko) return;
     const { error } = await supabase.from('funko_collection').insert({
       telegram_user_id: telegramUser.id,
@@ -102,6 +124,12 @@ export function FunkoDetailPage() {
     funko.is_limited && { label: 'Limited', color: 'bg-red-500/20 text-red-400' },
   ].filter(Boolean) as { label: string; color: string }[];
 
+  const confidenceConfig = {
+    high: { label: '🟢 Alta confianza', color: 'bg-green-500/20 text-green-400' },
+    medium: { label: '🟡 Media confianza', color: 'bg-yellow-500/20 text-yellow-400' },
+    low: { label: '🔴 Baja confianza', color: 'bg-red-500/20 text-red-400' },
+  };
+
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
       <div className="px-4 pt-6 pb-4 flex items-center gap-3">
@@ -122,6 +150,7 @@ export function FunkoDetailPage() {
           </div>
         )}
 
+        {/* Imagen */}
         <div className="bg-[#111118] border border-white/8 rounded-2xl p-6 flex items-center justify-center min-h-48">
           {funko.image_url ? (
             <img src={funko.image_url} alt={funko.name}
@@ -132,6 +161,7 @@ export function FunkoDetailPage() {
           )}
         </div>
 
+        {/* Info */}
         <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
           <h2 className="text-base font-bold text-white">{funko.name}</h2>
           {funko.franchise && <p className="text-sm text-purple-400">{funko.franchise}</p>}
@@ -153,6 +183,47 @@ export function FunkoDetailPage() {
           )}
         </div>
 
+        {/* Precio de mercado */}
+        <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-green-400" />
+            <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Precio de mercado</p>
+          </div>
+
+          {loadingPrice && (
+            <p className="text-xs text-gray-500">Consultando eBay...</p>
+          )}
+
+          {!loadingPrice && priceData && (
+            <div className="space-y-2">
+              <div className="flex items-end gap-2">
+                <p className="text-3xl font-bold text-green-400">€{priceData.price}</p>
+                <p className="text-xs text-gray-500 mb-1">estimado</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <p className="text-xs text-gray-500">
+                  Rango: <span className="text-white">€{priceData.min} — €{priceData.max}</span>
+                </p>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-gray-500">
+                <span>Media: <span className="text-white">€{priceData.avg}</span></span>
+                <span>·</span>
+                <span>{priceData.count} anuncios</span>
+              </div>
+              <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                confidenceConfig[priceData.confidence as keyof typeof confidenceConfig]?.color ?? confidenceConfig.low.color
+              }`}>
+                {confidenceConfig[priceData.confidence as keyof typeof confidenceConfig]?.label ?? '🔴 Baja confianza'}
+              </span>
+            </div>
+          )}
+
+          {!loadingPrice && !priceData && (
+            <p className="text-xs text-gray-500">Sin datos de precio disponibles en eBay</p>
+          )}
+        </div>
+
+        {/* Acciones */}
         <div className="grid grid-cols-2 gap-2">
           <button onClick={addToCollection} disabled={inCollection}
             className={'py-3 rounded-xl text-sm font-bold transition-all active:scale-95 flex items-center justify-center gap-2 ' +
