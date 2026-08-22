@@ -8,9 +8,12 @@ export default async function handler(req: Request) {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
 
   try {
-    const { telegramUserId, targetUserId, months, days } = await req.json();
+    const body = await req.json();
+    const telegramUserId = Number(body.telegramUserId);
+    const targetUserId = Number(body.targetUserId);
+    const months = body.months ?? 1;
+    const days = body.days ?? 0;
 
-    // Verificar que es el admin
     if (telegramUserId !== ADMIN_ID) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
     }
