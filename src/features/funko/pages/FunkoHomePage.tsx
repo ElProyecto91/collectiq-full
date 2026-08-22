@@ -34,7 +34,7 @@ export function FunkoHomePage() {
   const totalInvested = collection.reduce((s, f) => s + ((f.purchase_price ?? 0) * f.quantity), 0);
   const roi = totalInvested > 0 ? ((totalValue - totalInvested) / totalInvested) * 100 : 0;
 
-const exportCSV = async () => {
+  const exportCSV = async () => {
     if (!telegramUser?.id) return;
     const { data } = await supabase
       .from('funko_collection')
@@ -45,7 +45,7 @@ const exportCSV = async () => {
 
     const headers = ['Nombre', 'Franquicia', 'Serie', 'Número', 'Cantidad', 'Condición', 'Caja', 'Precio pagado', 'Valor mercado', 'ROI%', 'Carpeta', 'Ubicación', 'En venta', 'Intercambio', 'Notas'];
     const rows = data.map((item: any) => {
-      const roi = item.purchase_price && item.market_value
+      const itemRoi = item.purchase_price && item.market_value
         ? (((item.market_value - item.purchase_price) / item.purchase_price) * 100).toFixed(1) + '%'
         : '';
       return [
@@ -58,7 +58,7 @@ const exportCSV = async () => {
         item.box_condition ?? '',
         item.purchase_price ?? '',
         item.market_value ?? '',
-        roi,
+        itemRoi,
         item.folder ?? '',
         item.location ?? '',
         item.is_for_sale ? 'Sí' : 'No',
