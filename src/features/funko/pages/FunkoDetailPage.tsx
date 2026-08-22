@@ -130,7 +130,7 @@ export function FunkoDetailPage() {
         </div>
 
         <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
-          <h2 className="text-base font-bold">{funko.name}</h2>
+          <h2 className="text-base font-bold text-white">{funko.name}</h2>
           {funko.franchise && <p className="text-sm text-purple-400">{funko.franchise}</p>}
           {funko.series && <p className="text-xs text-gray-500">{funko.series}</p>}
           {funko.exclusivity && (
