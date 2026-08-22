@@ -37,7 +37,7 @@ export function FunkoHomePage() {
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
       <div className="px-4 pt-6 pb-4 flex items-center gap-3">
-        <button onClick={() => navigate(RoutePaths.Hub)}
+        onClick={() => navigate(RoutePaths.Home)}
           className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center">
           <ArrowLeft className="w-4 h-4" />
         </button>
