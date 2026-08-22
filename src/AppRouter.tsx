@@ -20,6 +20,8 @@ import { FunkoWishlistPage } from '@/features/funko/pages/FunkoWishlistPage';
 import { FunkoDetailPage } from '@/features/funko/pages/FunkoDetailPage';
 import { FunkoStatsPage } from '@/features/funko/pages/FunkoStatsPage';
 import { FunkoChecklistPage } from '@/features/funko/pages/FunkoChecklistPage';
+import { FunkoEditItemPage } from '@/features/funko/pages/FunkoEditItemPage';
+import { FunkoFoldersPage } from '@/features/funko/pages/FunkoFoldersPage';
 
 const router = createBrowserRouter([
   {
@@ -48,6 +50,8 @@ const router = createBrowserRouter([
       { path: RoutePaths.FunkoWishlist, element: <FunkoWishlistPage /> },
       { path: RoutePaths.FunkoStats, element: <FunkoStatsPage /> },
       { path: RoutePaths.FunkoChecklist, element: <FunkoChecklistPage /> },
+      { path: RoutePaths.FunkoFolders, element: <FunkoFoldersPage /> },
+      { path: RoutePaths.FunkoEditItem, element: <FunkoEditItemPage /> },
       { path: RoutePaths.FunkoDetail, element: <FunkoDetailPage /> },
     ],
   },
