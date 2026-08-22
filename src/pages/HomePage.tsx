@@ -1,199 +1,252 @@
-import { useState } from 'react';
-import { InstallPWA } from '@/components/InstallPWA';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Compass, Heart, LayoutGrid, ScanLine, TrendingUp, User, DollarSign, Trophy, Download } from 'lucide-react';
-
-import { Avatar, Button, Card, StatTile } from '@/components/ui';
-import { useDisplayName, useTelegram, useCollectionStats, useCollectionList, useCurrency } from '@/hooks';
-import { FeatureVotes } from '@/components/FeatureVotes';
-import { useUserStore } from '@/store';
+import { Settings, Bell, ChevronRight, Star, Zap, TrendingUp } from 'lucide-react';
 import { RoutePaths } from '@/config';
-import { formatNumber } from '@/utils';
-import { useI18n } from '@/i18n';
-import type { ReactNode } from 'react';
+import { useUserStore } from '@/store';
+import { useDisplayName } from '@/hooks';
+import { supabase } from '@/lib/supabase';
+
+const COLLECTIONS = [
+  {
+    key: 'pokemon',
+    label: 'Pokémon TCG',
+    emoji: '⚡',
+    desc: 'Cartas, escáner IA, deck builder',
+    route: RoutePaths.Home,
+    gradient: 'from-yellow-500 to-red-500',
+    bg: 'from-yellow-500/15 to-red-500/15',
+    border: 'border-yellow-500/20',
+    active: true,
+    color: '#F59E0B',
+  },
+  {
+    key: 'funko',
+    label: 'Funko Pop',
+    emoji: '🎭',
+    desc: 'Colección, precios eBay, wishlist',
+    route: RoutePaths.FunkoHome,
+    gradient: 'from-purple-500 to-pink-500',
+    bg: 'from-purple-500/15 to-pink-500/15',
+    border: 'border-purple-500/20',
+    active: true,
+    color: '#A855F7',
+  },
+  {
+    key: 'yugioh',
+    label: 'Yu-Gi-Oh!',
+    emoji: '🃏',
+    desc: 'Próximamente',
+    route: null,
+    gradient: 'from-blue-500 to-indigo-500',
+    bg: 'from-blue-500/10 to-indigo-500/10',
+    border: 'border-blue-500/10',
+    active: false,
+    color: '#3B82F6',
+  },
+  {
+    key: 'onepiece',
+    label: 'One Piece TCG',
+    emoji: '⚓',
+    desc: 'Próximamente',
+    route: null,
+    gradient: 'from-red-500 to-orange-500',
+    bg: 'from-red-500/10 to-orange-500/10',
+    border: 'border-red-500/10',
+    active: false,
+    color: '#EF4444',
+  },
+];
+
+function greetingByHour(): string {
+  const h = new Date().getHours();
+  if (h < 12) return 'Buenos días';
+  if (h < 20) return 'Buenas tardes';
+  return 'Buenas noches';
+}
 
 export function HomePage() {
   const navigate = useNavigate();
-  const { isTelegram } = useTelegram();
-  const [showInstall, setShowInstall] = useState(false);
   const name = useDisplayName();
-  const telegramUser = useUserStore((s) => s.telegramUser);
-  const { data: stats, isLoading } = useCollectionStats();
-  const { data: cards = [] } = useCollectionList();
-  const { t } = useI18n();
-  const { formatPrice } = useCurrency();
+  const telegramUser = useUserStore(s => s.telegramUser);
+  const [defaultCollection, setDefaultCollection] = useState<string | null>(
+    localStorage.getItem('collectiq_default_collection')
+  );
+  const [funkos, setFunkos] = useState(0);
+  const [funkoValue, setFunkoValue] = useState(0);
+  const [isPremium, setIsPremium] = useState(false);
 
-  const greeting = greetingFor(t);
+  useEffect(() => {
+    if (!telegramUser?.id) return;
+    // Cargar stats rápidas de Funko
+    supabase
+      .from('funko_collection')
+      .select('quantity, market_value')
+      .eq('telegram_user_id', telegramUser.id)
+      .then(({ data }) => {
+        if (data) {
+          setFunkos(data.reduce((s, f) => s + f.quantity, 0));
+          setFunkoValue(data.reduce((s, f) => s + ((f.market_value ?? 0) * f.quantity), 0));
+        }
+      });
+    // Verificar premium
+    supabase
+      .from('user_premium')
+      .select('plan, expires_at')
+      .eq('telegram_user_id', telegramUser.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.plan === 'go' && data.expires_at) {
+          setIsPremium(new Date(data.expires_at) > new Date());
+        }
+      });
+  }, [telegramUser?.id]);
 
-  const totalValue = cards.reduce((sum, card) => {
-    const price = card.marketPrice ?? card.tcgplayerPrice ?? 0;
-    return sum + price * card.quantity;
-  }, 0);
+  const setDefault = (key: string) => {
+    localStorage.setItem('collectiq_default_collection', key);
+    setDefaultCollection(key);
+  };
 
-  const mostValuable = cards.reduce((best, card) => {
-    const price = card.marketPrice ?? card.tcgplayerPrice ?? 0;
-    const bestPrice = best ? (best.marketPrice ?? best.tcgplayerPrice ?? 0) : 0;
-    return price > bestPrice ? card : best;
-  }, cards[0]);
-
-  const uniqueSets = new Set(cards.map(c => c.setName)).size;
+  const defaultCol = COLLECTIONS.find(c => c.key === defaultCollection && c.active);
+  const activeCollections = COLLECTIONS.filter(c => c.active);
+  const comingCollections = COLLECTIONS.filter(c => !c.active);
 
   return (
-    <div className="space-y-6 bg-gradient-hero -mx-4 px-4 pb-4 pt-3">
+    <div className="min-h-screen bg-[#080810] text-white pb-28">
 
-      <header className="flex items-center justify-between animate-fade-in">
+      {/* Header */}
+      <div className="px-4 pt-8 pb-2 flex items-center justify-between">
         <div>
-          <p className="text-sm text-ink-soft">{greeting},</p>
-          <h1 className="font-display text-2xl font-bold text-ink">{name}</h1>
+          <p className="text-xs text-gray-500">{greetingByHour()},</p>
+          <h1 className="text-2xl font-bold text-white">{name} {isPremium && <span className="text-yellow-400 text-lg">⚡</span>}</h1>
         </div>
-        <div onClick={() => navigate(RoutePaths.Profile)} className="cursor-pointer">
-          <Avatar
-            src={telegramUser?.photo_url}
-            name={name}
-            size={48}
-          />
+        <div className="flex items-center gap-2">
+          <button onClick={() => navigate('/notifications')}
+            className="w-9 h-9 rounded-xl bg-white/5 border border-white/8 flex items-center justify-center">
+            <Bell className="w-4 h-4 text-gray-400" />
+          </button>
+          <button onClick={() => navigate(RoutePaths.Profile)}
+            className="w-9 h-9 rounded-xl bg-white/5 border border-white/8 flex items-center justify-center">
+            {telegramUser?.photo_url
+              ? <img src={telegramUser.photo_url} className="w-9 h-9 rounded-xl object-cover" />
+              : <span className="text-sm font-bold text-white">{name?.[0]?.toUpperCase()}</span>
+            }
+          </button>
         </div>
-      </header>
+      </div>
 
-      {/* Acceso multi-coleccionable */}
-      <button onClick={() => navigate(RoutePaths.Hub)}
-        className="w-full bg-gradient-to-r from-purple-600/20 to-pink-600/20 border border-purple-500/30 rounded-2xl p-4 flex items-center gap-4 active:scale-95 transition-transform animate-fade-up">
-        <div className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center shrink-0">
-          <span className="text-2xl">🎭</span>
-        </div>
-        <div className="flex-1 text-left">
-          <p className="text-sm font-bold text-white">Funko Pop — ¡Nuevo!</p>
-          <p className="text-xs text-gray-400">Gestiona tu colección Funko</p>
-        </div>
-        <span className="text-gray-400">›</span>
-      </button>
+      <div className="px-4 space-y-5 mt-4">
 
-      {totalValue > 0 && (
-        <div
-          onClick={() => navigate(RoutePaths.Collection)}
-          className="bg-gradient-to-r from-blue-600/20 to-purple-600/20 border border-blue-500/20 rounded-2xl p-4 flex items-center gap-4 cursor-pointer animate-fade-up"
-        >
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-500/20">
-            <DollarSign size={24} className="text-blue-400" />
-          </div>
-          <div>
-            <p className="text-xs text-gray-400 uppercase tracking-wider">Valor total</p>
-            <p className="text-2xl font-bold text-white">{formatPrice(totalValue)}</p>
-          </div>
-        </div>
-      )}
-
-      <Card variant="glass" padding="lg" interactive className="animate-fade-up">
-        <div className="flex items-center gap-4">
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-primary/15 text-primary-soft">
-            <ScanLine size={28} strokeWidth={1.8} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h2 className="font-display text-lg font-bold text-ink">{t.home.scanCard}</h2>
-            <p className="text-sm text-ink-soft">{t.home.scanCardDesc}</p>
-          </div>
-        </div>
-        <Button
-          size="lg"
-          fullWidth
-          leftIcon={<ScanLine size={20} />}
-          className="mt-4"
-          onClick={() => navigate(RoutePaths.Scanner)}
-        >
-          {t.home.openScanner}
-        </Button>
-      </Card>
-
-      <section className="grid grid-cols-2 gap-3 animate-fade-up">
-        <QuickTile icon={<LayoutGrid size={20} />} label={t.nav.collection} onClick={() => navigate(RoutePaths.Collection)} />
-        <QuickTile icon={<Compass size={20} />} label={t.nav.explorer} onClick={() => navigate(RoutePaths.Explorer)} />
-        <QuickTile icon={<Heart size={20} />} label={t.nav.wishlist} onClick={() => navigate(RoutePaths.Wishlist)} />
-        <QuickTile icon={<User size={20} />} label={t.nav.profile} onClick={() => navigate(RoutePaths.Profile)} />
-      </section>
-
-      <section className="animate-fade-up">
-        <div className="mb-3 flex items-center gap-2">
-          <TrendingUp size={16} className="text-primary-soft" />
-          <h2 className="font-display text-base font-semibold text-ink">{t.home.yourCollection}</h2>
-        </div>
-        <div className="grid grid-cols-3 gap-3">
-          {isLoading || !stats ? (
-            <>
-              <StatTile label={t.stats.cards} value="—" />
-              <StatTile label={t.stats.unique} value="—" />
-              <StatTile label={t.stats.sets} value="—" />
-            </>
-          ) : (
-            <>
-              <StatTile label={t.stats.cards} value={formatNumber(stats.totalItems)} accent="primary" />
-              <StatTile label={t.stats.unique} value={formatNumber(stats.uniqueCards)} accent="gold" />
-              <StatTile label={t.stats.sets} value={uniqueSets} />
-            </>
-          )}
-        </div>
-      </section>
-
-      {mostValuable && (mostValuable.marketPrice ?? mostValuable.tcgplayerPrice) && (
-        <section className="animate-fade-up">
-          <div className="mb-3 flex items-center gap-2">
-            <Trophy size={16} className="text-yellow-400" />
-            <h2 className="font-display text-base font-semibold text-ink">Carta más valiosa</h2>
-          </div>
+        {/* Colección principal destacada */}
+        {defaultCol ? (
           <div
-            onClick={() => navigate(RoutePaths.Collection)}
-            className="bg-[#111118] border border-white/8 rounded-2xl p-3 flex items-center gap-3 cursor-pointer"
-          >
-            <img
-              src={mostValuable.imageUrl ?? ''}
-              alt={mostValuable.cardName}
-              className="h-16 w-11 object-cover rounded-lg shrink-0"
-            />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-bold text-white truncate">{mostValuable.cardName}</p>
-              <p className="text-xs text-gray-500 truncate">{mostValuable.setName}</p>
-              <p className="text-sm font-bold text-green-400 mt-1">
-                {formatPrice(mostValuable.marketPrice ?? mostValuable.tcgplayerPrice ?? 0)}
-              </p>
+            onClick={() => navigate(defaultCol.route!)}
+            className={`relative overflow-hidden bg-gradient-to-br ${defaultCol.bg} border ${defaultCol.border} rounded-3xl p-5 active:scale-[0.98] transition-transform cursor-pointer`}>
+            <div className="absolute top-0 right-0 w-32 h-32 rounded-full blur-3xl opacity-20"
+              style={{ background: defaultCol.color }} />
+            <div className="relative z-10">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[10px] font-bold text-white/50 uppercase tracking-[0.2em]">MI COLECCIÓN PRINCIPAL</span>
+                <button
+                  onClick={e => { e.stopPropagation(); setDefault(''); }}
+                  className="text-[10px] text-white/30 active:text-white/60">
+                  cambiar
+                </button>
+              </div>
+              <div className="flex items-center gap-3 mb-4">
+                <span className="text-5xl">{defaultCol.emoji}</span>
+                <div>
+                  <h2 className="text-xl font-bold text-white">{defaultCol.label}</h2>
+                  <p className="text-xs text-white/50">{defaultCol.desc}</p>
+                </div>
+              </div>
+              {defaultCol.key === 'funko' && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-white/10 rounded-2xl p-3">
+                    <p className="text-lg font-bold text-white">{funkos}</p>
+                    <p className="text-[10px] text-white/50">Funkos</p>
+                  </div>
+                  <div className="bg-white/10 rounded-2xl p-3">
+                    <p className="text-lg font-bold text-white">{funkoValue > 0 ? `€${funkoValue.toFixed(0)}` : '—'}</p>
+                    <p className="text-[10px] text-white/50">Valor</p>
+                  </div>
+                </div>
+              )}
+              <div className="mt-3 flex items-center gap-1 text-white/60">
+                <span className="text-xs font-medium">Abrir colección</span>
+                <ChevronRight className="w-3 h-3" />
+              </div>
             </div>
           </div>
-        </section>
-      )}
+        ) : (
+          <div className="bg-white/5 border border-white/8 rounded-3xl p-5 text-center space-y-2">
+            <p className="text-2xl">⭐</p>
+            <p className="text-sm font-bold text-white">Elige tu colección principal</p>
+            <p className="text-xs text-gray-500">Se mostrará destacada cada vez que abras la app</p>
+          </div>
+        )}
 
-      {showInstall && <InstallPWA onClose={() => setShowInstall(false)} />}
+        {/* Mis colecciones activas */}
+        <div className="space-y-2">
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Mis colecciones</p>
+          {activeCollections.map(col => (
+            <div key={col.key}
+              className={`bg-gradient-to-r ${col.bg} border ${col.border} rounded-2xl p-4 flex items-center gap-3 active:scale-[0.98] transition-transform`}>
+              <button
+                onClick={() => navigate(col.route!)}
+                className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center shrink-0">
+                  <span className="text-2xl">{col.emoji}</span>
+                </div>
+                <div className="flex-1 min-w-0 text-left">
+                  <p className="text-sm font-bold text-white">{col.label}</p>
+                  <p className="text-xs text-white/40">{col.desc}</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-white/30 shrink-0" />
+              </button>
+              <button
+                onClick={() => setDefault(col.key)}
+                className={`shrink-0 w-7 h-7 rounded-xl flex items-center justify-center transition-all ${
+                  defaultCollection === col.key
+                    ? 'bg-yellow-500 text-black'
+                    : 'bg-white/5 border border-white/10 text-gray-600'
+                }`}
+                title="Establecer como principal">
+                <Star className="w-3.5 h-3.5" fill={defaultCollection === col.key ? 'currentColor' : 'none'} />
+              </button>
+            </div>
+          ))}
+        </div>
 
-<FeatureVotes />
+        {/* Premium banner si no es GO */}
+        {!isPremium && (
+          <button onClick={() => navigate('/premium')}
+            className="w-full bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border border-yellow-500/20 rounded-2xl p-4 flex items-center gap-3 active:scale-[0.98] transition-transform">
+            <div className="w-10 h-10 rounded-xl bg-yellow-500/20 flex items-center justify-center shrink-0">
+              <Zap className="w-5 h-5 text-yellow-400" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="text-sm font-bold text-white">Hazte GO</p>
+              <p className="text-xs text-gray-400">Escaneos ilimitados, IA avanzada y más</p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-gray-500" />
+          </button>
+        )}
 
-<div className="pb-4 flex justify-center">
-  <button onClick={() => setShowInstall(true)}
-    className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-xs text-gray-400 active:scale-95 transition-transform">
-    <Download size={13} />
-    Descargar app
-  </button>
-</div>
+        {/* Próximamente */}
+        <div className="space-y-2">
+          <p className="text-xs font-bold text-gray-600 uppercase tracking-wider">Próximamente</p>
+          <div className="grid grid-cols-2 gap-2">
+            {comingCollections.map(col => (
+              <div key={col.key}
+                className="bg-white/3 border border-white/5 rounded-2xl p-3 flex flex-col items-center gap-2 opacity-50">
+                <span className="text-2xl">{col.emoji}</span>
+                <p className="text-xs font-bold text-gray-500 text-center">{col.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
 
-{isTelegram === false && (
-  <p className="pb-2 text-center text-xs text-ink-faint">
-    {t.home.webFallback}
-  </p>
-)}
+      </div>
     </div>
   );
-}
-
-function QuickTile({ icon, label, onClick }: { icon: ReactNode; label: string; onClick: () => void }) {
-  return (
-    <Card interactive padding="md" className="flex items-center gap-3" onClick={onClick} role="button">
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-surface-3 text-primary-soft">
-        {icon}
-      </div>
-      <span className="text-sm font-medium text-ink">{label}</span>
-    </Card>
-  );
-}
-
-function greetingFor(t: ReturnType<typeof useI18n>['t']): string {
-  const hour = new Date().getHours();
-  if (hour < 12) return t.home.greeting.morning;
-  if (hour < 18) return t.home.greeting.afternoon;
-  return t.home.greeting.evening;
 }
