@@ -63,7 +63,6 @@ export function FunkoWishlistPage() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
-      {/* Header */}
       <div className="px-4 pt-6 pb-4 flex items-center gap-3">
         <button onClick={() => navigate(RoutePaths.FunkoHome)}
           className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center">
@@ -107,7 +106,6 @@ export function FunkoWishlistPage() {
               return (
                 <div key={item.id}
                   className="bg-[#111118] border border-white/8 rounded-2xl p-3 flex items-center gap-3">
-                  {/* Imagen */}
                   <div
                     onClick={() => navigate(`/funko/${item.funko_id}`)}
                     className="w-14 h-14 rounded-xl bg-white/5 flex items-center justify-center shrink-0 overflow-hidden cursor-pointer">
@@ -119,26 +117,18 @@ export function FunkoWishlistPage() {
                       <span className="text-2xl">🎭</span>
                     )}
                   </div>
-
-                  {/* Info */}
-                  <div className="flex-1 min-w-0" onClick={() => navigate(`/funko/${item.funko_id}`)}>
+                  <div className="flex-1 min-w-0 cursor-pointer" onClick={() => navigate(`/funko/${item.funko_id}`)}>
                     <p className="text-sm font-bold text-white truncate">{funko?.name ?? 'Funko'}</p>
                     {funko?.franchise && (
                       <p className="text-xs text-purple-400 truncate">{funko.franchise}</p>
                     )}
                     <div className="flex items-center gap-2 mt-0.5">
-                      <span className={`text-[10px] font-bold ${prio.color}`}>
-                        ● {prio.label}
-                      </span>
+                      <span className={`text-[10px] font-bold ${prio.color}`}>● {prio.label}</span>
                       {item.target_price && (
-                        <span className="text-[10px] text-gray-500">
-                          Objetivo: {item.target_price}€
-                        </span>
+                        <span className="text-[10px] text-gray-500">Objetivo: {item.target_price}€</span>
                       )}
                     </div>
                   </div>
-
-                  {/* Eliminar */}
                   <button onClick={() => removeFromWishlist(item.id)}
                     className="w-8 h-8 rounded-xl bg-red-500/10 flex items-center justify-center shrink-0 active:scale-95">
                     <Trash2 className="w-4 h-4 text-red-400" />
