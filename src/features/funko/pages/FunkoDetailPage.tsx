@@ -317,6 +317,12 @@ export function FunkoDetailPage() {
             {inWishlist ? 'En wishlist' : 'Wishlist'}
           </button>
         </div>
+        {inCollection && collectionEntry?.id && (
+          <button onClick={() => navigate(`/funko/edit/${collectionEntry.id}`)}
+            className="w-full py-3 rounded-xl bg-white/10 text-white text-sm font-bold active:scale-95 transition-transform flex items-center justify-center gap-2">
+            ✏️ Editar en colección
+          </button>
+        )}
       </div>
     </div>
   );
