@@ -43,7 +43,6 @@ export function FunkoExplorerPage() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
-      {/* Header */}
       <div className="px-4 pt-6 pb-4 flex items-center gap-3">
         <button onClick={() => navigate(RoutePaths.FunkoHome)}
           className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center">
@@ -56,7 +55,6 @@ export function FunkoExplorerPage() {
       </div>
 
       <div className="px-4 space-y-4">
-        {/* Buscador */}
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
           <input
@@ -74,7 +72,6 @@ export function FunkoExplorerPage() {
           )}
         </div>
 
-        {/* Estados */}
         {isLoading && (
           <div className="text-center py-8 text-gray-500 text-sm">Buscando...</div>
         )}
@@ -91,7 +88,6 @@ export function FunkoExplorerPage() {
           </div>
         )}
 
-        {/* Resultados */}
         {!isLoading && results.length > 0 && (
           <div className="space-y-2">
             <p className="text-xs text-gray-500">{results.length} resultados</p>
