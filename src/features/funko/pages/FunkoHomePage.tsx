@@ -89,6 +89,14 @@ export function FunkoHomePage() {
             <p className="text-sm font-bold text-white">Estadísticas</p>
             <p className="text-[10px] text-gray-400 text-center">Valor y ROI</p>
           </button>
+          <button onClick={() => navigate(RoutePaths.FunkoChecklist)}
+            className="col-span-2 bg-gradient-to-r from-yellow-600/20 to-orange-600/20 border border-yellow-500/30 rounded-2xl p-4 flex items-center justify-center gap-3 active:scale-95 transition-transform">
+            <span className="text-2xl">📋</span>
+            <div className="text-left">
+              <p className="text-sm font-bold text-white">Checklist</p>
+              <p className="text-[10px] text-gray-400">Ver qué te falta por franquicia</p>
+            </div>
+          </button>
         </div>
 
         {/* Colección reciente */}
