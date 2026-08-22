@@ -58,7 +58,9 @@ export function FunkoDetailPage() {
       funko_id: funko.id,
       quantity: 1,
     });
-    if (!error) {
+    if (error) {
+      alert(JSON.stringify(error));
+    } else {
       setInCollection(true);
       setStatusMsg('✅ Añadido a tu colección');
       setTimeout(() => setStatusMsg(''), 3000);
