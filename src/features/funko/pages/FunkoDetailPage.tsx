@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Heart, Plus, Check, ShoppingBag, TrendingUp } from 'lucide-react';
+import { ArrowLeft, Heart, Plus, Check, ShoppingBag, TrendingUp, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useUserStore } from '@/store';
 
@@ -29,6 +29,14 @@ interface PriceData {
   currency: string;
 }
 
+interface CollectionEntry {
+  id: string;
+  quantity: number;
+  purchase_price: number | null;
+  market_value: number | null;
+  condition: string | null;
+}
+
 export function FunkoDetailPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -36,6 +44,7 @@ export function FunkoDetailPage() {
   const [funko, setFunko] = useState<FunkoItem | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [inCollection, setInCollection] = useState(false);
+  const [collectionEntry, setCollectionEntry] = useState<CollectionEntry | null>(null);
   const [inWishlist, setInWishlist] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
   const [priceData, setPriceData] = useState<PriceData | null>(null);
@@ -51,7 +60,7 @@ export function FunkoDetailPage() {
     const [{ data: funkoData }, { data: colData }, { data: wishData }] = await Promise.all([
       supabase.from('funko_items').select('*').eq('id', id).single(),
       telegramUser?.id
-        ? supabase.from('funko_collection').select('id').eq('funko_id', id).eq('telegram_user_id', telegramUser.id).maybeSingle()
+        ? supabase.from('funko_collection').select('id, quantity, purchase_price, market_value, condition').eq('funko_id', id).eq('telegram_user_id', telegramUser.id).maybeSingle()
         : Promise.resolve({ data: null }),
       telegramUser?.id
         ? supabase.from('funko_wishlist').select('id').eq('funko_id', id).eq('telegram_user_id', telegramUser.id).maybeSingle()
@@ -59,6 +68,7 @@ export function FunkoDetailPage() {
     ]);
     setFunko(funkoData);
     setInCollection(!!colData);
+    setCollectionEntry(colData ?? null);
     setInWishlist(!!wishData);
     setIsLoading(false);
 
@@ -66,8 +76,17 @@ export function FunkoDetailPage() {
       setLoadingPrice(true);
       fetch(`/api/funko-price?name=${encodeURIComponent(funkoData.name)}`)
         .then(r => r.json())
-        .then(data => {
-          if (data.price) setPriceData(data);
+        .then(async data => {
+          if (data.price) {
+            setPriceData(data);
+            // Guardar market_value automáticamente si está en colección
+            if (colData?.id) {
+              await supabase
+                .from('funko_collection')
+                .update({ market_value: data.price })
+                .eq('id', colData.id);
+            }
+          }
           setLoadingPrice(false);
         })
         .catch(() => setLoadingPrice(false));
@@ -76,17 +95,23 @@ export function FunkoDetailPage() {
 
   const addToCollection = async () => {
     if (!telegramUser?.id || !funko) return;
-    const { error } = await supabase.from('funko_collection').insert({
+    const { data, error } = await supabase.from('funko_collection').insert({
       telegram_user_id: telegramUser.id,
       funko_id: funko.id,
       quantity: 1,
-    });
+    }).select('id, quantity, purchase_price, market_value, condition').single();
     if (error) {
-      alert(JSON.stringify(error));
+      setStatusMsg('❌ Error al añadir');
+      setTimeout(() => setStatusMsg(''), 3000);
     } else {
       setInCollection(true);
+      setCollectionEntry(data);
       setStatusMsg('✅ Añadido a tu colección');
       setTimeout(() => setStatusMsg(''), 3000);
+      // Guardar precio de mercado si ya lo tenemos
+      if (priceData?.price && data?.id) {
+        await supabase.from('funko_collection').update({ market_value: priceData.price }).eq('id', data.id);
+      }
     }
   };
 
@@ -130,6 +155,10 @@ export function FunkoDetailPage() {
     low: { label: '🔴 Baja confianza', color: 'bg-red-500/20 text-red-400' },
   };
 
+  const roi = collectionEntry?.purchase_price && priceData?.price
+    ? ((priceData.price - collectionEntry.purchase_price) / collectionEntry.purchase_price) * 100
+    : null;
+
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
       <div className="px-4 pt-6 pb-4 flex items-center gap-3">
@@ -137,7 +166,7 @@ export function FunkoDetailPage() {
           className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center">
           <ArrowLeft className="w-4 h-4" />
         </button>
-        <div>
+        <div className="flex-1 min-w-0">
           <p className="text-[10px] text-purple-400 font-bold uppercase tracking-[0.2em]">FUNKO</p>
           <h1 className="text-lg font-bold truncate">{funko.name}</h1>
         </div>
@@ -147,6 +176,41 @@ export function FunkoDetailPage() {
         {statusMsg && (
           <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl px-4 py-3 text-sm text-blue-300 text-center">
             {statusMsg}
+          </div>
+        )}
+
+        {/* Sistema ¿Lo tengo? */}
+        {inCollection && (
+          <div className="bg-green-500/10 border border-green-500/30 rounded-2xl p-4 space-y-2">
+            <div className="flex items-center gap-2">
+              <Check className="w-4 h-4 text-green-400" />
+              <p className="text-sm font-bold text-green-400">✅ Ya lo tienes</p>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="text-center">
+                <p className="text-lg font-bold text-white">{collectionEntry?.quantity ?? 1}</p>
+                <p className="text-[10px] text-gray-500">Cantidad</p>
+              </div>
+              <div className="text-center">
+                <p className="text-lg font-bold text-white">
+                  {collectionEntry?.purchase_price ? `€${collectionEntry.purchase_price}` : '—'}
+                </p>
+                <p className="text-[10px] text-gray-500">Pagado</p>
+              </div>
+              <div className="text-center">
+                <p className={`text-lg font-bold ${roi !== null ? (roi >= 0 ? 'text-green-400' : 'text-red-400') : 'text-white'}`}>
+                  {roi !== null ? `${roi >= 0 ? '+' : ''}${roi.toFixed(0)}%` : '—'}
+                </p>
+                <p className="text-[10px] text-gray-500">ROI</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {inWishlist && !inCollection && (
+          <div className="bg-pink-500/10 border border-pink-500/30 rounded-2xl p-3 flex items-center gap-2">
+            <Heart className="w-4 h-4 text-pink-400 fill-pink-400" />
+            <p className="text-sm text-pink-400">❤️ Está en tu wishlist</p>
           </div>
         )}
 
@@ -189,26 +253,20 @@ export function FunkoDetailPage() {
             <TrendingUp className="w-4 h-4 text-green-400" />
             <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Precio de mercado</p>
           </div>
-
-          {loadingPrice && (
-            <p className="text-xs text-gray-500">Consultando eBay...</p>
-          )}
-
+          {loadingPrice && <p className="text-xs text-gray-500">Consultando eBay...</p>}
           {!loadingPrice && priceData && (
             <div className="space-y-2">
               <div className="flex items-end gap-2">
                 <p className="text-3xl font-bold text-green-400">€{priceData.price}</p>
                 <p className="text-xs text-gray-500 mb-1">estimado</p>
               </div>
-              <div className="flex items-center gap-2">
-                <p className="text-xs text-gray-500">
-                  Rango: <span className="text-white">€{priceData.min} — €{priceData.max}</span>
-                </p>
-              </div>
+              <p className="text-xs text-gray-500">
+                Rango: <span className="text-white">€{priceData.min} — €{priceData.max}</span>
+              </p>
               <div className="flex items-center gap-2 text-xs text-gray-500">
                 <span>Media: <span className="text-white">€{priceData.avg}</span></span>
                 <span>·</span>
-                <span>{priceData.count} anuncios</span>
+                <span>{priceData.count} anuncios en eBay</span>
               </div>
               <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full ${
                 confidenceConfig[priceData.confidence as keyof typeof confidenceConfig]?.color ?? confidenceConfig.low.color
@@ -217,9 +275,11 @@ export function FunkoDetailPage() {
               </span>
             </div>
           )}
-
           {!loadingPrice && !priceData && (
-            <p className="text-xs text-gray-500">Sin datos de precio disponibles en eBay</p>
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-gray-600" />
+              <p className="text-xs text-gray-500">Sin datos de precio disponibles en eBay</p>
+            </div>
           )}
         </div>
 
