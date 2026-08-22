@@ -71,7 +71,7 @@ export function FunkoHomePage() {
             <p className="text-sm font-bold text-white">Escanear</p>
             <p className="text-[10px] text-gray-400 text-center">Código de barras o foto</p>
           </button>
-          <button onClick={() => navigate(RoutePaths.FunkoExplorer)}
+          <button onClick={() => navigate(RoutePaths.FunkoStats)}
             className="bg-gradient-to-r from-blue-600/20 to-indigo-600/20 border border-blue-500/30 rounded-2xl p-4 flex flex-col items-center gap-2 active:scale-95 transition-transform">
             <Search size={24} className="text-blue-400" />
             <p className="text-sm font-bold text-white">Explorador</p>
