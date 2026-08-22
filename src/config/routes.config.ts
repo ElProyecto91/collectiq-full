@@ -22,6 +22,7 @@ export const RoutePaths = {
   FunkoExplorer: '/funko/explorer',
   FunkoWishlist: '/funko/wishlist',
   FunkoDetail: '/funko/:id',
+  FunkoStats: '/funko/stats',
 } as const;
 
 export type RoutePath = (typeof RoutePaths)[keyof typeof RoutePaths];
