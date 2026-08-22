@@ -175,23 +175,54 @@ export function FunkoScannerPage() {
   }, [searchQuery]);
 
   const addToCollection = async (funko: FunkoResult) => {
-    if (!telegramUser?.id) return;
-    const { data } = await supabase.from('funko_collection').insert({
-      telegram_user_id: telegramUser.id,
-      funko_id: funko.id ?? null,
-      custom_name: funko.id ? null : funko.name,
-      quantity: 1,
-      condition: 'mint',
-      box_condition: 'mint',
-      currency: 'EUR',
-    }).select().single();
-    if (data) {
-      setAddedIds(prev => new Set(prev).add(funko.id ?? funko.name));
-      setStatusMsg(`✅ ${funko.name} añadido a tu colección`);
-      setTimeout(() => setStatusMsg(''), 3000);
-      track('funko_added', { name: funko.name, franchise: funko.franchise });
+  if (!telegramUser?.id) return;
+
+  // Comprobar si ya lo tiene
+  const { data: existing } = await supabase
+    .from('funko_collection')
+    .select('id, quantity')
+    .eq('funko_id', funko.id ?? '')
+    .eq('telegram_user_id', telegramUser.id)
+    .maybeSingle();
+
+  if (existing) {
+    setStatusMsg(`⚠️ Ya tienes este Funko (x${existing.quantity})`);
+    setTimeout(() => setStatusMsg(''), 3000);
+    setAddedIds(prev => new Set(prev).add(funko.id ?? funko.name));
+    return;
+  }
+
+  const { data } = await supabase.from('funko_collection').insert({
+    telegram_user_id: telegramUser.id,
+    funko_id: funko.id ?? null,
+    custom_name: funko.id ? null : funko.name,
+    quantity: 1,
+    condition: 'mint',
+    box_condition: 'mint',
+    currency: 'EUR',
+  }).select().single();
+
+  if (data) {
+    setAddedIds(prev => new Set(prev).add(funko.id ?? funko.name));
+    setStatusMsg(`✅ ${funko.name} añadido a tu colección`);
+    setTimeout(() => setStatusMsg(''), 3000);
+    track('funko_added', { name: funko.name, franchise: funko.franchise });
+
+    // Guardar precio de mercado automáticamente
+    if (funko.name) {
+      fetch(`/api/funko-price?name=${encodeURIComponent(funko.name)}`)
+        .then(r => r.json())
+        .then(async priceData => {
+          if (priceData.price && data.id) {
+            await supabase.from('funko_collection')
+              .update({ market_value: priceData.price })
+              .eq('id', data.id);
+          }
+        })
+        .catch(() => {});
     }
-  };
+  }
+};
 
   return (
     <div className="flex flex-col min-h-screen bg-[#0a0a0f] text-white pb-24">
