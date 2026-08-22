@@ -101,7 +101,6 @@ export function FunkoDetailPage() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
-      {/* Header */}
       <div className="px-4 pt-6 pb-4 flex items-center gap-3">
         <button onClick={() => navigate(-1)}
           className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center">
@@ -120,7 +119,6 @@ export function FunkoDetailPage() {
           </div>
         )}
 
-        {/* Imagen */}
         <div className="bg-[#111118] border border-white/8 rounded-2xl p-6 flex items-center justify-center min-h-48">
           {funko.image_url ? (
             <img src={funko.image_url} alt={funko.name}
@@ -131,15 +129,10 @@ export function FunkoDetailPage() {
           )}
         </div>
 
-        {/* Info */}
         <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
           <h2 className="text-base font-bold">{funko.name}</h2>
-          {funko.franchise && (
-            <p className="text-sm text-purple-400">{funko.franchise}</p>
-          )}
-          {funko.series && (
-            <p className="text-xs text-gray-500">{funko.series}</p>
-          )}
+          {funko.franchise && <p className="text-sm text-purple-400">{funko.franchise}</p>}
+          {funko.series && <p className="text-xs text-gray-500">{funko.series}</p>}
           {funko.exclusivity && (
             <div className="flex items-center gap-1.5">
               <ShoppingBag className="w-3 h-3 text-gray-500" />
@@ -157,7 +150,6 @@ export function FunkoDetailPage() {
           )}
         </div>
 
-        {/* Acciones */}
         <div className="grid grid-cols-2 gap-2">
           <button onClick={addToCollection} disabled={inCollection}
             className={'py-3 rounded-xl text-sm font-bold transition-all active:scale-95 flex items-center justify-center gap-2 ' +
