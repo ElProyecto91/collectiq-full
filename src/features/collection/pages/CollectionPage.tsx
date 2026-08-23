@@ -757,18 +757,36 @@ export function CollectionPage() {
           <h1 className="text-2xl font-bold text-white">{t.collection.title}</h1>
           <p className="text-sm text-gray-500">{t.collection.subtitle}</p>
         </div>
-        <div className="flex gap-2">
-          <button onClick={() => setShowImport(true)}
-            className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 active:scale-95 transition-transform">
-            <Upload size={16} />
-          </button>
-          {!showComingSoon && cards.length > 0 && (
-            <button onClick={() => setShowExport(true)}
-              className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 active:scale-95 transition-transform">
-              <Download size={16} />
-            </button>
-          )}
-        </div>
+       <div className="flex gap-2">
+  <button onClick={() => setShowImport(true)}
+    className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 active:scale-95 transition-transform">
+    <Upload size={16} />
+  </button>
+  {!showComingSoon && cards.length > 0 && (
+    <button onClick={() => setShowExport(true)}
+      className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 active:scale-95 transition-transform">
+      <Download size={16} />
+    </button>
+  )}
+  {!showComingSoon && cards.length > 0 && (
+    <button onClick={async () => {
+      if (!telegramUser?.id) return;
+      const btn = document.getElementById('refresh-prices-btn');
+      if (btn) btn.style.opacity = '0.5';
+      await fetch('/api/pokemon-update-prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ telegramUserId: telegramUser.id }),
+      });
+      if (btn) btn.style.opacity = '1';
+      refetch();
+    }}
+    id="refresh-prices-btn"
+    className="w-9 h-9 rounded-xl bg-green-600/20 border border-green-500/30 flex items-center justify-center text-green-400 active:scale-95 transition-transform">
+      <Sparkles size={16} />
+    </button>
+  )}
+</div>
       </div>
 
       <TCGSelector activeTCG={activeTCG} setActiveTCG={setActiveTCG} />
