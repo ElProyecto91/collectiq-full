@@ -10,6 +10,11 @@ export const RoutePaths = {
   Decks: '/decks',
   DeckDetail: '/decks/:deckId',
   Hub: '/hub',
+  // Pokémon
+  PokemonHome: '/pokemon',
+  Pokedex: '/pokedex',
+  PokedexDetail: '/pokedex/:id',
+  // Funko
   FunkoHome: '/funko',
   FunkoScanner: '/funko/scanner',
   FunkoExplorer: '/funko/explorer',
@@ -19,6 +24,8 @@ export const RoutePaths = {
   FunkoFolders: '/funko/folders',
   FunkoEditItem: '/funko/edit/:id',
   FunkoDetail: '/funko/:id',
+  // Marketplace
+  Marketplace: '/market',
 } as const;
 
 export type RoutePath = (typeof RoutePaths)[keyof typeof RoutePaths];
