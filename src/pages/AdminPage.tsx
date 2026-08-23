@@ -477,17 +477,21 @@ function FunkoImporter({ adminId }: { adminId: number }) {
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState('');
   const [done, setDone] = useState(false);
+  const [activeSource, setActiveSource] = useState<'all' | 'kennymkchan' | 'funkopop_list'>('all');
 
-  const runImport = async () => {
+  // Importar al catálogo universal (catalog_items)
+  const runCatalogImport = async () => {
     setImporting(true);
-    setProgress('Iniciando importación...');
+    setDone(false);
+    setProgress('Iniciando importación al catálogo universal...');
     let offset = 0;
     let total = 0;
+
     while (true) {
-      const res = await fetch('/api/funko-import', {
+      const res = await fetch('/api/catalog-import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ adminId, offset, limit: 500 }),
+        body: JSON.stringify({ adminId, source: activeSource, offset, batchSize: 500 }),
       });
       const data = await res.json();
       if (!res.ok || data.error) {
@@ -495,27 +499,93 @@ function FunkoImporter({ adminId }: { adminId: number }) {
         setImporting(false);
         return;
       }
-      total += data.imported;
-      setProgress(`✅ Importados ${total} de ${data.total} Funkos...`);
-      if (data.done) break;
-      offset = data.nextOffset;
-      await new Promise(r => setTimeout(r, 500));
+
+      // Sumar resultados de todas las fuentes
+      let batchTotal = 0;
+      let allDone = true;
+      for (const [key, result] of Object.entries(data.results ?? {})) {
+        const r = result as any;
+        if (r.imported) batchTotal += r.imported;
+        if (!r.done) allDone = false;
+      }
+      total += batchTotal;
+      setProgress(`✅ Importados ${total} items al catálogo universal...`);
+      if (allDone || batchTotal === 0) break;
+      offset += 500;
+      await new Promise(r => setTimeout(r, 300));
     }
-    setProgress(`✅ Importación completa — ${total} Funkos en catálogo`);
+
+    setProgress(`✅ Importación completa — ${total} items en catalog_items`);
     setImporting(false);
     setDone(true);
   };
 
+  // Sincronización de precios y nuevos items via cron manual
+  const runSync = async (mode: 'prices' | 'import' | 'full') => {
+    setImporting(true);
+    setProgress(`Ejecutando sync (modo: ${mode})...`);
+    try {
+      const res = await fetch(`/api/catalog-sync?mode=${mode}&secret=collectiq_secret_2026`);
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setProgress('❌ Error: ' + (data.error ?? 'desconocido'));
+      } else {
+        const r = data.results ?? {};
+        setProgress(`✅ Sync completado — ${JSON.stringify(r)}`);
+      }
+    } catch (err: any) {
+      setProgress('❌ ' + (err?.message ?? 'Error desconocido'));
+    } finally {
+      setImporting(false);
+    }
+  };
+
   return (
     <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
-      <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">🎭 Catálogo Funko</p>
-      {progress && <p className="text-xs text-blue-300">{progress}</p>}
-      {!done && (
-        <button onClick={runImport} disabled={importing}
-          className="w-full py-2.5 rounded-xl bg-purple-600 text-white text-sm font-bold active:scale-95 transition-transform disabled:opacity-50">
-          {importing ? 'Importando...' : 'Importar 23.000 Funkos'}
-        </button>
+      <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">🗂 Catálogo Universal</p>
+
+      {progress && (
+        <p className="text-xs text-blue-300 break-all">{progress}</p>
       )}
+
+      {/* Selector de fuente */}
+      <div>
+        <p className="text-[10px] text-gray-500 mb-1.5">Fuente de datos Funko</p>
+        <div className="flex gap-2">
+          {(['all', 'kennymkchan', 'funkopop_list'] as const).map(src => (
+            <button key={src} onClick={() => setActiveSource(src)}
+              className={`flex-1 py-1.5 rounded-xl text-[10px] font-bold border transition-all ${
+                activeSource === src
+                  ? 'bg-purple-500/15 border-purple-500/30 text-purple-400'
+                  : 'bg-white/5 border-white/8 text-gray-500'
+              }`}>
+              {src === 'all' ? 'Todas' : src}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Importar catálogo */}
+      <button onClick={runCatalogImport} disabled={importing}
+        className="w-full py-2.5 rounded-xl bg-purple-600 text-white text-sm font-bold active:scale-95 transition-transform disabled:opacity-50">
+        {importing ? 'Importando...' : '📥 Importar Funkos → catalog_items'}
+      </button>
+
+      {/* Sync de precios */}
+      <div className="grid grid-cols-3 gap-2">
+        <button onClick={() => runSync('prices')} disabled={importing}
+          className="py-2 rounded-xl bg-green-600/20 border border-green-500/30 text-green-400 text-[10px] font-bold active:scale-95 disabled:opacity-50">
+          💰 Precios
+        </button>
+        <button onClick={() => runSync('import')} disabled={importing}
+          className="py-2 rounded-xl bg-blue-600/20 border border-blue-500/30 text-blue-400 text-[10px] font-bold active:scale-95 disabled:opacity-50">
+          📦 Importar
+        </button>
+        <button onClick={() => runSync('full')} disabled={importing}
+          className="py-2 rounded-xl bg-yellow-600/20 border border-yellow-500/30 text-yellow-400 text-[10px] font-bold active:scale-95 disabled:opacity-50">
+          🔄 Full sync
+        </button>
+      </div>
     </div>
   );
 }
