@@ -326,7 +326,8 @@ function CardZoom({ card, onClose }: { card: CollectionItem; onClose: () => void
   );
 }
 
-function EditCardModal({ card, onSave, onClose }: {
+
+  function EditCardModal({ card, onSave, onClose }: {
   card: CollectionItem; onSave: (update: Partial<CollectionItem>) => void; onClose: () => void;
 }) {
   const { t } = useI18n();
@@ -349,8 +350,9 @@ function EditCardModal({ card, onSave, onClose }: {
   const [gradeCentering, setGradeCentering] = useState<string>(card.gradeCentering?.toString() ?? '');
   const [gradeCorners, setGradeCorners] = useState<string>(card.gradeCorners?.toString() ?? '');
   const [gradeEdges, setGradeEdges] = useState<string>(card.gradeEdges?.toString() ?? '');
+  const [gradeSurface, setGradeSurface] = useState<string>(card.gradeSurface?.toString() ?? '');
   const [editCardId, setEditCardId] = useState<string>(card.cardId ?? '');
-const [editSetName, setEditSetName] = useState<string>(card.setName ?? '');
+  const [editSetName, setEditSetName] = useState<string>(card.setName ?? '');
   const [step, setStep] = useState<'main' | 'variant' | 'language' | 'condition' | 'grading' | 'acquisition' | 'sleeve' | 'card-id'>('main');
 
   const currentVariant = VARIANTS.find(v => v.key === variant);
@@ -377,10 +379,10 @@ const [editSetName, setEditSetName] = useState<string>(card.setName ?? '');
       gradeCorners: gradeCorners ? parseFloat(gradeCorners) : null,
       gradeEdges: gradeEdges ? parseFloat(gradeEdges) : null,
       gradeSurface: gradeSurface ? parseFloat(gradeSurface) : null,
+      cardId: editCardId || card.cardId,
+      setName: editSetName || card.setName,
     } as any);
-  cardId: editCardId || card.cardId,
-setName: editSetName || card.setName,
-};
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
@@ -396,7 +398,6 @@ setName: editSetName || card.setName,
               <button onClick={onClose} className="text-gray-500 text-xs bg-white/5 px-3 py-1.5 rounded-lg">{t.common.cancel}</button>
             </div>
 
-            {/* Cantidad */}
             <div className="bg-white/5 border border-white/8 rounded-xl px-4 py-3">
               <p className="text-xs text-gray-500 mb-2">Cantidad</p>
               <div className="flex items-center gap-3">
@@ -412,7 +413,6 @@ setName: editSetName || card.setName,
               </div>
             </div>
 
-            {/* Precio pagado + ROI */}
             <div className="bg-white/5 border border-white/8 rounded-xl px-4 py-3 space-y-2">
               <p className="text-xs text-gray-500">Precio pagado</p>
               <div className="flex items-center gap-2">
@@ -475,7 +475,6 @@ setName: editSetName || card.setName,
               <span className="text-gray-500 text-xs">›</span>
             </button>
 
-            {/* Ubicación física */}
             <div className="bg-white/5 border border-white/8 rounded-xl px-4 py-3 space-y-2">
               <p className="text-xs text-gray-500 flex items-center gap-1.5"><MapPin size={12} />Ubicación física</p>
               <input value={storageLocation} onChange={e => setStorageLocation(e.target.value)}
@@ -502,13 +501,13 @@ setName: editSetName || card.setName,
             </div>
 
             <button onClick={() => setStep('card-id')} className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-left">
-  <span className="text-xl">🔧</span>
-  <div className="flex-1">
-    <p className="text-xs text-gray-500">ID de carta / Set</p>
-    <p className="text-sm text-white font-medium truncate">{editCardId || card.cardId}</p>
-  </div>
-  <span className="text-gray-500 text-xs">›</span>
-</button>
+              <span className="text-xl">🔧</span>
+              <div className="flex-1">
+                <p className="text-xs text-gray-500">ID de carta / Set</p>
+                <p className="text-sm text-white font-medium truncate">{editCardId || card.cardId}</p>
+              </div>
+              <span className="text-gray-500 text-xs">›</span>
+            </button>
 
             <button onClick={handleSave} className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold active:scale-95 transition-transform">{t.common.saveChanges}</button>
           </>
@@ -683,6 +682,34 @@ setName: editSetName || card.setName,
           </>
         )}
 
+        {step === 'card-id' && (
+          <>
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-bold text-white">Corregir carta</p>
+              <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">Volver</button>
+            </div>
+            <p className="text-xs text-gray-500">
+              Útil si el escáner identificó mal la carta. Pega el ID oficial de pokemontcg.io o corrige el nombre del set.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <p className="text-xs text-gray-500 mb-1.5">ID de pokemontcg.io</p>
+                <input value={editCardId} onChange={e => setEditCardId(e.target.value)} placeholder="ej: sv3pt5-44"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50 font-mono" />
+                <p className="text-[10px] text-gray-600 mt-1">Actual: {card.cardId}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 mb-1.5">Nombre del set</p>
+                <input value={editSetName} onChange={e => setEditSetName(e.target.value)} placeholder="ej: Scarlet & Violet 151"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50" />
+              </div>
+              <button onClick={() => setStep('main')} className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold">
+                Aplicar corrección
+              </button>
+            </div>
+          </>
+        )}
+
       </div>
     </div>
   );
@@ -769,36 +796,36 @@ export function CollectionPage() {
           <h1 className="text-2xl font-bold text-white">{t.collection.title}</h1>
           <p className="text-sm text-gray-500">{t.collection.subtitle}</p>
         </div>
-       <div className="flex gap-2">
-  <button onClick={() => setShowImport(true)}
-    className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 active:scale-95 transition-transform">
-    <Upload size={16} />
-  </button>
-  {!showComingSoon && cards.length > 0 && (
-    <button onClick={() => setShowExport(true)}
-      className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 active:scale-95 transition-transform">
-      <Download size={16} />
-    </button>
-  )}
-  {!showComingSoon && cards.length > 0 && (
-    <button onClick={async () => {
-      if (!telegramUser?.id) return;
-      const btn = document.getElementById('refresh-prices-btn');
-      if (btn) btn.style.opacity = '0.5';
-      await fetch('/api/pokemon-update-prices', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ telegramUserId: telegramUser.id }),
-      });
-      if (btn) btn.style.opacity = '1';
-      refetch();
-    }}
-    id="refresh-prices-btn"
-    className="w-9 h-9 rounded-xl bg-green-600/20 border border-green-500/30 flex items-center justify-center text-green-400 active:scale-95 transition-transform">
-      <Sparkles size={16} />
-    </button>
-  )}
-</div>
+        <div className="flex gap-2">
+          <button onClick={() => setShowImport(true)}
+            className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 active:scale-95 transition-transform">
+            <Upload size={16} />
+          </button>
+          {!showComingSoon && cards.length > 0 && (
+            <button onClick={() => setShowExport(true)}
+              className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 active:scale-95 transition-transform">
+              <Download size={16} />
+            </button>
+          )}
+          {!showComingSoon && cards.length > 0 && (
+            <button onClick={async () => {
+              if (!telegramUser?.id) return;
+              const btn = document.getElementById('refresh-prices-btn');
+              if (btn) btn.style.opacity = '0.5';
+              await fetch('/api/pokemon-update-prices', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ telegramUserId: telegramUser.id }),
+              });
+              if (btn) btn.style.opacity = '1';
+              refetch();
+            }}
+            id="refresh-prices-btn"
+            className="w-9 h-9 rounded-xl bg-green-600/20 border border-green-500/30 flex items-center justify-center text-green-400 active:scale-95 transition-transform">
+              <Sparkles size={16} />
+            </button>
+          )}
+        </div>
       </div>
 
       <TCGSelector activeTCG={activeTCG} setActiveTCG={setActiveTCG} />
