@@ -191,7 +191,7 @@ export function PublicProfilePage() {
         <div className="px-4 mb-4">
           <div className="flex gap-2 bg-white/5 rounded-xl p-1">
             {tabs.map(tab => (
-              <button key={tab.key} onClick={() => setActiveTab(tab.key)}
+              <button key={tab.key} onClick={() => setActiveTab(tab.key as Tab)}
                 className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${
                   activeTab === tab.key ? 'bg-blue-600 text-white' : 'text-gray-400'
                 }`}>
