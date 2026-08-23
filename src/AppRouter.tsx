@@ -22,6 +22,10 @@ import { FunkoStatsPage } from '@/features/funko/pages/FunkoStatsPage';
 import { FunkoChecklistPage } from '@/features/funko/pages/FunkoChecklistPage';
 import { FunkoEditItemPage } from '@/features/funko/pages/FunkoEditItemPage';
 import { FunkoFoldersPage } from '@/features/funko/pages/FunkoFoldersPage';
+// Nuevas páginas Pokémon
+import { PokemonHomePage } from '@/features/pokemon/pages/PokemonHomePage';
+import { PokedexPage } from '@/features/pokemon/pages/PokedexPage';
+import { PokedexDetailPage } from '@/features/pokemon/pages/PokedexDetailPage';
 
 const router = createBrowserRouter([
   {
@@ -45,6 +49,11 @@ const router = createBrowserRouter([
       { path: '/premium', element: <PremiumPage /> },
       { path: '/notifications', element: <NotificationsPage /> },
       { path: '/admin', element: <AdminPage /> },
+      // Pokémon
+      { path: '/pokemon', element: <PokemonHomePage /> },
+      { path: '/pokedex', element: <PokedexPage /> },
+      { path: '/pokedex/:id', element: <PokedexDetailPage /> },
+      // Funko
       { path: RoutePaths.FunkoHome, element: <FunkoHomePage /> },
       { path: RoutePaths.FunkoExplorer, element: <FunkoExplorerPage /> },
       { path: RoutePaths.FunkoWishlist, element: <FunkoWishlistPage /> },
