@@ -132,7 +132,7 @@ const COLLECTIONS = [
     label: 'Pokémon TCG',
     LogoComponent: PokemonLogo,
     desc: 'Cartas, escáner IA, deck builder',
-    route: RoutePaths.Collection,
+    route: '/pokemon',
     bg: 'from-yellow-500/15 to-blue-600/15',
     border: 'border-yellow-500/20',
     active: true,
