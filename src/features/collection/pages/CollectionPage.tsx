@@ -349,8 +349,9 @@ function EditCardModal({ card, onSave, onClose }: {
   const [gradeCentering, setGradeCentering] = useState<string>(card.gradeCentering?.toString() ?? '');
   const [gradeCorners, setGradeCorners] = useState<string>(card.gradeCorners?.toString() ?? '');
   const [gradeEdges, setGradeEdges] = useState<string>(card.gradeEdges?.toString() ?? '');
-  const [gradeSurface, setGradeSurface] = useState<string>(card.gradeSurface?.toString() ?? '');
-  const [step, setStep] = useState<'main' | 'variant' | 'language' | 'condition' | 'grading' | 'acquisition' | 'sleeve'>('main');
+  const [editCardId, setEditCardId] = useState<string>(card.cardId ?? '');
+const [editSetName, setEditSetName] = useState<string>(card.setName ?? '');
+  const [step, setStep] = useState<'main' | 'variant' | 'language' | 'condition' | 'grading' | 'acquisition' | 'sleeve' | 'card-id'>('main');
 
   const currentVariant = VARIANTS.find(v => v.key === variant);
   const currentLanguage = CARD_LANGUAGES.find(l => l.code === language);
@@ -377,7 +378,9 @@ function EditCardModal({ card, onSave, onClose }: {
       gradeEdges: gradeEdges ? parseFloat(gradeEdges) : null,
       gradeSurface: gradeSurface ? parseFloat(gradeSurface) : null,
     } as any);
-  };
+  cardId: editCardId || card.cardId,
+setName: editSetName || card.setName,
+};
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
@@ -497,6 +500,15 @@ function EditCardModal({ card, onSave, onClose }: {
                 placeholder="Estado de la carta, historial, planes..."
                 className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50 resize-none h-20" />
             </div>
+
+            <button onClick={() => setStep('card-id')} className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-left">
+  <span className="text-xl">🔧</span>
+  <div className="flex-1">
+    <p className="text-xs text-gray-500">ID de carta / Set</p>
+    <p className="text-sm text-white font-medium truncate">{editCardId || card.cardId}</p>
+  </div>
+  <span className="text-gray-500 text-xs">›</span>
+</button>
 
             <button onClick={handleSave} className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold active:scale-95 transition-transform">{t.common.saveChanges}</button>
           </>
