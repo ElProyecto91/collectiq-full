@@ -1,20 +1,8 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft,
-  Camera,
-  ScanLine,
-  RefreshCw,
-  Sparkles,
-  X,
-  Search,
-  CheckCircle2,
-  AlertCircle,
-  Plus,
-  Loader2,
-  Tv,
-  Zap,
-  PenLine,
+  ArrowLeft, Camera, ScanLine, RefreshCw, Sparkles, X,
+  Search, CheckCircle2, AlertCircle, Plus, Loader2, Tv, Zap, PenLine,
 } from 'lucide-react';
 import { RoutePaths } from '@/config';
 import { cx } from '@/utils';
@@ -49,7 +37,21 @@ async function toBase64(file: File): Promise<string> {
   });
 }
 
-async function extractCardNameWithVision(base64: string): Promise<string> {
+interface VisionResult {
+  text: string;
+  number: string | null;
+  set_code: string | null;
+  validated_card_id: string | null;
+  validated_set_name: string | null;
+  language: string;
+  variant: string;
+  name_confidence: number;
+  variant_confidence: number;
+  was_validated: boolean;
+  error?: string;
+}
+
+async function analyzeWithVision(base64: string): Promise<VisionResult> {
   const res = await fetch('/api/vision', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -61,7 +63,7 @@ async function extractCardNameWithVision(base64: string): Promise<string> {
   }
   const data = await res.json();
   if (!data.text) throw new Error('No se detectó texto en la imagen');
-  return data.text.trim().replace(/^["']|["']$/g, '');
+  return data as VisionResult;
 }
 
 function getTCGPlayerPrice(card: PokemonCard): number | null {
@@ -70,7 +72,32 @@ function getTCGPlayerPrice(card: PokemonCard): number | null {
   return prices.holofoil?.market ?? prices.normal?.market ?? null;
 }
 
-async function searchPokemonTCG(name: string, retries = 3): Promise<PokemonCard[]> {
+async function fetchCardById(id: string): Promise<PokemonCard | null> {
+  try {
+    const res = await fetch(`https://api.pokemontcg.io/v2/cards/${id}`, {
+      headers: { 'X-Api-Key': POKEMON_API_KEY },
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json.data ?? null;
+  } catch { return null; }
+}
+
+async function searchPokemonTCG(name: string, number?: string | null, retries = 3): Promise<PokemonCard[]> {
+  // Si tenemos número, búsqueda exacta primero
+  if (number) {
+    const cleanNumber = number.split('/')[0];
+    const exactUrl = `https://api.pokemontcg.io/v2/cards?q=name:"${encodeURIComponent(name)}" number:"${encodeURIComponent(cleanNumber)}"&pageSize=10&orderBy=-set.releaseDate`;
+    try {
+      const res = await fetch(exactUrl, { headers: { 'X-Api-Key': POKEMON_API_KEY } });
+      if (res.ok) {
+        const json = await res.json();
+        if ((json.data ?? []).length > 0) return json.data as PokemonCard[];
+      }
+    } catch { /* fallback a búsqueda por nombre */ }
+  }
+
+  // Fallback: búsqueda por nombre
   const url = `https://api.pokemontcg.io/v2/cards?q=name:"${encodeURIComponent(name)}"&pageSize=20&orderBy=-set.releaseDate`;
   for (let i = 0; i < retries; i++) {
     try {
@@ -99,7 +126,7 @@ function getRarityColor(rarity?: string): string {
 export default function ScannerPage() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [showTutorial, setShowTutorial] = useState(true);
+  const [showTutorial] = useState(true);
 
   const [phase, setPhase] = useState<ScanPhase>('idle');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -111,6 +138,9 @@ export default function ScannerPage() {
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const [statusMsg, setStatusMsg] = useState('');
   const [progress, setProgress] = useState(0);
+  const [wasValidated, setWasValidated] = useState(false);
+  const [detectedVariant, setDetectedVariant] = useState<string>('normal');
+  const [detectedLanguage, setDetectedLanguage] = useState<string>('en');
 
   const [scansUsed, setScansUsed] = useState(0);
   const [scansAccumulated, setScansAccumulated] = useState(0);
@@ -130,13 +160,10 @@ export default function ScannerPage() {
       setScansLoaded(true);
       return;
     }
-
-    // Cargar estado premium y escaneos en paralelo
     Promise.all([
       supabase.from('user_premium').select('plan, expires_at')
         .eq('telegram_user_id', telegramUser.id).maybeSingle(),
-      fetch(`/api/scans?userId=${telegramUser.id}`)
-        .then(r => r.json()),
+      fetch(`/api/scans?userId=${telegramUser.id}`).then(r => r.json()),
     ]).then(([premiumRes, scansRes]) => {
       const data = premiumRes.data;
       const isExpired = data?.expires_at ? new Date(data.expires_at) < new Date() : true;
@@ -191,6 +218,7 @@ export default function ScannerPage() {
     setSearchQuery('');
     setErrorMsg('');
     setStatusMsg('');
+    setWasValidated(false);
     e.target.value = '';
   }, []);
 
@@ -211,13 +239,17 @@ export default function ScannerPage() {
 
     try {
       const base64 = await toBase64(currentFile);
-      setProgress(50);
+      setProgress(40);
       setStatusMsg('Identificando la carta…');
 
-      const name = await extractCardNameWithVision(base64);
-      setProgress(70);
+      const vision = await analyzeWithVision(base64);
+      setProgress(60);
 
-      if (!name) {
+      setDetectedVariant(vision.variant ?? 'normal');
+      setDetectedLanguage(vision.language ?? 'en');
+      setWasValidated(vision.was_validated);
+
+      if (!vision.text) {
         setDetectedName('');
         setSearchQuery('');
         setResults([]);
@@ -225,22 +257,36 @@ export default function ScannerPage() {
         return;
       }
 
-      setStatusMsg(`Buscando "${name}"…`);
+      // Si la API ya validó y devolvió un ID exacto, lo usamos directamente
+      if (vision.validated_card_id) {
+        setStatusMsg('Carta identificada. Obteniendo detalles…');
+        setProgress(80);
+        const exactCard = await fetchCardById(vision.validated_card_id);
+        if (exactCard) {
+          setProgress(100);
+          setDetectedName(exactCard.name);
+          setSearchQuery(exactCard.name);
+          setResults([exactCard]);
+          setPhase('results');
+          if (!isPremium) await updateScans('use');
+          return;
+        }
+      }
+
+      // Fallback: búsqueda por nombre + número
+      setStatusMsg(`Buscando "${vision.text}"…`);
       let cards: PokemonCard[] = [];
       try {
-        cards = await searchPokemonTCG(name);
+        cards = await searchPokemonTCG(vision.text, vision.number);
       } catch {
         throw new Error('pokétcg_error');
       }
 
-      // Solo descontamos si la búsqueda fue exitosa y no es premium
-      if (!isPremium) {
-        await updateScans('use');
-      }
+      if (!isPremium) await updateScans('use');
 
       setProgress(100);
-      setDetectedName(name);
-      setSearchQuery(name);
+      setDetectedName(vision.text);
+      setSearchQuery(vision.text);
       setResults(cards);
       setPhase(cards.length === 0 ? 'no-results' : 'results');
 
@@ -280,6 +326,9 @@ export default function ScannerPage() {
       favorite: false, setTotal: card.set.total ?? null,
       marketPrice: card.cardmarket?.prices?.averageSellPrice ?? null,
       tcgplayerPrice: getTCGPlayerPrice(card), currency: 'EUR',
+      // Pre-rellenar variante e idioma detectados por Gemini
+      variant: detectedVariant as any,
+      cardLanguage: detectedLanguage as any,
     });
     setAddedIds(prev => new Set(prev).add(card.id));
     setStatusMsg(`✅ ${card.name} añadida a tu colección`);
@@ -307,6 +356,7 @@ export default function ScannerPage() {
     setErrorMsg('');
     setStatusMsg('');
     setProgress(0);
+    setWasValidated(false);
   };
 
   return (
@@ -339,9 +389,7 @@ export default function ScannerPage() {
             <Zap size={16} className="text-yellow-400" />
             <p className="text-xs font-bold" style={{
               background: 'linear-gradient(135deg, #FFD700, #FFA500, #FFD700)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
+              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
             }}>CollectIQ GO · Escaneos ilimitados ✨</p>
           </div>
         )}
@@ -418,7 +466,7 @@ export default function ScannerPage() {
         {sessionLoaded && scansLoaded && isPremium === false && !canScan && phase === 'idle' && (
           <div className="bg-orange-500/10 border border-orange-500/30 rounded-2xl p-4 space-y-3">
             <p className="text-sm font-bold text-orange-300">⚡ Límite diario alcanzado</p>
-            <p className="text-xs text-orange-400/80">Has usado tus {DAILY_SCAN_LIMIT} escaneos de hoy. Ve un anuncio para conseguir más o hazte GO para escaneos ilimitados.</p>
+            <p className="text-xs text-orange-400/80">Has usado tus {DAILY_SCAN_LIMIT} escaneos de hoy.</p>
             <button onClick={watchAd} disabled={watchingAd}
               className="w-full flex items-center justify-center gap-2 bg-green-500/10 border border-green-500/20 text-green-400 rounded-xl py-3 text-sm font-bold active:scale-95 transition-transform disabled:opacity-50">
               {watchingAd
@@ -467,9 +515,17 @@ export default function ScannerPage() {
         )}
 
         {detectedName && phase === 'results' && (
-          <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 rounded-xl px-3 py-2">
-            <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-            <span className="text-xs text-blue-300">Detectado: <strong className="text-white">{detectedName}</strong></span>
+          <div className={cx(
+            'flex items-center gap-2 rounded-xl px-3 py-2',
+            wasValidated
+              ? 'bg-green-500/10 border border-green-500/20'
+              : 'bg-blue-500/10 border border-blue-500/20'
+          )}>
+            <Sparkles className={cx('w-3.5 h-3.5', wasValidated ? 'text-green-400' : 'text-blue-400')} />
+            <span className={cx('text-xs', wasValidated ? 'text-green-300' : 'text-blue-300')}>
+              {wasValidated ? '✓ Validado: ' : 'Detectado: '}
+              <strong className="text-white">{detectedName}</strong>
+            </span>
           </div>
         )}
 
@@ -496,6 +552,7 @@ export default function ScannerPage() {
                     <div className="p-2.5 space-y-1.5">
                       <p className="text-xs font-bold truncate">{card.name}</p>
                       <p className="text-[10px] text-gray-500 truncate">{card.set.name}</p>
+                      <p className="text-[10px] text-gray-600">#{card.number}</p>
                       {card.rarity && (
                         <p className={cx('text-[10px] truncate font-medium', getRarityColor(card.rarity))}>{card.rarity}</p>
                       )}
@@ -530,22 +587,17 @@ export default function ScannerPage() {
                 <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4 space-y-3">
                   <p className="text-sm font-semibold text-blue-300">📷 Cómo escanear una carta</p>
                   <div className="space-y-2 text-xs text-gray-400">
-                    <div className="flex items-start gap-2">
-                      <span className="text-blue-400 font-bold shrink-0">1.</span>
-                      <span>Toca <strong className="text-white">"Escanear carta"</strong> abajo</span>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <span className="text-blue-400 font-bold shrink-0">2.</span>
-                      <span>Se abrirá el selector de archivos. Toca los <strong className="text-white">tres puntos ⋮</strong> arriba a la derecha</span>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <span className="text-blue-400 font-bold shrink-0">3.</span>
-                      <span>Selecciona <strong className="text-white">"Cámara"</strong> para hacer una foto directamente</span>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <span className="text-blue-400 font-bold shrink-0">4.</span>
-                      <span>O elige una foto existente de tu galería</span>
-                    </div>
+                    {[
+                      ['1.', 'Toca "Escanear carta" abajo'],
+                      ['2.', 'Toca los tres puntos ⋮ arriba a la derecha'],
+                      ['3.', 'Selecciona "Cámara" para hacer una foto directamente'],
+                      ['4.', 'O elige una foto existente de tu galería'],
+                    ].map(([n, text]) => (
+                      <div key={n} className="flex items-start gap-2">
+                        <span className="text-blue-400 font-bold shrink-0">{n}</span>
+                        <span>{text}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
