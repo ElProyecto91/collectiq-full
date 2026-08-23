@@ -110,7 +110,7 @@ export function PublicProfilePage() {
       });
 
       setCards((cardsData ?? []).map(mapCollectionItem));
-      setFunkos((funkosData ?? []) as FunkoItem[]);
+      setFunkos((funkosData ?? []) as unknown as FunkoItem[]);
       setWishlist((wishlistData ?? []) as WishlistItem[]);
       setMarketplace((marketData ?? []) as MarketplaceListing[]);
     } catch (err) {
@@ -124,7 +124,7 @@ export function PublicProfilePage() {
   const totalCards = cards.reduce((s, c) => s + c.quantity, 0);
   const totalValue = cards.reduce((s, c) => s + ((c.marketPrice ?? c.tcgplayerPrice ?? 0) * c.quantity), 0);
 
-  const tabs: { key: Tab; label: string; count: number; show: boolean }[] = [
+  const tabs = [
     { key: 'collection', label: 'Colección', count: totalCards, show: user?.collection_public ?? true },
     { key: 'wishlist', label: 'Wishlist', count: wishlist.length, show: user?.wishlist_public ?? false },
     { key: 'market', label: 'Venta/Inter.', count: marketplace.length, show: marketplace.length > 0 },
