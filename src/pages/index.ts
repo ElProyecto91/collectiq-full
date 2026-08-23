@@ -16,3 +16,4 @@ export { PremiumPage } from './PremiumPage';
 export { NotificationsPage } from './NotificationsPage';
 export { CollectablesHub } from './CollectablesHub';
 export { AdminPage } from './AdminPage';
+export { MarketplacePage } from './MarketplacePage';
