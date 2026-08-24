@@ -26,6 +26,8 @@ export interface CollectionItem {
   tcg: string;
   catalog_item_id: string | null;
   external_card_id: string | null;
+
+  // snake_case (base de datos)
   name: string;
   set_name: string | null;
   number: string | null;
@@ -62,6 +64,31 @@ export interface CollectionItem {
   metadata: Record<string, any>;
   created_at: string;
   updated_at: string;
+
+  // camelCase aliases (compatibilidad con código existente)
+  cardId?: string | null;
+  cardName?: string | null;
+  setName?: string | null;
+  setTotal?: number | null;
+  imageUrl?: string | null;
+  marketPrice?: number | null;
+  tcgplayerPrice?: number | null;
+  purchasePrice?: number | null;
+  favorite?: boolean;
+  acquiredAt?: string;
+  createdAt?: string;
+  telegramUserId?: number;
+  grade?: string | null;
+  cardLanguage?: string | null;
+  cardNumber?: string | null;
+  storageLocation?: string | null;
+  inSleeve?: boolean;
+  sleevType?: string | null;
+  inBinder?: boolean;
+  gradingCompany?: string | null;
+  gradingScore?: number | null;
+  gradingCertificate?: string | null;
+  customPhoto?: string | null;
 }
 
 export interface WishlistItem {
@@ -70,6 +97,8 @@ export interface WishlistItem {
   tcg: string;
   catalog_item_id: string | null;
   external_card_id: string | null;
+
+  // snake_case (base de datos)
   name: string;
   set_name: string | null;
   number: string | null;
@@ -86,6 +115,14 @@ export interface WishlistItem {
   metadata: Record<string, any>;
   created_at: string;
   updated_at: string;
+
+  // camelCase aliases (compatibilidad con código existente)
+  cardId?: string | null;
+  cardName?: string | null;
+  setName?: string | null;
+  imageUrl?: string | null;
+  maxPrice?: number | null;
+  telegramUserId?: number;
 }
 
 export interface UserReputation {
