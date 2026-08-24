@@ -1,4 +1,3 @@
-// src/hooks/use-wishlist.ts
 import { useState, useEffect, useCallback } from 'react';
 import { WishlistItem } from '../types/tcg';
 
@@ -74,6 +73,37 @@ export function useWishlist(tcg?: string) {
   return {
     items, loading, error,
     addItem, updateItem, removeItem,
-    refresh: fetchItems
+    refresh: fetchItems,
+    data: items,
+    isLoading: loading
+  };
+}
+
+// ── Aliases de compatibilidad ────────────────────────────────────────────────
+export function useWishlistList(tcg?: string) {
+  return useWishlist(tcg);
+}
+
+export function useCreateWishlistItem() {
+  const wish = useWishlist();
+  return {
+    mutate: async (item: any) => wish.addItem(item),
+    isPending: false
+  };
+}
+
+export function useUpdateWishlistItem() {
+  const wish = useWishlist();
+  return {
+    mutate: async ({ id, ...updates }: any) => wish.updateItem(id, updates),
+    isPending: false
+  };
+}
+
+export function useDeleteWishlistItem() {
+  const wish = useWishlist();
+  return {
+    mutate: async (id: string) => wish.removeItem(id),
+    isPending: false
   };
 }
