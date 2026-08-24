@@ -1,13 +1,7 @@
 import type {
-  CardCondition,
-  CardLanguage,
-  CardVariant,
-  GradingCompany,
-  PurchaseSource,
   CollectionItem,
   CollectionItemInput,
   Profile,
-  Tcg,
   WishlistItem,
   WishlistItemInput,
 } from '@/types';
@@ -16,31 +10,6 @@ import type {
   ProfileRow,
   WishlistItemRow,
 } from '@/types/database';
-
-const isTcg = (value: string): value is Tcg =>
-  (['pokemon', 'one-piece', 'yugioh', 'lorcana', 'magic'] as const).includes(value as Tcg);
-
-const toTcg = (value: string): Tcg => (isTcg(value) ? value : 'pokemon');
-
-const isCondition = (value: string | null): value is CardCondition | null =>
-  value === null ||
-  (['mint', 'near-mint', 'lightly-played', 'moderately-played', 'heavily-played', 'damaged'] as const).includes(value as CardCondition);
-
-const isVariant = (value: string | null): value is CardVariant | null =>
-  value === null ||
-  (['normal', 'holofoil', 'reverseHolofoil', 'firstEdition', 'promo'] as const).includes(value as CardVariant);
-
-const isLanguage = (value: string | null): value is CardLanguage | null =>
-  value === null ||
-  (['en', 'es', 'ja', 'de', 'fr', 'it', 'pt', 'ko', 'zh-hant', 'th', 'id', 'ru', 'pl'] as const).includes(value as CardLanguage);
-
-const isGradingCompany = (value: string | null): value is GradingCompany | null =>
-  value === null ||
-  (['PSA', 'BGS', 'CGC', 'CCC', 'PGC', 'other'] as const).includes(value as GradingCompany);
-
-const isPurchaseSource = (value: string | null): value is PurchaseSource | null =>
-  value === null ||
-  (['pack', 'trade', 'purchase', 'gift', 'other'] as const).includes(value as PurchaseSource);
 
 export function mapProfile(row: ProfileRow): Profile {
   return {
@@ -59,19 +28,14 @@ export function mapProfile(row: ProfileRow): Profile {
 export function mapCollectionItem(row: CollectionItemRow): CollectionItem {
   return {
     id: row.id,
-    cardId: row.card_id,
-    tcg: toTcg(row.tcg),
+    tcg: row.tcg,
+    quantity: row.quantity ?? 1,
+    // camelCase (código existente)
+    cardId: row.card_id ?? null,
     telegramUserId: row.telegram_user_id,
-    quantity: row.quantity,
-    condition: isCondition(row.condition) ? row.condition : null,
-    grade: null,
-    metadata: row.metadata ?? {},
-    acquiredAt: row.acquired_at,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    cardName: row.card_name ?? '',
-    setName: row.set_name ?? '',
-    cardNumber: row.card_number ?? '',
+    cardName: row.card_name ?? null,
+    setName: row.set_name ?? null,
+    cardNumber: row.card_number ?? null,
     rarity: row.rarity ?? null,
     imageUrl: row.image_url ?? null,
     notes: row.notes ?? null,
@@ -80,11 +44,11 @@ export function mapCollectionItem(row: CollectionItemRow): CollectionItem {
     marketPrice: row.market_price ?? null,
     tcgplayerPrice: row.tcgplayer_price ?? null,
     currency: row.currency ?? null,
-    variant: isVariant(row.variant) ? row.variant : 'normal',
-    cardLanguage: isLanguage(row.card_language) ? row.card_language : 'en',
+    variant: row.variant ?? null,
+    cardLanguage: row.card_language ?? null,
     purchasePrice: row.purchase_price ?? null,
-    purchaseSource: isPurchaseSource(row.purchase_source) ? row.purchase_source : null,
-    gradingCompany: isGradingCompany(row.grading_company) ? row.grading_company : null,
+    purchaseSource: row.purchase_source ?? null,
+    gradingCompany: row.grading_company ?? null,
     gradingScore: row.grading_score ?? null,
     gradingCertificate: row.grading_certificate ?? null,
     gradeCentering: row.grade_centering ?? null,
@@ -96,26 +60,32 @@ export function mapCollectionItem(row: CollectionItemRow): CollectionItem {
     customPhoto: row.custom_photo ?? null,
     storageLocation: (row as any).storage_location ?? null,
     sleeveType: (row as any).sleeve_type ?? null,
+    condition: row.condition ?? null,
+    grade: null,
+    acquiredAt: row.acquired_at ?? null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    metadata: row.metadata ?? {},
   };
 }
 
 export function mapWishlistItem(row: WishlistItemRow): WishlistItem {
   return {
     id: row.id,
-    cardId: row.card_id,
-    tcg: toTcg(row.tcg),
-    maxPrice: row.max_price,
-    notes: row.notes,
-    metadata: row.metadata ?? {},
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    cardName: row.card_name ?? '',
-    setName: row.set_name ?? '',
-    cardNumber: row.card_number ?? '',
+    tcg: row.tcg,
+    cardId: row.card_id ?? null,
+    telegramUserId: row.telegram_user_id,
+    maxPrice: row.max_price ?? null,
+    notes: row.notes ?? null,
+    cardName: row.card_name ?? null,
+    setName: row.set_name ?? null,
+    cardNumber: row.card_number ?? null,
     rarity: row.rarity ?? null,
     imageUrl: row.image_url ?? null,
-    telegramUserId: row.telegram_user_id,
     setTotal: row.set_total ?? null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    metadata: row.metadata ?? {},
   };
 }
 
@@ -160,7 +130,6 @@ export function toCollectionItemRow(input: CollectionItemInput) {
 
 export function toCollectionItemUpdateRow(input: Partial<CollectionItemInput>) {
   const row: Record<string, any> = {};
-
   if (input.variant !== undefined) row.variant = input.variant;
   if (input.cardLanguage !== undefined) row.card_language = input.cardLanguage;
   if (input.condition !== undefined) row.condition = input.condition;
@@ -188,7 +157,6 @@ export function toCollectionItemUpdateRow(input: Partial<CollectionItemInput>) {
   if (input.tcgplayerPrice !== undefined) row.tcgplayer_price = input.tcgplayerPrice;
   if ((input as any).storageLocation !== undefined) row.storage_location = (input as any).storageLocation;
   if ((input as any).sleeveType !== undefined) row.sleeve_type = (input as any).sleeveType;
-
   return row;
 }
 
@@ -199,12 +167,12 @@ export function toWishlistItemRow(input: WishlistItemInput) {
     max_price: input.maxPrice ?? null,
     notes: input.notes ?? null,
     metadata: input.metadata ?? {},
-    card_name: (input as any).cardName ?? '',
-    set_name: (input as any).setName ?? '',
-    card_number: (input as any).cardNumber ?? '',
-    rarity: (input as any).rarity ?? null,
-    image_url: (input as any).imageUrl ?? null,
-    telegram_user_id: (input as any).telegramUserId ?? 0,
-    set_total: (input as any).setTotal ?? null,
+    card_name: input.cardName ?? '',
+    set_name: input.setName ?? '',
+    card_number: input.cardNumber ?? '',
+    rarity: input.rarity ?? null,
+    image_url: input.imageUrl ?? null,
+    telegram_user_id: input.telegramUserId ?? 0,
+    set_total: input.setTotal ?? null,
   };
 }
