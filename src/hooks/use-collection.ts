@@ -1,118 +1,113 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+// src/hooks/use-collection.ts
+import { useState, useEffect, useCallback } from 'react';
+import { CollectionItem } from '../types/tcg';
 
-import { collectionService } from '@/services';
-import type { CollectionQueryOptions } from '@/services';
-import { queryKeys } from '@/lib/query-client';
-import { isDevelopmentMode } from '@/lib/dev-user';
-import { useCollectionStore } from '@/store';
-import { useUserStore } from '@/store';
-import type { CollectionItem, CollectionItemInput, CollectionItemUpdate, CollectionStats } from '@/types';
+function getToken(): string | null {
+  return localStorage.getItem('auth_token');
+}
 
-const EMPTY_STATS: CollectionStats = {
-  totalItems: 0,
-  uniqueCards: 0,
-  favoriteCount: 0,
-  byTcg: {},
-};
+function authHeaders() {
+  return {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${getToken()}`
+  };
+}
 
-/** Map the UI sort key to the database column + direction. */
-const SORT_MAP: Record<string, { column: string; ascending: boolean }> = {
-  recent: { column: 'created_at', ascending: false },
-  name: { column: 'card_name', ascending: true },
-  set: { column: 'set_name', ascending: true },
-  rarity: { column: 'rarity', ascending: false },
-};
+export function useCollection(tcg?: string) {
+  const [items, setItems] = useState<CollectionItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-/**
- * Collection data hooks — React Query wrappers over the collection service.
- *
- * Every hook reads the Telegram user ID from the user store and passes it to
- * the service, so queries are always scoped to the current collector. The list
- * hook also reads search/sort from the collection store so the cache key tracks
- * the active filters. Mutations invalidate the relevant caches so the UI
- * refreshes automatically after edits.
- */
-export function useCollectionList() {
-  const search = useCollectionStore((s) => s.search);
-  const sort = useCollectionStore((s) => s.sort);
-  const telegramUser = useUserStore((s) => s.telegramUser);
+  const fetchItems = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const url = tcg ? `/api/collection?tcg=${tcg}` : '/api/collection';
+      const r = await fetch(url, { headers: authHeaders() });
+      if (!r.ok) throw new Error('Error cargando colección');
+      const d = await r.json();
+      setItems(d.items ?? []);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [tcg]);
 
-  const sortConfig = SORT_MAP[sort] ?? SORT_MAP.recent;
-  const options: CollectionQueryOptions = {
-    telegramUserId: telegramUser?.id ?? 0,
-    search: search.trim() || undefined,
-    orderBy: sortConfig.column,
-    ascending: sortConfig.ascending,
+  useEffect(() => { fetchItems(); }, [fetchItems]);
+
+  const addItem = useCallback(async (item: Partial<CollectionItem>) => {
+    const r = await fetch('/api/collection', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify(item)
+    });
+    if (!r.ok) throw new Error('Error añadiendo item');
+    const d = await r.json();
+    if (d.action === 'created') {
+      setItems(prev => [d.item, ...prev]);
+    } else if (d.action === 'quantity_updated') {
+      setItems(prev => prev.map(i => i.id === d.item.id ? d.item : i));
+    }
+    return d;
+  }, []);
+
+  const updateItem = useCallback(async (id: string, updates: Partial<CollectionItem>) => {
+    const r = await fetch(`/api/collection?id=${id}`, {
+      method: 'PUT',
+      headers: authHeaders(),
+      body: JSON.stringify(updates)
+    });
+    if (!r.ok) throw new Error('Error actualizando item');
+    const d = await r.json();
+    setItems(prev => prev.map(i => i.id === id ? d.item : i));
+    return d.item;
+  }, []);
+
+  const removeItem = useCallback(async (id: string) => {
+    const r = await fetch(`/api/collection?id=${id}`, {
+      method: 'DELETE',
+      headers: authHeaders()
+    });
+    if (!r.ok) throw new Error('Error eliminando item');
+    setItems(prev => prev.filter(i => i.id !== id));
+  }, []);
+
+  const updatePrices = useCallback(async (tcgId: string) => {
+    const r = await fetch('/api/prices', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ tcg: tcgId })
+    });
+    if (!r.ok) throw new Error('Error actualizando precios');
+    const d = await r.json();
+    await fetchItems(); // recargar tras actualizar
+    return d;
+  }, [fetchItems]);
+
+  // Stats calculadas en cliente — sin llamadas extra a la API
+  const stats = {
+    total: items.length,
+    totalQuantity: items.reduce((s, i) => s + i.quantity, 0),
+    totalValue: items.reduce((s, i) => s + (i.market_value ?? 0) * i.quantity, 0),
+    totalCost: items.reduce((s, i) => s + (i.purchase_price ?? 0) * i.quantity, 0),
+    roi: (() => {
+      const cost = items.reduce((s, i) => s + (i.purchase_price ?? 0) * i.quantity, 0);
+      const value = items.reduce((s, i) => s + (i.market_value ?? 0) * i.quantity, 0);
+      return cost > 0 ? ((value - cost) / cost) * 100 : 0;
+    })(),
+    favorites: items.filter(i => i.is_favorite).length,
+    forSale: items.filter(i => i.is_for_sale).length,
+    byTcg: items.reduce((acc, i) => {
+      acc[i.tcg] = (acc[i.tcg] ?? 0) + 1;
+      return acc;
+    }, {} as Record<string, number>)
   };
 
-  return useQuery<CollectionItem[]>({
-    queryKey: queryKeys.collectionList({ search: options.search, orderBy: options.orderBy }),
-    queryFn: () =>
-      isDevelopmentMode() ? Promise.resolve([]) : collectionService.list(options),
-    enabled: Boolean(telegramUser?.id),
-  });
-}
-
-export function useCollectionStats() {
-  const setStats = useCollectionStore((s) => s.setStats);
-  const telegramUser = useUserStore((s) => s.telegramUser);
-
-  return useQuery({
-    queryKey: queryKeys.collectionStats,
-    queryFn: async () => {
-      if (isDevelopmentMode()) {
-        setStats(EMPTY_STATS);
-        return EMPTY_STATS;
-      }
-      const stats = await collectionService.stats(telegramUser!.id);
-      setStats(stats);
-      return stats;
-    },
-    enabled: Boolean(telegramUser?.id),
-  });
-}
-
-/** Check whether a card is already in the collection. */
-export function useCollectionItem(cardId: string | undefined) {
-  const telegramUser = useUserStore((s) => s.telegramUser);
-
-  return useQuery<CollectionItem | null>({
-    queryKey: ['collection', 'item', cardId],
-    queryFn: () => collectionService.findByCardId(telegramUser!.id, cardId as string),
-    enabled: Boolean(telegramUser?.id && cardId),
-  });
-}
-
-export function useCreateCollectionItem() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (input: CollectionItemInput) => collectionService.create(input),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.collection });
-    },
-  });
-}
-
-export function useUpdateCollectionItem() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({ id, update }: { id: string; update: CollectionItemUpdate }) =>
-      collectionService.update(id, update),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.collection });
-    },
-  });
-}
-
-export function useDeleteCollectionItem() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (id: string) => collectionService.remove(id),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.collection });
-    },
-  });
+  return {
+    items, loading, error,
+    addItem, updateItem, removeItem, updatePrices,
+    refresh: fetchItems,
+    stats
+  };
 }
