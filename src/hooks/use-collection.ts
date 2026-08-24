@@ -106,8 +106,8 @@ export function useCollection(tcg?: string) {
     items, loading, error,
     addItem, updateItem, removeItem, updatePrices,
     refresh: fetchItems,
+    refetch: fetchItems,
     stats,
-    // datos directos que usan algunas páginas
     data: items,
     isLoading: loading
   };
