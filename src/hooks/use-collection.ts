@@ -1,4 +1,3 @@
-// src/hooks/use-collection.ts
 import { useState, useEffect, useCallback } from 'react';
 import { CollectionItem } from '../types/tcg';
 
@@ -81,11 +80,10 @@ export function useCollection(tcg?: string) {
     });
     if (!r.ok) throw new Error('Error actualizando precios');
     const d = await r.json();
-    await fetchItems(); // recargar tras actualizar
+    await fetchItems();
     return d;
   }, [fetchItems]);
 
-  // Stats calculadas en cliente — sin llamadas extra a la API
   const stats = {
     total: items.length,
     totalQuantity: items.reduce((s, i) => s + i.quantity, 0),
@@ -108,6 +106,48 @@ export function useCollection(tcg?: string) {
     items, loading, error,
     addItem, updateItem, removeItem, updatePrices,
     refresh: fetchItems,
-    stats
+    stats,
+    // datos directos que usan algunas páginas
+    data: items,
+    isLoading: loading
+  };
+}
+
+// ── Aliases de compatibilidad ────────────────────────────────────────────────
+export function useCollectionList(tcg?: string) {
+  return useCollection(tcg);
+}
+
+export function useCollectionItem(_id?: string) {
+  const col = useCollection();
+  return { item: null, isLoading: col.loading };
+}
+
+export function useCollectionStats() {
+  const col = useCollection();
+  return { stats: col.stats, isLoading: col.loading };
+}
+
+export function useCreateCollectionItem() {
+  const col = useCollection();
+  return {
+    mutate: async (item: any) => col.addItem(item),
+    isPending: false
+  };
+}
+
+export function useUpdateCollectionItem() {
+  const col = useCollection();
+  return {
+    mutate: async ({ id, ...updates }: any) => col.updateItem(id, updates),
+    isPending: false
+  };
+}
+
+export function useDeleteCollectionItem() {
+  const col = useCollection();
+  return {
+    mutate: async (id: string) => col.removeItem(id),
+    isPending: false
   };
 }
