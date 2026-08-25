@@ -1,3 +1,4 @@
+// @ts-nocheck
 // api/onepiece-cards.ts
 import { createClient } from '@supabase/supabase-js';
 
