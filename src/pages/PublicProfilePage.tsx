@@ -109,7 +109,7 @@ export function PublicProfilePage() {
         marketplace_active: profileData?.marketplace_active ?? false,
       });
 
-      setCards((cardsData ?? []).map(mapCollectionItem));
+      setCards((cardsData ?? []).map(row => ({ ...mapCollectionItem(row), imageUrl: row.image_url ?? undefined, cardName: row.card_name ?? undefined })));
       setFunkos((funkosData ?? []) as unknown as FunkoItem[]);
       setWishlist((wishlistData ?? []) as WishlistItem[]);
       setMarketplace((marketData ?? []) as MarketplaceListing[]);
