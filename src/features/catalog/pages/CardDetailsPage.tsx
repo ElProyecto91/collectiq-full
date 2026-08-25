@@ -103,7 +103,7 @@ export function CardDetailsPage() {
   const [priceHistory, setPriceHistory] = useState<PriceHistory[]>([]);
 
   const { mutate: createItem } = useCreateCollectionItem();
-  const { data: existingItem } = useCollectionItem(cardId);
+  const { item: existingItem } = useCollectionItem(cardId);
   const telegramUser = useUserStore((s) => s.telegramUser);
   const { formatPrice } = useCurrency();
   const { t } = useI18n();
