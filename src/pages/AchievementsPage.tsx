@@ -32,7 +32,7 @@ export function AchievementsPage() {
 
     const setGroups = Object.values(
       cards.reduce((acc, card) => {
-        const key = card.setName;
+        const key = card.setName ?? '';
         if (!acc[key]) acc[key] = { count: 0, total: card.setTotal ?? 0 };
         acc[key].count += 1;
         return acc;
