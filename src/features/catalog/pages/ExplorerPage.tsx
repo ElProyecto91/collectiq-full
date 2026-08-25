@@ -194,7 +194,7 @@ export function ExplorerPage() {
   const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    setWishlistIds(new Set(wishlistItems.map(w => w.cardId)));
+    setWishlistIds(new Set(wishlistItems.map(w => w.cardId ?? '').filter(Boolean)));
   }, [wishlistItems]);
 
   const doSearch = useCallback(async (q: string, p: number, append: boolean) => {
