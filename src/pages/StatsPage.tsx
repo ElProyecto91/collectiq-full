@@ -95,7 +95,7 @@ export function StatsPage() {
 
   const setGroups = Object.values(
     cards.reduce((acc, card) => {
-      const key = card.setName;
+      const key = card.setName ?? '';
       if (!acc[key]) acc[key] = { setName: key, count: 0, value: 0 };
       acc[key].count += card.quantity;
       acc[key].value += (card.marketPrice ?? card.tcgplayerPrice ?? 0) * card.quantity;
