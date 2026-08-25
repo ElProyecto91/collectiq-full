@@ -47,34 +47,48 @@ const COLOR_STYLES: Record<string, string> = {
 };
 
 async function fetchOnePieceCards(q: string, set: string, page: number): Promise<{ cards: OnePieceCard[]; total: number }> {
-  // Usamos la API de optcgdecks que es pública
-  const params = new URLSearchParams();
-  if (q) params.set('name', q);
-  if (set) params.set('set', set);
-  params.set('page', String(page));
-  params.set('limit', '20');
-
   try {
-    const r = await fetch(`https://db.optcgdecks.com/cards?${params.toString()}`);
+    // API oficial One Piece Card Game
+    const params = new URLSearchParams();
+    if (q) params.set('keyWord', q);
+    if (set) params.set('series', set);
+    params.set('type', '');
+    params.set('pageNo', String(page));
+    params.set('pageSize', '20');
+
+    const r = await fetch(
+      `https://en.onepiece-cardgame.com/api/search?${params.toString()}`,
+      { headers: { 'Accept': 'application/json', 'Referer': 'https://en.onepiece-cardgame.com/' } }
+    );
+
     if (!r.ok) throw new Error('API error');
     const data = await r.json();
-    const cards = (data.cards ?? data.data ?? []).map((c: any) => ({
-      id: c.id ?? c.card_id ?? c.number,
-      name: c.name,
-      number: c.number ?? c.card_number ?? '',
+
+    const cards = (data.result ?? data.list ?? []).map((c: any) => ({
+      id: c.id ?? c.cardId ?? c.number,
+      name: c.name ?? c.cardName ?? '',
+      number: c.number ?? c.cardNo ?? '',
       rarity: c.rarity ?? '',
-      type: c.type ?? c.card_type ?? '',
-      color: Array.isArray(c.color) ? c.color : [c.color].filter(Boolean),
+      type: c.type ?? '',
+      color: c.color ? [c.color] : [],
       power: c.power ?? null,
       cost: c.cost ?? null,
-      image_url: c.image_url ?? c.img ?? `https://en.onepiece-cardgame.com/images/cardlist/card/${c.number}.png`,
-      set_id: c.set_id ?? c.set ?? '',
-      set_name: c.set_name ?? c.set ?? '',
-      price_eur: c.price_eur ?? null,
+      image_url: c.imgUrl ?? c.image ?? `https://en.onepiece-cardgame.com/images/cardlist/card/${c.number}.png`,
+      set_id: set || '',
+      set_name: c.series ?? set ?? '',
+      price_eur: null,
     }));
+
     return { cards, total: data.total ?? cards.length };
   } catch {
-    return { cards: [], total: 0 };
+    // Fallback: usar proxy local
+    try {
+      const r2 = await fetch(`/api/onepiece-cards?q=${encodeURIComponent(q)}&set=${set}&page=${page}`);
+      if (!r2.ok) return { cards: [], total: 0 };
+      return await r2.json();
+    } catch {
+      return { cards: [], total: 0 };
+    }
   }
 }
 
