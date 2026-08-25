@@ -1,4 +1,5 @@
 // @ts-nocheck
+declare const process: { env: Record<string, string> };
 // api/onepiece-cards.ts
 import { createClient } from '@supabase/supabase-js';
 
