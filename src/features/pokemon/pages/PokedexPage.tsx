@@ -53,7 +53,7 @@ export function PokedexPage() {
     const cards = allCards.filter(c => c.tcg === 'pokemon');
     const nameMap = new Map<string, number>(); // nombre → cantidad de cartas
     cards.forEach(card => {
-      const baseName = extractPokemonName(card.cardName);
+      const baseName = extractPokemonName(card.cardName ?? '');
       nameMap.set(baseName, (nameMap.get(baseName) ?? 0) + card.quantity);
     });
     return nameMap;
