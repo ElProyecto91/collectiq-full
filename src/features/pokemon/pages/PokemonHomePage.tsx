@@ -17,7 +17,6 @@ export function PokemonHomePage() {
   const { data: allCards = [], isLoading } = useCollectionList();
   const { data: wishlistItems = [] } = useWishlistList();
 
-  // Solo cartas Pokémon
   const cards = allCards.filter(c => c.tcg === 'pokemon');
 
   const totalCards = cards.reduce((s, c) => s + c.quantity, 0);
@@ -26,9 +25,9 @@ export function PokemonHomePage() {
   const totalPaid = cards.reduce((s, c) => s + (c.purchasePrice ?? 0) * c.quantity, 0);
   const roi = totalPaid > 0 ? ((totalValue - totalPaid) / totalPaid) * 100 : null;
 
-  const sets = [...new Set(cards.map(c => c.setName))].length;
+  const sets = [...new Set(cards.map(c => c.setName ?? ''))].filter(Boolean).length;
   const favorites = cards.filter(c => c.favorite);
-  const recentCards = [...cards].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 6);
+  const recentCards = [...cards].sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime()).slice(0, 6);
   const topCards = [...cards].sort((a, b) => (b.marketPrice ?? b.tcgplayerPrice ?? 0) - (a.marketPrice ?? a.tcgplayerPrice ?? 0)).slice(0, 3);
   const pokemonWishlist = wishlistItems.filter(w => w.tcg === 'pokemon');
 
@@ -43,15 +42,11 @@ export function PokemonHomePage() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
-      {/* Header */}
       <div className="relative px-4 pt-6 pb-6">
         <div className="absolute inset-0 bg-gradient-to-b from-red-950/30 to-transparent pointer-events-none" />
         <div className="flex items-center justify-between relative z-10">
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate(RoutePaths.Home)}
-              className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center"
-            >
+            <button onClick={() => navigate(RoutePaths.Home)} className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center">
               <ArrowLeft className="w-4 h-4" />
             </button>
             <div>
@@ -59,7 +54,6 @@ export function PokemonHomePage() {
               <h1 className="text-lg font-bold leading-tight">Pokémon TCG</h1>
             </div>
           </div>
-          {/* Pokéball SVG */}
           <svg viewBox="0 0 40 40" className="w-10 h-10 opacity-60" fill="none">
             <circle cx="20" cy="20" r="19" stroke="#ef4444" strokeWidth="2" />
             <path d="M1 20h38" stroke="#ef4444" strokeWidth="2" />
@@ -70,7 +64,6 @@ export function PokemonHomePage() {
       </div>
 
       <div className="px-4 space-y-5">
-        {/* Stats principales */}
         {!isLoading && (
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 col-span-2">
@@ -83,9 +76,7 @@ export function PokemonHomePage() {
                 )}
               </div>
               <p className="text-2xl font-bold text-white">{formatPrice(totalValue)}</p>
-              {totalPaid > 0 && (
-                <p className="text-xs text-gray-500 mt-0.5">Invertido: {formatPrice(totalPaid)}</p>
-              )}
+              {totalPaid > 0 && <p className="text-xs text-gray-500 mt-0.5">Invertido: {formatPrice(totalPaid)}</p>}
             </div>
             <div className="bg-[#111118] border border-white/8 rounded-2xl p-3 text-center">
               <p className="text-xl font-bold text-blue-400">{totalCards}</p>
@@ -106,16 +97,12 @@ export function PokemonHomePage() {
           </div>
         )}
 
-        {/* Accesos rápidos */}
         <div>
           <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-3">Accesos rápidos</p>
           <div className="grid grid-cols-3 gap-2">
             {quickActions.map(({ icon: Icon, label, color, path }) => (
-              <button
-                key={label}
-                onClick={() => navigate(path)}
-                className={`flex flex-col items-center gap-2 border rounded-2xl py-4 px-2 active:scale-95 transition-transform ${color}`}
-              >
+              <button key={label} onClick={() => navigate(path)}
+                className={`flex flex-col items-center gap-2 border rounded-2xl py-4 px-2 active:scale-95 transition-transform ${color}`}>
                 <Icon size={22} />
                 <span className="text-xs font-medium">{label}</span>
               </button>
@@ -123,7 +110,6 @@ export function PokemonHomePage() {
           </div>
         </div>
 
-        {/* Cartas más valiosas */}
         {topCards.length > 0 && (
           <div>
             <div className="flex items-center justify-between mb-3">
@@ -140,7 +126,7 @@ export function PokemonHomePage() {
                 return (
                   <div key={card.id} className="bg-[#111118] border border-white/8 rounded-2xl p-3 flex items-center gap-3">
                     <span className="text-xs text-gray-600 font-bold w-4">#{i + 1}</span>
-                    <img src={card.imageUrl ?? ''} alt={card.cardName} className="w-10 h-14 object-cover rounded-lg shrink-0" />
+                    <img src={card.imageUrl ?? ''} alt={card.cardName ?? ''} className="w-10 h-14 object-cover rounded-lg shrink-0" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-bold text-white truncate">{card.cardName}</p>
                       <p className="text-xs text-gray-500 truncate">{card.setName}</p>
@@ -158,7 +144,6 @@ export function PokemonHomePage() {
           </div>
         )}
 
-        {/* Favoritas */}
         {favorites.length > 0 && (
           <div>
             <div className="flex items-center justify-between mb-3">
@@ -171,19 +156,14 @@ export function PokemonHomePage() {
             </div>
             <div className="flex gap-2 overflow-x-auto pb-1">
               {favorites.slice(0, 8).map(card => (
-                <img
-                  key={card.id}
-                  src={card.imageUrl ?? ''}
-                  alt={card.cardName}
+                <img key={card.id} src={card.imageUrl ?? ''} alt={card.cardName ?? ''}
                   className="h-24 w-16 object-cover rounded-xl shrink-0 cursor-pointer active:scale-95 transition-transform"
-                  onClick={() => navigate(RoutePaths.Collection)}
-                />
+                  onClick={() => navigate(RoutePaths.Collection)} />
               ))}
             </div>
           </div>
         )}
 
-        {/* Añadidas recientemente */}
         {recentCards.length > 0 && (
           <div>
             <div className="flex items-center justify-between mb-3">
@@ -197,12 +177,9 @@ export function PokemonHomePage() {
             <div className="flex gap-2 overflow-x-auto pb-1">
               {recentCards.map(card => (
                 <div key={card.id} className="shrink-0 w-20">
-                  <img
-                    src={card.imageUrl ?? ''}
-                    alt={card.cardName}
+                  <img src={card.imageUrl ?? ''} alt={card.cardName ?? ''}
                     className="w-20 h-28 object-cover rounded-xl cursor-pointer active:scale-95 transition-transform"
-                    onClick={() => navigate(RoutePaths.Collection)}
-                  />
+                    onClick={() => navigate(RoutePaths.Collection)} />
                   <p className="text-[9px] text-gray-500 truncate mt-1 text-center">{card.cardName}</p>
                 </div>
               ))}
@@ -210,7 +187,6 @@ export function PokemonHomePage() {
           </div>
         )}
 
-        {/* Estado vacío */}
         {!isLoading && cards.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
             <div className="w-20 h-20 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
@@ -225,16 +201,13 @@ export function PokemonHomePage() {
               <p className="text-white font-bold">Sin cartas todavía</p>
               <p className="text-sm text-gray-500 mt-1">Escanea tu primera carta para empezar</p>
             </div>
-            <button
-              onClick={() => navigate(RoutePaths.Scanner)}
-              className="bg-gradient-to-r from-red-600 to-red-500 text-white rounded-2xl px-6 py-3 font-semibold flex items-center gap-2 active:scale-95 transition-transform"
-            >
+            <button onClick={() => navigate(RoutePaths.Scanner)}
+              className="bg-gradient-to-r from-red-600 to-red-500 text-white rounded-2xl px-6 py-3 font-semibold flex items-center gap-2 active:scale-95 transition-transform">
               <Camera size={18} /> Escanear carta
             </button>
           </div>
         )}
 
-        {/* Trending */}
         {totalValue > 0 && (
           <div className="bg-gradient-to-r from-blue-900/30 to-purple-900/30 border border-white/8 rounded-2xl p-4">
             <div className="flex items-center gap-2 mb-2">
