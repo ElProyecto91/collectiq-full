@@ -141,7 +141,7 @@ export function PublicProfilePage() {
       {zoomedCard && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-6"
           onClick={() => setZoomedCard(null)}>
-          <img src={zoomedCard.imageUrl ?? ''} alt={zoomedCard.cardName} className="w-full max-w-xs rounded-2xl shadow-2xl" />
+          <img src={zoomedCard.imageUrl ?? ''} alt={zoomedCard.cardName ?? ''} className="w-full max-w-xs rounded-2xl shadow-2xl" />
         </div>
       )}
 
@@ -213,7 +213,7 @@ export function PublicProfilePage() {
               <div className="grid grid-cols-3 gap-2 mb-4">
                 {cards.map(card => (
                   <div key={card.id} className="cursor-pointer" onClick={() => setZoomedCard(card)}>
-                    <img src={card.imageUrl ?? ''} alt={card.cardName}
+                    <img src={card.imageUrl ?? ''} alt={card.cardName ?? ''}
                       className={`w-full aspect-[2/3] object-cover rounded-xl ${user?.isPremium ? 'ring-1 ring-yellow-500/20' : ''}`}
                       loading="lazy" />
                   </div>
