@@ -4,45 +4,74 @@ export default async function handler(req: any, res: any) {
 
   const { q = '', set = '', page = '1' } = req.query;
   const pageNum = Math.max(1, parseInt(page as string) || 1);
-  const offset = (pageNum - 1) * 20;
 
   try {
-    let url = `https://www.op-tcg.com/api/cards?limit=20&offset=${offset}`;
-    if (q) url += `&name=${encodeURIComponent(q as string)}`;
-    if (set) url += `&set=${encodeURIComponent(set as string)}`;
+    // TCGdex - buscar sets de One Piece primero
+    const setsUrl = 'https://api.tcgdex.net/v2/en/series/op/sets';
+    const setsR = await fetch(setsUrl, { headers: { 'Accept': 'application/json' } });
+    
+    let targetSet = set as string;
+    
+    if (!targetSet) {
+      // Sin filtro de set, buscar en OP01 por defecto o todos
+      targetSet = 'op01';
+    }
 
-    const r = await fetch(url, {
-      headers: {
-        'Accept': 'application/json',
-        'User-Agent': 'Mozilla/5.0',
+    const cardsUrl = `https://api.tcgdex.net/v2/en/sets/${targetSet.toLowerCase()}/cards`;
+    const r = await fetch(cardsUrl, { headers: { 'Accept': 'application/json' } });
+
+    if (!r.ok) return res.status(200).json({ cards: [], total: 0, error: `TCGdex ${r.status}` });
+
+    const list: any[] = await r.json();
+
+    const filtered = (Array.isArray(list) ? list : [])
+      .filter((c: any) => !q || (c.name ?? '').toLowerCase().includes((q as string).toLowerCase()));
+
+    const pageSize = 20;
+    const start = (pageNum - 1) * pageSize;
+    const paged = filtered.slice(start, start + pageSize);
+
+    // Obtener detalles de cada carta
+    const cards = await Promise.all(paged.map(async (c: any) => {
+      try {
+        const detailR = await fetch(`https://api.tcgdex.net/v2/en/cards/${c.id}`, {
+          headers: { 'Accept': 'application/json' }
+        });
+        if (!detailR.ok) throw new Error('no detail');
+        const detail: any = await detailR.json();
+        return {
+          id: detail.id ?? c.id,
+          name: detail.name ?? c.name ?? '',
+          number: detail.localId ?? c.localId ?? '',
+          rarity: detail.rarity ?? '',
+          type: detail.types?.[0] ?? '',
+          color: detail.types ?? [],
+          power: detail.hp ?? null,
+          cost: null,
+          image_url: detail.image ? `${detail.image}/high.webp` : `https://placehold.co/200x280/111118/666?text=${encodeURIComponent(c.name ?? 'OP')}`,
+          set_id: targetSet,
+          set_name: detail.set?.name ?? targetSet,
+          price_eur: null,
+        };
+      } catch {
+        return {
+          id: c.id,
+          name: c.name ?? '',
+          number: c.localId ?? '',
+          rarity: '',
+          type: '',
+          color: [],
+          power: null,
+          cost: null,
+          image_url: c.image ? `${c.image}/high.webp` : `https://placehold.co/200x280/111118/666?text=OP`,
+          set_id: targetSet,
+          set_name: targetSet,
+          price_eur: null,
+        };
       }
-    });
-
-    if (!r.ok) return res.status(200).json({ cards: [], total: 0, error: `Status ${r.status}` });
-
-    const text = await r.text();
-    let data: any;
-    try { data = JSON.parse(text); }
-    catch { return res.status(200).json({ cards: [], total: 0, error: 'Not JSON: ' + text.slice(0, 150) }); }
-
-    const list = data.cards ?? data.results ?? data.data ?? data ?? [];
-    const cards = (Array.isArray(list) ? list : []).map((c: any) => ({
-      id: c.id ?? c.card_id ?? c.number ?? String(Math.random()),
-      name: c.name ?? '',
-      number: c.number ?? c.card_number ?? '',
-      rarity: c.rarity ?? '',
-      type: c.type ?? c.card_type ?? '',
-      color: c.color ? (Array.isArray(c.color) ? c.color : [c.color]) : [],
-      power: c.power ?? null,
-      cost: c.cost ?? null,
-      image_url: c.image ?? c.image_url ?? c.img_url ??
-        `https://placehold.co/200x280/111118/666?text=${encodeURIComponent(c.name ?? 'OP')}`,
-      set_id: c.set ?? set ?? '',
-      set_name: c.set_name ?? c.series ?? '',
-      price_eur: null,
     }));
 
-    return res.status(200).json({ cards, total: data.total ?? data.count ?? cards.length });
+    return res.status(200).json({ cards, total: filtered.length });
   } catch (err: any) {
     return res.status(200).json({ cards: [], total: 0, error: String(err?.message ?? err) });
   }
