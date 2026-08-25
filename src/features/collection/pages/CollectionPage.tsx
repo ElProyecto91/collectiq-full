@@ -58,19 +58,24 @@ const ALBUM_BACKGROUNDS = [
 ];
 
 function getConditionLabel(key: CardCondition, t: any): string {
-  const map: Record<CardCondition, string> = {
+  const map: Partial<Record<string, string>> = {
     'mint': t.cardEdit?.mint ?? 'Mint',
     'near-mint': t.cardEdit?.nearMint ?? 'Near Mint',
+    'NM': t.cardEdit?.nearMint ?? 'Near Mint',
     'lightly-played': t.cardEdit?.lightlyPlayed ?? 'Lightly Played',
+    'LP': t.cardEdit?.lightlyPlayed ?? 'Lightly Played',
     'moderately-played': t.cardEdit?.moderatelyPlayed ?? 'Moderately Played',
+    'MP': t.cardEdit?.moderatelyPlayed ?? 'Moderately Played',
     'heavily-played': t.cardEdit?.heavilyPlayed ?? 'Heavily Played',
+    'HP': t.cardEdit?.heavilyPlayed ?? 'Heavily Played',
     'damaged': t.cardEdit?.damaged ?? 'Damaged',
+    'DMG': t.cardEdit?.damaged ?? 'Damaged',
   };
   return map[key] ?? key;
 }
 
 function getPurchaseSourceLabel(key: PurchaseSource, t: any): string {
-  const map: Record<PurchaseSource, string> = {
+  const map: Partial<Record<string, string>> = {
     'pack': t.purchaseSources?.pack ?? 'Pack',
     'purchase': t.purchaseSources?.purchase ?? 'Purchase',
     'trade': t.purchaseSources?.trade ?? 'Trade',
@@ -209,7 +214,7 @@ function AlbumView({ cards, onZoom }: { cards: CollectionItem[]; onZoom: (card: 
                 style={{ borderColor: bg.border, aspectRatio: '2/3', backgroundColor: card ? 'transparent' : bg.border }}
                 onClick={() => card && onZoom(card)}>
                 {card ? (
-                  <img src={card.imageUrl ?? ''} alt={card.cardName} className="w-full h-full object-cover" loading="lazy" />
+                  <img src={card.imageUrl ?? ''} alt={card.cardName ?? ''} className="w-full h-full object-cover" loading="lazy" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">
                     <span className="text-white/20 text-xs">+</span>
@@ -318,7 +323,7 @@ function CardZoom({ card, onClose }: { card: CollectionItem; onClose: () => void
         <X size={20} className="text-white" />
       </button>
       <div onClick={e => e.stopPropagation()}>
-        <img src={card.imageUrl ?? ''} alt={card.cardName} className="w-full max-w-xs rounded-2xl shadow-2xl" />
+        <img src={card.imageUrl ?? ''} alt={card.cardName ?? ''} className="w-full max-w-xs rounded-2xl shadow-2xl" />
         <p className="text-white text-center font-bold mt-3">{card.cardName}</p>
         <p className="text-gray-400 text-center text-sm">{card.setName}</p>
       </div>
@@ -326,25 +331,24 @@ function CardZoom({ card, onClose }: { card: CollectionItem; onClose: () => void
   );
 }
 
-
-  function EditCardModal({ card, onSave, onClose }: {
+function EditCardModal({ card, onSave, onClose }: {
   card: CollectionItem; onSave: (update: Partial<CollectionItem>) => void; onClose: () => void;
 }) {
   const { t } = useI18n();
   const { formatPrice } = useCurrency();
-  const [variant, setVariant] = useState<CardVariant>(card.variant ?? 'normal');
-  const [language, setLanguage] = useState<CardLanguage>(card.cardLanguage ?? 'en');
-  const [condition, setCondition] = useState<CardCondition | null>(card.condition ?? null);
+  const [variant, setVariant] = useState<CardVariant>((card.variant as CardVariant) ?? 'normal');
+  const [language, setLanguage] = useState<CardLanguage>((card.cardLanguage as CardLanguage) ?? 'en');
+  const [condition, setCondition] = useState<CardCondition | null>((card.condition as CardCondition) ?? null);
   const [quantity, setQuantity] = useState<number>(card.quantity ?? 1);
   const [purchasePrice, setPurchasePrice] = useState<string>(card.purchasePrice?.toString() ?? '');
-  const [purchaseSource, setPurchaseSource] = useState<PurchaseSource | null>(card.purchaseSource ?? null);
+  const [purchaseSource, setPurchaseSource] = useState<PurchaseSource | null>(card.purchaseSource as PurchaseSource ?? null);
   const [acquiredAt, setAcquiredAt] = useState<string>(card.acquiredAt?.split('T')[0] ?? '');
   const [notes, setNotes] = useState<string>(card.notes ?? '');
   const [inSleeve, setInSleeve] = useState<boolean>(card.inSleeve ?? false);
   const [inBinder, setInBinder] = useState<boolean>(card.inBinder ?? false);
   const [sleeveType, setSleeveType] = useState<string | null>((card as any).sleeveType ?? null);
   const [storageLocation, setStorageLocation] = useState<string>((card as any).storageLocation ?? '');
-  const [gradingCompany, setGradingCompany] = useState<GradingCompany | null>(card.gradingCompany ?? null);
+  const [gradingCompany, setGradingCompany] = useState<GradingCompany | null>((card.gradingCompany as GradingCompany) ?? null);
   const [gradingScore, setGradingScore] = useState<string>(card.gradingScore?.toString() ?? '');
   const [gradingCertificate, setGradingCertificate] = useState<string>(card.gradingCertificate ?? '');
   const [gradeCentering, setGradeCentering] = useState<string>(card.gradeCentering?.toString() ?? '');
@@ -664,7 +668,7 @@ function CardZoom({ card, onClose }: { card: CollectionItem; onClose: () => void
                 <p className="text-xs text-gray-500 mb-1.5">Como la conseguiste</p>
                 <div className="grid grid-cols-3 gap-2">
                   {PURCHASE_SOURCES.map(s => (
-                    <button key={s.code} onClick={() => setPurchaseSource(s.code)}
+                    <button key={s.code} onClick={() => setPurchaseSource(s.code as PurchaseSource)}
                       className={'flex flex-col items-center py-2.5 rounded-xl text-xs border transition-all ' + (purchaseSource === s.code ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-white/5 border-white/8 text-gray-400')}>
                       <span className="text-lg mb-0.5">{s.emoji}</span>
                       {getPurchaseSourceLabel(s.code, t)}
@@ -746,7 +750,7 @@ export function CollectionPage() {
 
   const setGroups: SetCompletion[] = Object.values(
     cards.reduce((acc, card) => {
-      const key = card.setName;
+      const key = card.setName ?? '';
       if (!acc[key]) acc[key] = { setName: key, owned: 0, total: card.setTotal ?? 0, cards: [], totalValue: 0 };
       acc[key].owned += card.quantity;
       acc[key].cards.push(card);
@@ -756,16 +760,16 @@ export function CollectionPage() {
   ).sort((a, b) => b.owned - a.owned);
 
   const wishlistCardIds = new Set(wishlistItems.map(w => w.cardId));
-  const availableSets = [...new Set(cards.map(c => c.setName))].sort();
+  const availableSets = [...new Set(cards.map(c => c.setName ?? '').filter(Boolean))].sort();
   const availableRarities = [...new Set(cards.map(c => c.rarity).filter(Boolean))].sort() as string[];
 
   const filtered = [...cards]
-    .filter(c => c.cardName.toLowerCase().includes(search.toLowerCase()))
+    .filter(c => (c.cardName ?? '').toLowerCase().includes(search.toLowerCase()))
     .filter(c => filterSet ? c.setName === filterSet : true)
     .filter(c => filterRarity ? (c.rarity ?? '') === filterRarity : true)
     .sort((a, b) => {
-      if (sort === 'recent') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-      if (sort === 'name') return a.cardName.localeCompare(b.cardName);
+      if (sort === 'recent') return new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime();
+      if (sort === 'name') return (a.cardName ?? '').localeCompare(b.cardName ?? '');
       if (sort === 'value') return (b.marketPrice ?? b.tcgplayerPrice ?? 0) - (a.marketPrice ?? a.tcgplayerPrice ?? 0);
       return 0;
     });
@@ -984,7 +988,7 @@ export function CollectionPage() {
                       )}
                       <div className="flex gap-2 overflow-x-auto pb-1">
                         {group.cards.slice(0, 5).map(card => (
-                          <img key={card.id} src={card.imageUrl ?? ''} alt={card.cardName}
+                          <img key={card.id} src={card.imageUrl ?? ''} alt={card.cardName ?? ''}
                             className="h-14 w-10 object-cover rounded-lg shrink-0 cursor-pointer active:scale-95 transition-transform"
                             onClick={() => setZoomedCard(card)} />
                         ))}
@@ -1052,7 +1056,7 @@ function CollectionCard({ card, onUpdate, onRemove, onEdit, onZoom, onQR, format
   return (
     <div className="bg-[#111118] border border-white/8 rounded-2xl overflow-hidden flex flex-col">
       <div className="relative cursor-pointer" onClick={onZoom}>
-        <img src={card.imageUrl ?? ''} alt={card.cardName} className="w-full aspect-[2/3] object-cover" loading="lazy" />
+        <img src={card.imageUrl ?? ''} alt={card.cardName ?? ''} className="w-full aspect-[2/3] object-cover" loading="lazy" />
         <button onClick={e => { e.stopPropagation(); onUpdate(card.id, { favorite: !card.favorite }); }}
           className="absolute right-1.5 top-1.5 w-8 h-8 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center">
           <Heart size={15} className={card.favorite ? 'fill-yellow-400 text-yellow-400' : 'text-gray-400'} />
@@ -1077,7 +1081,7 @@ function CollectionCard({ card, onUpdate, onRemove, onEdit, onZoom, onQR, format
       <div className="p-2.5 flex-1 space-y-1">
         <p className="text-xs font-bold truncate text-white">{card.cardName}</p>
         <p className="text-[10px] text-gray-500 truncate">{card.setName}</p>
-        {card.condition && <p className={'text-[10px] font-medium ' + conditionColor}>{getConditionLabel(card.condition, t)}</p>}
+        {card.condition && <p className={'text-[10px] font-medium ' + conditionColor}>{getConditionLabel(card.condition as CardCondition, t)}</p>}
         {price && <p className="text-[10px] text-green-400 font-medium">{formatPrice(price)}</p>}
         {roi !== null && (
           <p className={'text-[10px] font-medium ' + (roi >= 0 ? 'text-green-400' : 'text-red-400')}>
