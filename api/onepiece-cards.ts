@@ -4,45 +4,52 @@ export default async function handler(req: any, res: any) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const { q = '', set = '', page = '1' } = req.query;
-  const pageNum = parseInt(page as string) || 1;
+  const pageNum = Math.max(1, parseInt(page as string) || 1);
   const pageSize = 20;
 
   try {
-    // TCGdex tiene One Piece TCG con API pública
-    let url = `https://api.tcgdex.net/v2/en/cards?`;
-    const filters: string[] = ['serie.name=One Piece'];
-    if (q) filters.push(`name=${encodeURIComponent(q as string)}`);
-    if (set) filters.push(`set.name=${encodeURIComponent(set as string)}`);
-    url += filters.join('&');
-
-    const r = await fetch(url, {
+    // Usar TCGdex - API pública sin auth
+    const baseUrl = 'https://api.tcgdex.net/v2/en/cards';
+    const r = await fetch(baseUrl, {
       headers: { 'Accept': 'application/json' }
     });
 
-    if (!r.ok) throw new Error(`TCGdex error: ${r.status}`);
-    const data = await r.json();
+    if (!r.ok) {
+      return res.status(200).json({ cards: [], total: 0, error: `API returned ${r.status}` });
+    }
 
-    const allCards = Array.isArray(data) ? data : [];
+    const data = await r.json();
+    const allCards: any[] = Array.isArray(data) ? data : [];
+
+    // Filtrar por nombre y set
+    const filtered = allCards.filter((c: any) => {
+      const matchesQ = !q || (c.name ?? '').toLowerCase().includes((q as string).toLowerCase());
+      const matchesSet = !set || (c.set?.id ?? '').toUpperCase().startsWith((set as string).toUpperCase());
+      return matchesQ && matchesSet;
+    });
+
     const start = (pageNum - 1) * pageSize;
-    const paged = allCards.slice(start, start + pageSize);
+    const paged = filtered.slice(start, start + pageSize);
 
     const cards = paged.map((c: any) => ({
-      id: c.id ?? c.localId ?? '',
+      id: c.id ?? c.localId ?? String(Math.random()),
       name: c.name ?? '',
       number: c.localId ?? '',
       rarity: c.rarity ?? '',
-      type: c.types?.[0] ?? '',
-      color: c.types ?? [],
+      type: Array.isArray(c.types) ? c.types[0] ?? '' : '',
+      color: Array.isArray(c.types) ? c.types : [],
       power: c.hp ?? null,
-      cost: c.cost ?? null,
-      image_url: c.image ? `${c.image}/high.webp` : `https://placehold.co/200x280/111118/666?text=OP`,
+      cost: null,
+      image_url: c.image
+        ? `${c.image}/high.webp`
+        : `https://placehold.co/200x280/111118/666?text=${encodeURIComponent(c.name ?? 'OP')}`,
       set_id: c.set?.id ?? '',
       set_name: c.set?.name ?? '',
       price_eur: null,
     }));
 
-    return res.status(200).json({ cards, total: allCards.length });
+    return res.status(200).json({ cards, total: filtered.length });
   } catch (err: any) {
-    return res.status(200).json({ cards: [], total: 0, error: err.message });
+    return res.status(200).json({ cards: [], total: 0, error: String(err?.message ?? err) });
   }
 }
