@@ -24,6 +24,9 @@ export const RoutePaths = {
   FunkoFolders: '/funko/folders',
   FunkoEditItem: '/funko/edit/:id',
   FunkoDetail: '/funko/:id',
+  // One Piece
+  OnePieceHome: '/onepiece',
+  OnePieceExplorer: '/onepiece/explorer',
   // Marketplace
   Marketplace: '/market',
 } as const;
