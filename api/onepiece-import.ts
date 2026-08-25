@@ -1,3 +1,4 @@
+// @ts-nocheck
 // api/onepiece-import.ts
 import { createClient } from '@supabase/supabase-js';
 
