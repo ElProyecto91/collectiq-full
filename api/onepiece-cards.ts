@@ -4,44 +4,44 @@ export default async function handler(req: any, res: any) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const { q = '', set = '', page = '1' } = req.query;
+  const pageNum = parseInt(page as string) || 1;
+  const pageSize = 20;
 
   try {
-    const params = new URLSearchParams();
-    if (q) params.set('keyWord', q as string);
-    if (set) params.set('series', set as string);
-    params.set('pageNo', page as string);
-    params.set('pageSize', '20');
+    // TCGdex tiene One Piece TCG con API pública
+    let url = `https://api.tcgdex.net/v2/en/cards?`;
+    const filters: string[] = ['serie.name=One Piece'];
+    if (q) filters.push(`name=${encodeURIComponent(q as string)}`);
+    if (set) filters.push(`set.name=${encodeURIComponent(set as string)}`);
+    url += filters.join('&');
 
-    const r = await fetch(
-      `https://en.onepiece-cardgame.com/api/search?${params.toString()}`,
-      {
-        headers: {
-          'Accept': 'application/json',
-          'Referer': 'https://en.onepiece-cardgame.com/',
-          'User-Agent': 'Mozilla/5.0',
-        }
-      }
-    );
+    const r = await fetch(url, {
+      headers: { 'Accept': 'application/json' }
+    });
 
-    if (!r.ok) return res.status(200).json({ cards: [], total: 0 });
+    if (!r.ok) throw new Error(`TCGdex error: ${r.status}`);
     const data = await r.json();
 
-    const cards = (data.result ?? data.list ?? []).map((c: any) => ({
-      id: c.id ?? c.number,
-      name: c.name ?? c.cardName ?? '',
-      number: c.number ?? c.cardNo ?? '',
+    const allCards = Array.isArray(data) ? data : [];
+    const start = (pageNum - 1) * pageSize;
+    const paged = allCards.slice(start, start + pageSize);
+
+    const cards = paged.map((c: any) => ({
+      id: c.id ?? c.localId ?? '',
+      name: c.name ?? '',
+      number: c.localId ?? '',
       rarity: c.rarity ?? '',
-      type: c.type ?? '',
-      color: c.color ? [c.color] : [],
-      power: c.power ?? null,
+      type: c.types?.[0] ?? '',
+      color: c.types ?? [],
+      power: c.hp ?? null,
       cost: c.cost ?? null,
-      image_url: c.imgUrl ?? `https://en.onepiece-cardgame.com/images/cardlist/card/${c.number}.png`,
-      set_id: set || '',
-      set_name: c.series ?? '',
+      image_url: c.image ? `${c.image}/high.webp` : `https://placehold.co/200x280/111118/666?text=OP`,
+      set_id: c.set?.id ?? '',
+      set_name: c.set?.name ?? '',
       price_eur: null,
     }));
 
-    return res.status(200).json({ cards, total: data.total ?? cards.length });
+    return res.status(200).json({ cards, total: allCards.length });
   } catch (err: any) {
     return res.status(200).json({ cards: [], total: 0, error: err.message });
   }
