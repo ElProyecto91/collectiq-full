@@ -114,7 +114,7 @@ export function OnePieceExplorerPage() {
     setIsLoadingMore(false);
   }, []);
 
-  useEffect(() => { doSearch('', '', 1, false); }, []);
+  useEffect(() => { doSearch('', '', 1, false); }, [doSearch]);
 
   useEffect(() => {
     clearTimeout(searchTimeout.current);
