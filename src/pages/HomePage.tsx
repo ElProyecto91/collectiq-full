@@ -165,10 +165,10 @@ const COLLECTIONS = [
     label: 'One Piece TCG',
     LogoComponent: OnePieceLogo,
     desc: 'Próximamente',
-    route: null,
+    route: '/onepiece',
     bg: 'from-yellow-500/10 to-red-500/10',
     border: 'border-yellow-500/10',
-    active: false,
+    active: true,
     color: '#D4AF37',
   },
   {
