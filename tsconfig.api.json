@@ -9,7 +9,7 @@
     "noImplicitAny": false,
     "skipLibCheck": true,
     "esModuleInterop": true,
-    "noEmit": true,
+    "outDir": "./dist-api",
     "useUnknownInCatchVariables": false
   },
   "include": ["api/**/*"]
