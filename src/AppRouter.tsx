@@ -26,6 +26,8 @@ import { FunkoFoldersPage } from '@/features/funko/pages/FunkoFoldersPage';
 import { PokemonHomePage } from '@/features/pokemon/pages/PokemonHomePage';
 import { PokedexPage } from '@/features/pokemon/pages/PokedexPage';
 import { PokedexDetailPage } from '@/features/pokemon/pages/PokedexDetailPage';
+import { OnePieceHomePage } from '@/features/onepiece/pages/OnePieceHomePage';
+import { OnePieceExplorerPage } from '@/features/onepiece/pages/OnePieceExplorerPage';
 
 const router = createBrowserRouter([
   {
@@ -63,6 +65,9 @@ const router = createBrowserRouter([
       { path: RoutePaths.FunkoFolders, element: <FunkoFoldersPage /> },
       { path: RoutePaths.FunkoEditItem, element: <FunkoEditItemPage /> },
       { path: RoutePaths.FunkoDetail, element: <FunkoDetailPage /> },
+      // One Piece
+      { path: RoutePaths.OnePieceHome, element: <OnePieceHomePage /> },
+      { path: RoutePaths.OnePieceExplorer, element: <OnePieceExplorerPage /> },
     ],
   },
   { path: RoutePaths.Scanner, element: <ScannerPage /> },
