@@ -1,54 +1,74 @@
-// api/onepiece-cards.ts
 export default async function handler(req: any, res: any) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const { q = '', set = '', page = '1' } = req.query;
   const pageNum = Math.max(1, parseInt(page as string) || 1);
-  const pageSize = 20;
 
   try {
-    // Usar TCGdex - API pública sin auth
-    const baseUrl = 'https://api.tcgdex.net/v2/en/cards';
-    const r = await fetch(baseUrl, {
-      headers: { 'Accept': 'application/json' }
+    const body = {
+      search: {
+        momPrice: '', rangeMin: '', rangeMax: '',
+        keyword: q || '',
+        type: '',
+        color: '',
+        series: set || '',
+        rarity: '',
+        illustrator: '',
+        power: '',
+        cost: '',
+        life: '',
+        attribute: '',
+        trigger: '',
+        cardId: '',
+      },
+      language: 'en',
+      pageNum,
+      pageSize: 20,
+    };
+
+    const r = await fetch('https://en.onepiece-cardgame.com/cardlist/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Referer': 'https://en.onepiece-cardgame.com/cardlist/',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      body: JSON.stringify(body),
     });
 
     if (!r.ok) {
-      return res.status(200).json({ cards: [], total: 0, error: `API returned ${r.status}` });
+      return res.status(200).json({ cards: [], total: 0, error: `Status ${r.status}` });
     }
 
-    const data = await r.json();
-    const allCards: any[] = Array.isArray(data) ? data : [];
+    const text = await r.text();
+    let data: any;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      return res.status(200).json({ cards: [], total: 0, error: 'Not JSON: ' + text.slice(0, 100) });
+    }
 
-    // Filtrar por nombre y set
-    const filtered = allCards.filter((c: any) => {
-      const matchesQ = !q || (c.name ?? '').toLowerCase().includes((q as string).toLowerCase());
-      const matchesSet = !set || (c.set?.id ?? '').toUpperCase().startsWith((set as string).toUpperCase());
-      return matchesQ && matchesSet;
-    });
-
-    const start = (pageNum - 1) * pageSize;
-    const paged = filtered.slice(start, start + pageSize);
-
-    const cards = paged.map((c: any) => ({
-      id: c.id ?? c.localId ?? String(Math.random()),
-      name: c.name ?? '',
-      number: c.localId ?? '',
+    const list = data.result ?? data.list ?? data.cards ?? data.data ?? [];
+    const cards = (Array.isArray(list) ? list : []).map((c: any) => ({
+      id: c.cardId ?? c.id ?? c.number ?? String(Math.random()),
+      name: c.name ?? c.cardName ?? '',
+      number: c.cardId ?? c.number ?? '',
       rarity: c.rarity ?? '',
-      type: Array.isArray(c.types) ? c.types[0] ?? '' : '',
-      color: Array.isArray(c.types) ? c.types : [],
-      power: c.hp ?? null,
-      cost: null,
-      image_url: c.image
-        ? `${c.image}/high.webp`
-        : `https://placehold.co/200x280/111118/666?text=${encodeURIComponent(c.name ?? 'OP')}`,
-      set_id: c.set?.id ?? '',
-      set_name: c.set?.name ?? '',
+      type: c.type ?? '',
+      color: c.color ? (Array.isArray(c.color) ? c.color : [c.color]) : [],
+      power: c.power ?? null,
+      cost: c.cost ?? null,
+      image_url: c.imgUrl ?? c.image_url ?? c.image ??
+        `https://en.onepiece-cardgame.com/images/cardlist/card/${c.cardId ?? c.number}.png`,
+      set_id: set || '',
+      set_name: c.series ?? '',
       price_eur: null,
     }));
 
-    return res.status(200).json({ cards, total: filtered.length });
+    return res.status(200).json({ cards, total: data.total ?? cards.length });
   } catch (err: any) {
     return res.status(200).json({ cards: [], total: 0, error: String(err?.message ?? err) });
   }
