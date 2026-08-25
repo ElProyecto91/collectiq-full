@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Search, Plus, CheckCircle2, Heart, Loader2, SearchX } from 'lucide-react';
-import { RoutePaths } from '@/config';
 import { useCreateCollectionItem, useCollectionList } from '@/hooks/use-collection';
 import { useCreateWishlistItem, useWishlistList } from '@/hooks/use-wishlist';
 import { useUserStore } from '@/store';
@@ -48,47 +47,15 @@ const COLOR_STYLES: Record<string, string> = {
 
 async function fetchOnePieceCards(q: string, set: string, page: number): Promise<{ cards: OnePieceCard[]; total: number }> {
   try {
-    // API oficial One Piece Card Game
     const params = new URLSearchParams();
-    if (q) params.set('keyWord', q);
-    if (set) params.set('series', set);
-    params.set('type', '');
-    params.set('pageNo', String(page));
-    params.set('pageSize', '20');
-
-    const r = await fetch(
-      `https://en.onepiece-cardgame.com/api/search?${params.toString()}`,
-      { headers: { 'Accept': 'application/json', 'Referer': 'https://en.onepiece-cardgame.com/' } }
-    );
-
-    if (!r.ok) throw new Error('API error');
-    const data = await r.json();
-
-    const cards = (data.result ?? data.list ?? []).map((c: any) => ({
-      id: c.id ?? c.cardId ?? c.number,
-      name: c.name ?? c.cardName ?? '',
-      number: c.number ?? c.cardNo ?? '',
-      rarity: c.rarity ?? '',
-      type: c.type ?? '',
-      color: c.color ? [c.color] : [],
-      power: c.power ?? null,
-      cost: c.cost ?? null,
-      image_url: c.imgUrl ?? c.image ?? `https://en.onepiece-cardgame.com/images/cardlist/card/${c.number}.png`,
-      set_id: set || '',
-      set_name: c.series ?? set ?? '',
-      price_eur: null,
-    }));
-
-    return { cards, total: data.total ?? cards.length };
+    if (q) params.set('q', q);
+    if (set) params.set('set', set);
+    params.set('page', String(page));
+    const r = await fetch(`/api/onepiece-cards?${params.toString()}`);
+    if (!r.ok) return { cards: [], total: 0 };
+    return await r.json();
   } catch {
-    // Fallback: usar proxy local
-    try {
-      const r2 = await fetch(`/api/onepiece-cards?q=${encodeURIComponent(q)}&set=${set}&page=${page}`);
-      if (!r2.ok) return { cards: [], total: 0 };
-      return await r2.json();
-    } catch {
-      return { cards: [], total: 0 };
-    }
+    return { cards: [], total: 0 };
   }
 }
 
@@ -134,7 +101,7 @@ export function OnePieceExplorerPage() {
     clearTimeout(searchTimeout.current);
     searchTimeout.current = setTimeout(() => doSearch(query, selectedSet, 1, false), 600);
     return () => clearTimeout(searchTimeout.current);
-  }, [query, selectedSet]);
+  }, [query, selectedSet, doSearch]);
 
   useEffect(() => {
     if (!sentinelRef.current || !hasMore) return;
@@ -144,7 +111,7 @@ export function OnePieceExplorerPage() {
     );
     observer.observe(sentinelRef.current);
     return () => observer.disconnect();
-  }, [hasMore, isLoadingMore, page, query, selectedSet]);
+  }, [hasMore, isLoadingMore, page, query, selectedSet, doSearch]);
 
   const handleAdd = (card: OnePieceCard) => {
     if (!telegramUser?.id) return;
