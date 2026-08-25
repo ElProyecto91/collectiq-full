@@ -74,7 +74,7 @@ export function WishlistPage() {
   };
 
   const sorted = [...items].sort((a, b) => {
-    if (sort === 'name') return a.cardName.localeCompare(b.cardName);
+    if (sort === 'name') return (a.cardName ?? '').localeCompare(b.cardName ?? '');
     return 0;
   });
 
@@ -115,7 +115,6 @@ export function WishlistPage() {
         </>
       )}
 
-      {/* Modal alerta de precio */}
       {settingAlert && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm"
           onClick={() => { setSettingAlert(null); setAlertPrice(''); }}>
@@ -135,7 +134,7 @@ export function WishlistPage() {
               <button
                 onClick={() => {
                   const item = items.find(i => i.cardId === settingAlert);
-                  if (item) saveAlert(item.cardId, item.cardName, item.imageUrl ?? null);
+                  if (item) saveAlert(item.cardId ?? '', item.cardName ?? '', item.imageUrl ?? null);
                 }}
                 disabled={savingAlert || !alertPrice}
                 className="px-4 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-bold disabled:opacity-50 flex items-center gap-1.5">
@@ -160,11 +159,13 @@ export function WishlistPage() {
       ) : (
         <div className="grid grid-cols-2 gap-3">
           {sorted.map(item => {
-            const alert = getAlert(item.cardId);
+            const cardId = item.cardId ?? item.id;
+            const cardName = item.cardName ?? '';
+            const alert = getAlert(cardId);
             return (
               <div key={item.id} className="bg-[#111118] border border-white/8 rounded-2xl overflow-hidden flex flex-col">
                 <div className="relative">
-                  <img src={item.imageUrl ?? ''} alt={item.cardName}
+                  <img src={item.imageUrl ?? ''} alt={cardName}
                     className="w-full aspect-[2/3] object-cover" loading="lazy" />
                   <div className="absolute top-1.5 left-1.5 w-6 h-6 rounded-full bg-pink-500/90 flex items-center justify-center">
                     <Heart size={12} className="fill-white text-white" />
@@ -177,7 +178,7 @@ export function WishlistPage() {
                 </div>
 
                 <div className="p-2.5 flex-1 space-y-1">
-                  <p className="text-xs font-bold truncate text-white">{item.cardName}</p>
+                  <p className="text-xs font-bold truncate text-white">{cardName}</p>
                   <p className="text-[10px] text-gray-500 truncate">{item.setName}</p>
                   {item.rarity && <p className="text-[10px] text-blue-400 truncate">{item.rarity}</p>}
                   {alert && (
@@ -186,7 +187,7 @@ export function WishlistPage() {
                 </div>
 
                 <div className="px-2.5 pb-2.5 space-y-1.5">
-                  <a href={'https://www.cardmarket.com/en/Pokemon/Products/Singles?searchString=' + encodeURIComponent(item.cardName)}
+                  <a href={'https://www.cardmarket.com/en/Pokemon/Products/Singles?searchString=' + encodeURIComponent(cardName)}
                     target="_blank" rel="noopener noreferrer"
                     className="w-full py-2 rounded-xl bg-blue-600/10 border border-blue-500/20 text-blue-400 text-xs font-medium flex items-center justify-center gap-1.5 active:scale-95 transition-transform">
                     <ExternalLink size={11} />Cardmarket
@@ -194,9 +195,9 @@ export function WishlistPage() {
                   <button
                     onClick={() => {
                       if (alert) {
-                        removeAlert(item.cardId);
+                        removeAlert(cardId);
                       } else {
-                        setSettingAlert(item.cardId);
+                        setSettingAlert(cardId);
                         setAlertPrice('');
                       }
                     }}
