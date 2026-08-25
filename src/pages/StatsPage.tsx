@@ -273,7 +273,7 @@ export function StatsPage() {
                   <span className={'text-xs font-bold w-5 text-center ' + (i === 0 ? 'text-yellow-400' : i === 1 ? 'text-gray-300' : i === 2 ? 'text-amber-600' : 'text-gray-600')}>
                     {i + 1}
                   </span>
-                  <img src={card.imageUrl ?? ''} alt={card.cardName} className="w-8 h-11 object-cover rounded" />
+                  <img src={card.imageUrl ?? ''} alt={card.cardName ?? ''} className="w-8 h-11 object-cover rounded" />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-bold truncate">{card.cardName}</p>
                     <p className="text-[10px] text-gray-500 truncate">{card.setName}</p>
@@ -287,7 +287,7 @@ export function StatsPage() {
               {topCards.slice(0, 3).map((card, i) => (
                 <div key={card.id} className="flex items-center gap-3 blur-sm opacity-50">
                   <span className="text-xs font-bold w-5 text-center text-gray-600">{i + 1}</span>
-                  <img src={card.imageUrl ?? ''} alt={card.cardName} className="w-8 h-11 object-cover rounded" />
+                  <img src={card.imageUrl ?? ''} alt={card.cardName ?? ''} className="w-8 h-11 object-cover rounded" />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-bold truncate">{card.cardName}</p>
                   </div>
