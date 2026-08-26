@@ -1,154 +1,57 @@
-import { useEffect } from 'react';
-
-import { initTelegramWebApp, isInsideTelegram } from '@/lib/telegram';
-import { isDevelopmentMode, getDevUser } from '@/lib/dev-user';
-import { useAppStore } from '@/store';
+import { useState, useEffect } from 'react';
 import { useUserStore } from '@/store';
-import type { TelegramUser } from '@/types';
 
-const SESSION_KEY = 'collectiq-session-token';
-
-function getTokenFromUrl(): string | null {
-  const params = new URLSearchParams(window.location.search);
-  const token = params.get('token');
-  if (token) {
-    localStorage.setItem(SESSION_KEY, token);
-    window.history.replaceState({}, '', '/');
-  }
-  return token;
-}
-
-async function createSession(initData: string): Promise<{ user: TelegramUser; token: string } | null> {
-  try {
-    const res = await fetch('/api/auth-telegram', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ initData }),
-    });
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
-  }
-}
-
-async function generateAuthCode(telegramUserId: number, userData: any): Promise<string | null> {
-  try {
-    const res = await fetch('/api/auth-code', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ telegramUserId, userData }),
-    });
-    if (!res.ok) return null;
-    const { code } = await res.json();
-    return code;
-  } catch {
-    return null;
-  }
-}
-
-async function loadSession(token: string): Promise<TelegramUser | null> {
-  try {
-    const res = await fetch(`/api/auth-telegram?token=${token}`);
-    if (!res.ok) return null;
-    const { user } = await res.json();
-    return user ?? null;
-  } catch {
-    return null;
-  }
-}
+const API_BASE = 'https://collectiq-api.esxdinero.workers.dev';
 
 export function useTelegram() {
-  const isTelegram = useAppStore((s) => s.isTelegram);
-  const setIsTelegram = useAppStore((s) => s.setIsTelegram);
-  const setTelegramUser = useUserStore((s) => s.setTelegramUser);
-  const setSessionLoaded = useUserStore((s) => s.setSessionLoaded);
-  const telegramUser = useUserStore((s) => s.telegramUser);
+  const { telegramUser, setTelegramUser } = useUserStore();
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const inside = isInsideTelegram();
-    setIsTelegram(inside);
+    const tg = (window as any).Telegram?.WebApp;
+    if (!tg?.initData) return;
+    authenticateWithTelegram(tg.initData, tg.initDataUnsafe?.user);
+  }, []);
 
-    if (inside) {
-      const webApp = initTelegramWebApp();
-      const initData = webApp?.initData ?? '';
-      const tgUser = webApp?.initDataUnsafe?.user ?? null;
-      const startParam = webApp?.initDataUnsafe?.start_param ?? '';
-
-      if (tgUser) {
-        const normalized: TelegramUser = {
-          id: tgUser.id,
-          first_name: tgUser.first_name,
-          last_name: tgUser.last_name,
-          username: tgUser.username,
-          photo_url: tgUser.photo_url,
-          language_code: tgUser.language_code,
-          is_premium: tgUser.is_premium,
-        };
-        setTelegramUser(normalized);
-        setSessionLoaded(true);
-// Bonus de bienvenida para nuevos usuarios
-fetch('/api/welcome-bonus', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ telegramUserId: tgUser.id }),
-});
-
-        // Si viene desde la PWA, generar código
-        if (startParam === 'pwa') {
-          generateAuthCode(tgUser.id, normalized).then(code => {
-            if (code) {
-              webApp?.showAlert?.(
-                `Tu código de acceso es:\n\n🔑 ${code}\n\nIntrodúcelo en la app para iniciar sesión. Válido 5 minutos.`,
-                () => { webApp?.close?.(); }
-              );
-            }
-          });
-          return;
-        }
-
-        if (initData) {
-          createSession(initData).then(result => {
-            if (result?.token) {
-              localStorage.setItem(SESSION_KEY, result.token);
-            }
-            if (result?.user) {
-              setTelegramUser({ ...normalized, ...result.user });
-            }
-          });
-        }
-        return;
-      }
-    }
-
-    // Fuera de Telegram
-    const urlToken = getTokenFromUrl();
-    const savedToken = urlToken ?? localStorage.getItem(SESSION_KEY);
-
-    if (savedToken) {
-      loadSession(savedToken).then(user => {
-        if (user) {
-          setTelegramUser(user);
-        } else {
-          // Sesión inválida — limpiar todo
-          localStorage.removeItem(SESSION_KEY);
-          setTelegramUser(null);
-        }
-        setSessionLoaded(true);
+  async function authenticateWithTelegram(initData: string, user: any) {
+    setIsLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth-telegram`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData }),
       });
-      return;
+      const data = await res.json();
+      if (data.ok) {
+        setTelegramUser(data.user);
+        if (data.token) localStorage.setItem('auth_token', data.token);
+      }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
     }
+  }
 
-    // No hay sesión guardada
-    setTelegramUser(null);
-    setSessionLoaded(true);
-
-    if (isDevelopmentMode()) {
-      const devUser = getDevUser();
-      if (devUser) setTelegramUser(devUser);
+  async function verifySession(token: string) {
+    try {
+      const res = await fetch(`${API_BASE}/auth-telegram?token=${token}`);
+      const data = await res.json();
+      if (data.ok) {
+        setTelegramUser(data.user);
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
     }
-  }, [setIsTelegram, setTelegramUser, setSessionLoaded]);
+  }
 
-  return { isTelegram, telegramUser };
+  return { telegramUser, isLoading, error, verifySession };
+}
+
+export function useDisplayName(user?: any) {
+  if (!user) return 'Usuario';
+  return user.first_name ?? user.username ?? 'Usuario';
 }
