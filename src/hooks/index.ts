@@ -1,7 +1,7 @@
 // src/hooks/index.ts
 
 // ── Hooks existentes (no tocar) ──────────────────────────────────────────────
-export * from './use-telegram';
+export { useTelegram, useDisplayName } from './use-telegram';
 export * from './use-profile';
 export * from './use-analytics';
 export * from './use-premium';
