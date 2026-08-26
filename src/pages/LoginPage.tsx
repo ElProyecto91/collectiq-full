@@ -32,6 +32,7 @@ export function LoginPage() {
 
     const result = await verifyCode(code);
     if (result?.token) {
+      localStorage.setItem('auth_token', result.token);
       localStorage.setItem('collectiq-session-token', result.token);
       window.location.href = '/';
     } else {
