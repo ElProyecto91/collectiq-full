@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { ScanLine, Loader2 } from 'lucide-react';
 
+const API_BASE = 'https://collectiq-api.esxdinero.workers.dev';
+
 async function verifyCode(code: string): Promise<{ token: string; user: any } | null> {
   try {
-    const res = await fetch(`/api/auth-code?code=${code}`);
+    const res = await fetch(`${API_BASE}/auth-code?code=${code}`);
     if (!res.ok) return null;
     return await res.json();
   } catch {
