@@ -303,8 +303,8 @@ function greetingByHour(): string {
 
 export function HomePage() {
   const navigate = useNavigate();
-  const name = useDisplayName(telegramUser);
   const telegramUser = useUserStore(s => s.telegramUser);
+  const name = useDisplayName(telegramUser);
   const [defaultCollection, setDefaultCollection] = useState<string | null>(
     localStorage.getItem('collectiq_default_collection')
   );
