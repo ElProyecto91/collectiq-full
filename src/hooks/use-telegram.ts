@@ -9,12 +9,20 @@ export function useTelegram() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Primero intentar Telegram WebApp
     const tg = (window as any).Telegram?.WebApp;
-    if (!tg?.initData) return;
-    authenticateWithTelegram(tg.initData, tg.initDataUnsafe?.user);
+    if (tg?.initData) {
+      authenticateWithTelegram(tg.initData);
+      return;
+    }
+    // Si no, verificar token guardado
+    const token = localStorage.getItem('auth_token') || localStorage.getItem('collectiq-session-token');
+    if (token && !telegramUser) {
+      verifySession(token);
+    }
   }, []);
 
-  async function authenticateWithTelegram(initData: string, user: any) {
+  async function authenticateWithTelegram(initData: string) {
     setIsLoading(true);
     try {
       const res = await fetch(`${API_BASE}/auth-telegram`, {
@@ -35,6 +43,7 @@ export function useTelegram() {
   }
 
   async function verifySession(token: string) {
+    setIsLoading(true);
     try {
       const res = await fetch(`${API_BASE}/auth-telegram?token=${token}`);
       const data = await res.json();
@@ -45,6 +54,8 @@ export function useTelegram() {
       return false;
     } catch {
       return false;
+    } finally {
+      setIsLoading(false);
     }
   }
 
