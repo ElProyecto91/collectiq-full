@@ -6,6 +6,8 @@ import { useCreateWishlistItem, useWishlistList } from '@/hooks/use-wishlist';
 import { useUserStore } from '@/store';
 import { useCurrency } from '@/hooks/use-currency';
 
+const API = 'https://collectiq-api.esxdinero.workers.dev';
+
 interface OnePieceCard {
   id: string;
   name: string;
@@ -21,21 +23,6 @@ interface OnePieceCard {
   price_eur?: number | null;
 }
 
-const SETS = [
-  { id: '', name: 'Todos los sets' },
-  { id: 'OP01', name: 'OP01 - Romance Dawn' },
-  { id: 'OP02', name: 'OP02 - Paramount War' },
-  { id: 'OP03', name: 'OP03 - Pillars of Strength' },
-  { id: 'OP04', name: 'OP04 - Kingdoms of Intrigue' },
-  { id: 'OP05', name: 'OP05 - Awakening' },
-  { id: 'OP06', name: 'OP06 - Wings of the Captain' },
-  { id: 'OP07', name: 'OP07 - 500 Years in the Future' },
-  { id: 'OP08', name: 'OP08 - Two Legends' },
-  { id: 'OP09', name: 'OP09 - The Four Emperors' },
-  { id: 'ST01', name: 'ST01 - Straw Hat Crew' },
-  { id: 'ST02', name: 'ST02 - Worst Generation' },
-];
-
 const COLOR_STYLES: Record<string, string> = {
   Red: 'bg-red-500/20 text-red-400',
   Blue: 'bg-blue-500/20 text-blue-400',
@@ -45,18 +32,24 @@ const COLOR_STYLES: Record<string, string> = {
   Yellow: 'bg-yellow-500/20 text-yellow-400',
 };
 
-async function fetchOnePieceCards(q: string, set: string, page: number): Promise<{ cards: OnePieceCard[]; total: number }> {
+async function fetchCards(q: string, set: string, page: number): Promise<{ cards: OnePieceCard[]; total: number }> {
   try {
-    const params = new URLSearchParams();
+    const params = new URLSearchParams({ page: String(page) });
     if (q) params.set('q', q);
     if (set) params.set('set', set);
-    params.set('page', String(page));
-    const r = await fetch(`/api/onepiece-cards?${params.toString()}`);
+    const r = await fetch(`${API}/onepiece-cards?${params}`);
     if (!r.ok) return { cards: [], total: 0 };
     return await r.json();
-  } catch {
-    return { cards: [], total: 0 };
-  }
+  } catch { return { cards: [], total: 0 }; }
+}
+
+async function fetchSets(): Promise<{ id: string; name: string; total: number }[]> {
+  try {
+    const r = await fetch(`${API}/onepiece-sets`);
+    if (!r.ok) return [];
+    const data = await r.json();
+    return data.sets || [];
+  } catch { return []; }
 }
 
 export function OnePieceExplorerPage() {
@@ -64,6 +57,7 @@ export function OnePieceExplorerPage() {
   const { formatPrice } = useCurrency();
   const [query, setQuery] = useState('');
   const [selectedSet, setSelectedSet] = useState('');
+  const [sets, setSets] = useState<{ id: string; name: string; total: number }[]>([]);
   const [cards, setCards] = useState<OnePieceCard[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -72,7 +66,7 @@ export function OnePieceExplorerPage() {
   const [hasMore, setHasMore] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
   const sentinelRef = useRef<HTMLDivElement>(null);
-  const searchTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const searchTimeout = useRef<ReturnType<typeof setTimeout>>();
 
   const { data: collectionCards = [] } = useCollectionList();
   const { data: wishlistItems = [] } = useWishlistList();
@@ -83,10 +77,15 @@ export function OnePieceExplorerPage() {
   const addedIds = new Set(collectionCards.filter(c => c.tcg === 'onepiece').map(c => c.cardId ?? ''));
   const wishlistIds = new Set(wishlistItems.filter(w => w.tcg === 'onepiece').map(w => w.cardId ?? ''));
 
+  // Cargar sets reales
+  useEffect(() => {
+    fetchSets().then(data => setSets(data));
+  }, []);
+
   const doSearch = useCallback(async (q: string, set: string, p: number, append: boolean) => {
     if (append) setIsLoadingMore(true);
     else setIsLoading(true);
-    const result = await fetchOnePieceCards(q, set, p);
+    const result = await fetchCards(q, set, p);
     setTotal(result.total);
     setCards(prev => append ? [...prev, ...result.cards] : result.cards);
     setHasMore(result.cards.length === 20);
@@ -138,34 +137,50 @@ export function OnePieceExplorerPage() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
-      <div className="px-4 pt-6 pb-4 flex items-center gap-3">
-        <button onClick={() => navigate('/onepiece')} className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center">
-          <ArrowLeft size={16} />
-        </button>
-        <div>
-          <p className="text-[10px] text-red-400 font-bold uppercase tracking-[0.2em]">ONE PIECE TCG</p>
-          <h1 className="text-lg font-bold">Explorador</h1>
+      {/* Header */}
+      <div className="relative px-4 pt-6 pb-4">
+        <div className="absolute inset-0 bg-gradient-to-b from-red-950/30 to-transparent pointer-events-none" />
+        <div className="flex items-center gap-3 relative z-10">
+          <button onClick={() => navigate('/onepiece')} className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center">
+            <ArrowLeft size={16} />
+          </button>
+          <div>
+            <p className="text-[10px] text-red-400 font-bold uppercase tracking-[0.2em]">ONE PIECE TCG</p>
+            <h1 className="text-lg font-bold">Explorador</h1>
+          </div>
+          <span className="ml-auto text-2xl">☠️</span>
         </div>
       </div>
 
       <div className="px-4 space-y-3 pb-4">
+        {/* Búsqueda */}
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
           <input value={query} onChange={e => setQuery(e.target.value)}
-            placeholder="Buscar carta..."
+            placeholder="Buscar carta de One Piece..."
             className="w-full bg-white/5 border border-white/10 rounded-2xl pl-11 pr-4 py-3.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-red-500/50" />
         </div>
 
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          {SETS.map(s => (
-            <button key={s.id} onClick={() => setSelectedSet(s.id)}
-              className={'shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ' + (
-                selectedSet === s.id ? 'bg-red-600 text-white border-red-600' : 'bg-white/5 border-white/10 text-gray-400'
-              )}>
-              {s.id || 'Todos'}
+        {/* Sets reales */}
+        {sets.length > 0 && (
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            <button
+              onClick={() => setSelectedSet('')}
+              className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                selectedSet === '' ? 'bg-red-600 text-white border-red-600' : 'bg-white/5 border-white/10 text-gray-400'
+              }`}>
+              Todos
             </button>
-          ))}
-        </div>
+            {sets.slice(0, 20).map(s => (
+              <button key={s.id} onClick={() => setSelectedSet(s.id)}
+                className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                  selectedSet === s.id ? 'bg-red-600 text-white border-red-600' : 'bg-white/5 border-white/10 text-gray-400'
+                }`}>
+                {s.name || s.id}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {statusMsg && (
@@ -215,10 +230,12 @@ export function OnePieceExplorerPage() {
                           <CheckCircle2 size={14} className="text-white" />
                         </div>
                       )}
-                      {card.color.length > 0 && (
+                      {card.color?.length > 0 && (
                         <div className="absolute top-1.5 left-1.5 flex gap-1">
                           {card.color.map(c => (
-                            <span key={c} className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full ${COLOR_STYLES[c] ?? 'bg-white/10 text-white'}`}>{c[0]}</span>
+                            <span key={c} className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full ${COLOR_STYLES[c] ?? 'bg-white/10 text-white'}`}>
+                              {c[0]}
+                            </span>
                           ))}
                         </div>
                       )}
@@ -226,15 +243,16 @@ export function OnePieceExplorerPage() {
                     <div className="p-2.5 space-y-1.5">
                       <p className="text-xs font-bold truncate">{card.name}</p>
                       <p className="text-[10px] text-gray-500 truncate">{card.number} · {card.rarity}</p>
+                      <p className="text-[10px] text-gray-600 truncate">{card.set_name}</p>
                       {card.price_eur && <p className="text-[10px] text-green-400 font-medium">{formatPrice(card.price_eur)}</p>}
                       <button onClick={() => handleAdd(card)}
                         className="w-full rounded-xl py-2 text-xs font-semibold flex items-center justify-center gap-1.5 bg-red-600 text-white active:scale-95 transition-transform">
                         <Plus size={12} />{added ? 'Añadir otra' : 'Añadir'}
                       </button>
                       <button onClick={() => handleWishlist(card)} disabled={inWishlist}
-                        className={'w-full rounded-xl py-2 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ' + (
+                        className={`w-full rounded-xl py-2 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
                           inWishlist ? 'bg-pink-500/10 text-pink-400 cursor-default' : 'bg-white/5 border border-white/10 text-gray-400 active:scale-95'
-                        )}>
+                        }`}>
                         <Heart size={12} />{inWishlist ? 'En wishlist' : 'Wishlist'}
                       </button>
                     </div>
@@ -245,7 +263,7 @@ export function OnePieceExplorerPage() {
             <div ref={sentinelRef} className="h-4 w-full" />
             {isLoadingMore && (
               <div className="flex items-center justify-center gap-2 py-4 text-sm text-gray-500">
-                <Loader2 size={16} className="animate-spin" />Cargando más...
+                <Loader2 size={16} className="animate-spin" /> Cargando más...
               </div>
             )}
           </>
