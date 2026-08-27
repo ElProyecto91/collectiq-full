@@ -1,11 +1,12 @@
-// deploy test
 // ============================================================
-// CollectIQ API Worker — Cloudflare Workers v2.0
+// CollectIQ API Worker — Cloudflare Workers v3.0
 // URL: https://collectiq-api.esxdinero.workers.dev/
 // ============================================================
 
 var SUPABASE_URL = 'https://ajuinjefipjrnbimcdxz.supabase.co';
 var ADMIN_ID = 1299079722;
+var APP_URL = 'https://collectiq-full.vercel.app';
+var FREE_LISTING_LIMIT = 3;
 
 function getEnv(key) {
   try { return globalThis[key] || ''; } catch(e) { return ''; }
@@ -14,7 +15,7 @@ function getEnv(key) {
 function corsHeaders() {
   return {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization'
   };
 }
@@ -54,10 +55,32 @@ async function sbPatch(table, query, body) {
   });
 }
 
+async function sbFetch(path, options) {
+  if (!options) options = {};
+  var h = sbHeaders();
+  if (options.prefer) h['Prefer'] = options.prefer;
+  if (options.headers) Object.assign(h, options.headers);
+  var res = await fetch(SUPABASE_URL + '/rest/v1' + path, {
+    method: options.method || 'GET',
+    headers: h,
+    body: options.body ? JSON.stringify(options.body) : undefined
+  });
+  var text = await res.text();
+  try { return { ok: res.ok, status: res.status, data: JSON.parse(text) }; }
+  catch(e) { return { ok: res.ok, status: res.status, data: text }; }
+}
+
 async function generateToken() {
   var array = new Uint8Array(32);
   crypto.getRandomValues(array);
   return Array.from(array).map(function(b) { return b.toString(16).padStart(2, '0'); }).join('');
+}
+
+async function sendTgMessage(chatId, text) {
+  await fetch('https://api.telegram.org/bot' + getEnv('TELEGRAM_BOT_TOKEN') + '/sendMessage', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: chatId, text: text, parse_mode: 'Markdown', disable_web_page_preview: false })
+  });
 }
 
 // ── AUTH-TELEGRAM ─────────────────────────────────────────────
@@ -138,13 +161,6 @@ async function handleAuthCode(request) {
 }
 
 // ── BOT-WEBHOOK ───────────────────────────────────────────────
-async function sendTgMessage(chatId, text) {
-  await fetch('https://api.telegram.org/bot' + getEnv('TELEGRAM_BOT_TOKEN') + '/sendMessage', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text: text, parse_mode: 'HTML' })
-  });
-}
-
 async function handleBotWebhook(request) {
   if (request.method !== 'POST') return new Response('OK', { status: 200 });
   var secret = request.headers.get('X-Telegram-Bot-Api-Secret-Token');
@@ -165,7 +181,7 @@ async function handleBotWebhook(request) {
       try { var payload = JSON.parse(payment.invoice_payload); telegramUserId = payload.telegramUserId || userId; } catch(e) {}
       var expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
       await sbPost('user_premium', { telegram_user_id: telegramUserId, plan: 'go', expires_at: expiresAt, stars_paid: payment.total_amount, updated_at: new Date().toISOString() }, 'resolution=merge-duplicates');
-      await sendTgMessage(userId, '<b>Bienvenido a CollectIQ GO!</b>\n\nTu plan esta activo.\n\nAbre la app: https://t.me/CollectIQ_bot/app');
+      await sendTgMessage(userId, '*¡Bienvenido a CollectIQ GO!*\n\nTu plan está activo 🎉\n\n[Abrir app](' + APP_URL + ')');
       return new Response('OK', { status: 200 });
     }
     var message = update.message;
@@ -177,7 +193,7 @@ async function handleBotWebhook(request) {
       var referrerId = parseInt(startParam.replace('ref_', ''));
       if (!isNaN(referrerId) && referrerId !== user.id) {
         await sbPost('referrals', { referrer_id: referrerId, referred_id: user.id, completed: false, cards_added: 0, reward_given: false, referred_registered_at: new Date().toISOString() });
-        await sendTgMessage(chatId, '<b>Bienvenido a CollectIQ!</b>\n\nAnade 10 cartas y tu amigo recibira recompensas.');
+        await sendTgMessage(chatId, '*¡Bienvenido a CollectIQ!*\n\nAñade 10 cartas y tu amigo recibirá recompensas.');
         return new Response('OK', { status: 200 });
       }
     }
@@ -185,7 +201,7 @@ async function handleBotWebhook(request) {
     crypto.getRandomValues(arr);
     var authCode = Array.from(arr).map(function(b) { return b.toString(10).padStart(2, '0'); }).join('').slice(0, 6);
     await sbPost('auth_codes', { code: authCode, telegram_user_id: user.id, user_data: { id: user.id, first_name: user.first_name, last_name: user.last_name, username: user.username } });
-    await sendTgMessage(chatId, '<b>Tu codigo de acceso CollectIQ:</b>\n\n<code>' + authCode + '</code>\n\nIntroducelo en la app. Valido 5 minutos.');
+    await sendTgMessage(chatId, '*Tu código de acceso CollectIQ:*\n\n`' + authCode + '`\n\nIntrodúcelo en la app. Válido 5 minutos.');
     return new Response('OK', { status: 200 });
   } catch(e) { return new Response('OK', { status: 200 }); }
 }
@@ -249,7 +265,7 @@ async function handleVision(request) {
     var text = ((rawContent || {}).parts || [])[0];
     text = (text || {}).text || '';
     var parsed = {};
-    try { parsed = JSON.parse(text.replace(/json|/g, '').trim()); } catch(e) { return jsonResponse({ text: text.trim() }); }
+    try { parsed = JSON.parse(text.replace(/```json|```/g, '').trim()); } catch(e) { return jsonResponse({ text: text.trim() }); }
     if (!parsed.is_pokemon_card) return jsonResponse({ text: '', error: 'No es una carta Pokemon' });
     var validated = await validatePokemonCard(parsed.name || '', parsed.number || null, parsed.set_code || null);
     return jsonResponse({
@@ -285,7 +301,7 @@ async function handleScanner(request) {
     var gd = await gr.json();
     var text = (((gd.candidates || [])[0] || {}).content || {});
     text = ((text.parts || [])[0] || {}).text || '';
-    var result = JSON.parse(text.replace(/json|/g, '').trim());
+    var result = JSON.parse(text.replace(/```json|```/g, '').trim());
     return jsonResponse({ result: result, validated: false, scans_remaining: 99 });
   } catch(e) { return jsonResponse({ error: e.message }, 500); }
 }
@@ -358,139 +374,4 @@ async function handleAdminGiveGo(request) {
   if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
   try {
     var body = await request.json();
-    var telegramUserId = Number(body.telegramUserId);
-    var targetUserId = Number(body.targetUserId);
-    var months = body.months || 1;
-    var days = body.days || 0;
-    if (telegramUserId !== ADMIN_ID) return jsonResponse({ error: 'Unauthorized' }, 401);
-    var ms = (months * 30 * 24 * 60 * 60 * 1000) + (days * 24 * 60 * 60 * 1000);
-    var expiresAt = new Date(Date.now() + ms).toISOString();
-    await sbPost('user_premium', { telegram_user_id: targetUserId, plan: 'go', expires_at: expiresAt, stars_paid: 0, updated_at: new Date().toISOString() }, 'resolution=merge-duplicates');
-    return jsonResponse({ ok: true, expiresAt: expiresAt });
-  } catch(e) { return jsonResponse({ error: e.message }, 500); }
-}
-
-// ── ANALYTICS ─────────────────────────────────────────────────
-async function handleAnalytics(request) {
-  if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
-  try {
-    var body = await request.json();
-    if (!body.eventName) return jsonResponse({ error: 'Missing eventName' }, 400);
-    await sbPost('analytics_events', {
-      app_id: body.appId || 'collectiq',
-      telegram_user_id: body.telegramUserId || null,
-      session_id: body.sessionId || null,
-      event_name: body.eventName,
-      platform: body.platform || 'unknown',
-      app_version: body.appVersion || null,
-      is_premium: body.isPremium || false,
-      page: (body.properties || {}).page || null,
-      properties: body.properties || {}
-    });
-    return jsonResponse({ ok: true });
-  } catch(e) { return jsonResponse({ error: e.message }, 500); }
-}
-
-// ── CREATE-INVOICE ────────────────────────────────────────────
-async function handleCreateInvoice(request) {
-  if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
-  try {
-    var body = await request.json();
-    if (!body.telegramUserId) return jsonResponse({ error: 'Missing telegramUserId' }, 400);
-    var res = await fetch('https://api.telegram.org/bot' + getEnv('TELEGRAM_BOT_TOKEN') + '/createInvoiceLink', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: 'CollectIQ GO', description: 'Escaneos ilimitados y todas las funciones premium durante 30 dias.', payload: JSON.stringify({ telegramUserId: body.telegramUserId, type: 'go_monthly' }), currency: 'XTR', prices: [{ label: 'CollectIQ GO - 1 mes', amount: 75 }] })
-    });
-    var data = await res.json();
-    if (!data.ok) return jsonResponse({ error: data.description }, 500);
-    return jsonResponse({ invoiceLink: data.result });
-  } catch(e) { return jsonResponse({ error: e.message }, 500); }
-}
-// ── SECCIÓN: ONE PIECE CARDS ──────────────────────────────────
-// Busca cartas de One Piece via APITCG (con API key)
-async function fetchOnePieceFromAPI(q, set, page) {
-  var limit = 20;
-    var offset = (page - 1) * limit;
-      var url = 'https://api.apitcg.com/api/products?tcg=one-piece&type=card&limit=' + limit + '&page=' + page;
-        if (q) url += '&name=' + encodeURIComponent(q);
-          if (set) url += '&set=' + encodeURIComponent(set);
-            var r = await fetch(url, { headers: { 'x-api-key': getEnv('APITCG_API_KEY') } });
-              if (!r.ok) return { cards: [], total: 0 };
-                var data = await r.json();
-                  var items = data.data || data.results || data.products || [];
-                    var cards = items.map(function(c) {
-                        var images = c.images || {};
-                            return {
-                                  id: String(c._id || c.id || ''),
-                                        name: c.name || '',
-                                              number: (c.attributes || {}).Number || (c.attributes || {}).CardNumber || '',
-                                                    rarity: (c.attributes || {}).Rarity || '',
-                                                          type: (c.attributes || {}).Type || (c.attributes || {}).CardType || '',
-                                                                color: [(c.attributes || {}).Color || ''].filter(Boolean),
-                                                                      power: (c.attributes || {}).Power || null,
-                                                                            cost: (c.attributes || {}).Cost || null,
-                                                                                  image_url: images.small || images.large || images.full || '',
-                                                                                        set_id: (c.set || {})._id || (c.set || {}).id || '',
-                                                                                              set_name: (c.set || {}).name || '',
-                                                                                                    price_eur: null,
-                                                                                                        };
-                                                                                                          });
-                                                                                                            return { cards: cards, total: data.total || cards.length };
-                                                                                                            }
-
-                                                                                                            async function handleOnePieceCards(request) {
-                                                                                                              var url = new URL(request.url);
-                                                                                                                var q = url.searchParams.get('q') || '';
-                                                                                                                  var set = url.searchParams.get('set') || '';
-                                                                                                                    var page = parseInt(url.searchParams.get('page') || '1') || 1;
-                                                                                                                      try {
-                                                                                                                          var result = await fetchOnePieceFromAPI(q, set, page);
-                                                                                                                              return jsonResponse(result);
-                                                                                                                                } catch(e) {
-                                                                                                                                    return jsonResponse({ cards: [], total: 0, error: e.message });
-                                                                                                                                      }
-                                                                                                                                      }
-
-                                                                                                                                      async function handleOnePieceSets(request) {
-                                                                                                                                        try {
-                                                                                                                                            var r = await fetch('https://api.apitcg.com/api/sets?tcg=one-piece&limit=100', {
-                                                                                                                                                  headers: { 'x-api-key': getEnv('APITCG_API_KEY') }
-                                                                                                                                                      });
-                                                                                                                                                          if (!r.ok) return jsonResponse({ sets: [] });
-                                                                                                                                                              var data = await r.json();
-                                                                                                                                                                  var sets = (data.data || []).map(function(s) {
-                                                                                                                                                                        return { id: s._id || s.id, name: s.name, total: s.total || 0 };
-                                                                                                                                                                            });
-                                                                                                                                                                                return jsonResponse({ sets: sets });
-                                                                                                                                                                                  } catch(e) {
-                                                                                                                                                                                      return jsonResponse({ sets: [], error: e.message });
-                                                                                                                                                                                        }
-                                                                                                                                                                                        }
-// ── ROUTER PRINCIPAL ──────────────────────────────────────────
-addEventListener('fetch', function(event) {
-  event.respondWith(handleRequest(event.request));
-});
-
-async function handleRequest(request) {
-  if (request.method === 'OPTIONS') {
-    return new Response(null, { status: 200, headers: corsHeaders() });
-  }
-  var url = new URL(request.url);
-  var route = url.pathname.replace(/^\//, '').split('/')[0] || url.searchParams.get('route') || '';
-
-  if (route === 'auth-telegram') return handleAuthTelegram(request);
-  if (route === 'auth-code') return handleAuthCode(request);
-  if (route === 'bot-webhook') return handleBotWebhook(request);
-  if (route === 'telegram-callback') return handleTelegramCallback(request);
-  if (route === 'vision') return handleVision(request);
-  if (route === 'scanner') return handleScanner(request);
-  if (route === 'funko-import') return handleFunkoImport(request);
-  if (route === 'funko-price') return handleFunkoPrice(request);
-  if (route === 'admin-verify') return handleAdminVerify(request);
-  if (route === 'admin-give-go') return handleAdminGiveGo(request);
-  if (route === 'analytics') return handleAnalytics(request);
-  if (route === 'create-invoice') return handleCreateInvoice(request);
-  if (route === 'onepiece-cards') return handleOnePieceCards(request);
-  if (route === 'onepiece-sets') return handleOnePieceSets(request);addEventListener
-  return jsonResponse({ ok: true, service: 'CollectIQ API', version: '2.0', routes: ['auth-telegram','auth-code','bot-webhook','telegram-callback','vision','scanner','funko-import','funko-price','admin-verify','admin-give-go','analytics','create-invoice'] });
-}
+    var tele
