@@ -71,8 +71,8 @@ const CONDITION_LABELS: Record<string, string> = {
 };
 
 const LISTING_INFO: Record<ListingType, { label: string; color: string; bg: string; emoji: string }> = {
-  sell:  { label: 'Vendo',  color: 'text-green-400',  bg: 'bg-green-500/15 border-green-500/25',  emoji: '💚' },
-  trade: { label: 'Cambio', color: 'text-blue-400',   bg: 'bg-blue-500/15 border-blue-500/25',   emoji: '🔄' },
+  sell:  { label: 'Vendo',  color: 'text-green-400',  bg: 'bg-green-500/15 border-green-500/25',   emoji: '💚' },
+  trade: { label: 'Cambio', color: 'text-blue-400',   bg: 'bg-blue-500/15 border-blue-500/25',    emoji: '🔄' },
   want:  { label: 'Busco',  color: 'text-purple-400', bg: 'bg-purple-500/15 border-purple-500/25', emoji: '🔍' },
 };
 
@@ -80,7 +80,9 @@ const LISTING_INFO: Record<ListingType, { label: string; color: string; bg: stri
 export function MarketplacePage() {
   const navigate = useNavigate();
   const telegramUser = useUserStore(s => s.telegramUser);
-  const isPremium = useUserStore(s => s.isPremium);
+
+  // Premium: se consulta directamente al Worker
+  const [isPremium, setIsPremium] = useState(false);
 
   const [tab, setTab] = useState<TabType>('browse');
   const [listings, setListings] = useState<Listing[]>([]);
@@ -94,6 +96,22 @@ export function MarketplacePage() {
   const [sort, setSort] = useState<SortType>('newest');
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
+
+  // Verificar premium al cargar
+  useEffect(() => {
+    if (!telegramUser?.id) return;
+    fetch(`${API}/marketplace-list?user_id=${telegramUser.id}&limit=1`)
+      .catch(() => {});
+    // Consultar premium via Worker (evita exponer claves en frontend)
+    fetch(`${API}/admin-verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ telegramUserId: telegramUser.id, checkPremium: true }),
+    })
+      .then(r => r.json())
+      .then(data => { if (data.isPremium) setIsPremium(true); })
+      .catch(() => {});
+  }, [telegramUser?.id]);
 
   const fetchListings = useCallback(async () => {
     setLoading(true);
@@ -204,10 +222,7 @@ export function MarketplacePage() {
                 className="w-full bg-white/5 border border-white/10 rounded-xl pl-8 pr-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-green-500/50"
               />
             </div>
-            <button onClick={() => setSearch(searchInput)}
-              className="bg-green-600 px-3 rounded-xl text-sm font-medium">
-              Ir
-            </button>
+            <button onClick={() => setSearch(searchInput)} className="bg-green-600 px-3 rounded-xl text-sm font-medium">Ir</button>
           </div>
 
           <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4">
@@ -350,7 +365,7 @@ function CreateTab({ telegramUser, isPremium, myListingsCount, onCreated }: any)
       <div className="px-4 pt-8 text-center space-y-4">
         <div className="text-5xl">🔒</div>
         <h2 className="text-lg font-bold">Límite alcanzado</h2>
-        <p className="text-sm text-gray-400">Los usuarios FREE pueden tener {FREE_LIMIT} anuncios activos.</p>
+        <p className="text-sm text-gray-400">Los usuarios FREE pueden tener {FREE_LIMIT} anuncios activos. Hazte GO para publicar ilimitado.</p>
         <button className="bg-yellow-500 text-black font-bold py-3 px-6 rounded-2xl">⭐ Hazte GO — 75 Stars</button>
       </div>
     );
@@ -365,7 +380,12 @@ function CreateTab({ telegramUser, isPremium, myListingsCount, onCreated }: any)
       const res = await fetch(`${API}/marketplace-create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, price: form.price ? parseFloat(form.price) : null, telegram_user_id: telegramUser?.id, username: telegramUser?.username }),
+        body: JSON.stringify({
+          ...form,
+          price: form.price ? parseFloat(form.price) : null,
+          telegram_user_id: telegramUser?.id,
+          username: telegramUser?.username,
+        }),
       });
       const data = await res.json();
       if (!res.ok) setError(data.error || 'Error al publicar');
@@ -517,7 +537,12 @@ function ListingModal({ listing, currentUserId, onClose }: { listing: Listing; c
       await fetch(`${API}/marketplace-offer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ listing_id: listing.id, from_user_id: currentUserId, message: offerMsg, offer_price: offerPrice ? parseFloat(offerPrice) : undefined }),
+        body: JSON.stringify({
+          listing_id: listing.id,
+          from_user_id: currentUserId,
+          message: offerMsg,
+          offer_price: offerPrice ? parseFloat(offerPrice) : undefined,
+        }),
       });
       setSent(true);
     } finally { setSending(false); }
@@ -551,7 +576,8 @@ function ListingModal({ listing, currentUserId, onClose }: { listing: Listing; c
               <div className="flex items-center gap-3">
                 <span className="text-2xl font-bold text-green-400">{listing.price.toFixed(2)}€</span>
                 {listing.price_change && (
-                  <span className={cx('text-xs font-semibold flex items-center gap-1', listing.price_change.direction === 'down' ? 'text-emerald-400' : 'text-red-400')}>
+                  <span className={cx('text-xs font-semibold flex items-center gap-1',
+                    listing.price_change.direction === 'down' ? 'text-emerald-400' : 'text-red-400')}>
                     {listing.price_change.direction === 'down' ? <TrendingDown size={12} /> : <TrendingUp size={12} />}
                     {Math.abs(listing.price_change.pct)}% desde {listing.price_change.from.toFixed(2)}€
                   </span>
@@ -591,7 +617,8 @@ function ListingModal({ listing, currentUserId, onClose }: { listing: Listing; c
           {!isOwn && !sent && (
             <div className="border border-white/8 rounded-xl p-3 space-y-2">
               <p className="text-xs font-semibold">✉️ Enviar oferta</p>
-              <textarea value={offerMsg} onChange={e => setOfferMsg(e.target.value)} placeholder="Hola, me interesa tu anuncio..." rows={2}
+              <textarea value={offerMsg} onChange={e => setOfferMsg(e.target.value)}
+                placeholder="Hola, me interesa tu anuncio..." rows={2}
                 className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none resize-none" />
               {listing.listing_type !== 'want' && (
                 <div className="flex items-center gap-2">
