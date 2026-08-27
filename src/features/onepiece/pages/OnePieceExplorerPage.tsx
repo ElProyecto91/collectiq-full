@@ -66,7 +66,7 @@ export function OnePieceExplorerPage() {
   const [hasMore, setHasMore] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
   const sentinelRef = useRef<HTMLDivElement>(null);
-  const searchTimeout = useRef<ReturnType<typeof setTimeout>>();
+  const searchTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const { data: collectionCards = [] } = useCollectionList();
   const { data: wishlistItems = [] } = useWishlistList();
