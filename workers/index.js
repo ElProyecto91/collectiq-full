@@ -1,3 +1,4 @@
+// deploy test
 // ============================================================
 // CollectIQ API Worker — Cloudflare Workers v2.0
 // URL: https://collectiq-api.esxdinero.workers.dev/
