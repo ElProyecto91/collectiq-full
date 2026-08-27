@@ -416,7 +416,7 @@ function CreateTab({ telegramUser, isPremium, myListingsCount, onCreated }: any)
 
       <Field label="Categoría">
         <select value={form.tcg} onChange={e => set('tcg', e.target.value)}
-          className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none">
+          className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2.5 text-sm text-gray-900 focus:outline-none">
           {TCG_OPTIONS.filter(o => o.value).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       </Field>
@@ -441,7 +441,7 @@ function CreateTab({ telegramUser, isPremium, myListingsCount, onCreated }: any)
       <div className="grid grid-cols-2 gap-2">
         <Field label="Condición">
           <select value={form.condition} onChange={e => set('condition', e.target.value)}
-            className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none">
+            className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-sm text-gray-900 focus:outline-none">
             {Object.entries(CONDITION_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
         </Field>
@@ -453,7 +453,7 @@ function CreateTab({ telegramUser, isPremium, myListingsCount, onCreated }: any)
 
       <Field label="Idioma">
         <select value={form.language} onChange={e => set('language', e.target.value)}
-          className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none">
+          className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2.5 text-sm text-gray-900 focus:outline-none">
           <option value="es">🇪🇸 Español</option>
           <option value="en">🇬🇧 Inglés</option>
           <option value="jp">🇯🇵 Japonés</option>
