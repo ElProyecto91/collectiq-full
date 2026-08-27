@@ -424,39 +424,65 @@ async function handleCreateInvoice(request) {
   } catch(e) { return jsonResponse({ error: e.message }, 500); }
 }
 
-// ── ONE PIECE ─────────────────────────────────────────────────
+// ── ONE PIECE (optcgapi.com — gratuita, sin API key) ──────────
 async function handleOnePieceCards(request) {
   var url = new URL(request.url);
-  var q = url.searchParams.get('q') || '';
+  var q = (url.searchParams.get('q') || '').toLowerCase();
   var set = url.searchParams.get('set') || '';
   var page = parseInt(url.searchParams.get('page') || '1') || 1;
+  var limit = 20;
   try {
-    var apiUrl = 'https://api.apitcg.com/api/products?tcg=one-piece&type=card&limit=20&page=' + page;
-    if (q) apiUrl += '&name=' + encodeURIComponent(q);
-    if (set) apiUrl += '&set=' + encodeURIComponent(set);
-    var r = await fetch(apiUrl, { headers: { 'x-api-key': getEnv('APITCG_API_KEY') } });
-    if (!r.ok) return jsonResponse({ cards: [], total: 0 });
-    var data = await r.json();
-    var items = data.data || data.results || data.products || [];
-    var cards = items.map(function(c) {
-      var images = c.images || {};
-      var attrs = c.attributes || {};
+    var allCards = [];
+    var total = 0;
+
+    if (set && set.startsWith('ST')) {
+      // Starter decks
+      var r = await fetch('https://optcgapi.com/api/allSTCards/');
+      if (!r.ok) return jsonResponse({ cards: [], total: 0 });
+      var data = await r.json();
+      allCards = (data || []).filter(function(c) {
+        return (!set || (c.set_id || '').toUpperCase() === set.toUpperCase()) &&
+               (!q || (c.name || '').toLowerCase().includes(q));
+      });
+    } else {
+      // Set cards
+      var r2 = await fetch('https://optcgapi.com/api/sets/filtered/?name=' + encodeURIComponent(q) + (set ? '&set_id=' + set : '') + '&limit=500&offset=' + ((page - 1) * limit));
+      if (!r2.ok) {
+        // Fallback: buscar en todas
+        var r3 = await fetch('https://optcgapi.com/api/allSetCards/');
+        if (!r3.ok) return jsonResponse({ cards: [], total: 0 });
+        var allData = await r3.json();
+        allCards = (allData || []).filter(function(c) {
+          return (!q || (c.name || '').toLowerCase().includes(q)) &&
+                 (!set || (c.set_id || '').toUpperCase() === set.toUpperCase());
+        });
+      } else {
+        var data2 = await r2.json();
+        allCards = Array.isArray(data2) ? data2 : (data2.results || data2.cards || []);
+      }
+    }
+
+    total = allCards.length;
+    var pageCards = allCards.slice((page - 1) * limit, page * limit);
+
+    var cards = pageCards.map(function(c) {
       return {
-        id: String(c._id || c.id || ''),
+        id: String(c.id || c.card_id || ''),
         name: c.name || '',
-        number: attrs.Number || attrs.CardNumber || '',
-        rarity: attrs.Rarity || '',
-        type: attrs.Type || attrs.CardType || '',
-        color: [attrs.Color || ''].filter(Boolean),
-        power: attrs.Power || null,
-        cost: attrs.Cost || null,
-        image_url: images.small || images.large || images.full || '',
-        set_id: (c.set || {})._id || (c.set || {}).id || '',
-        set_name: (c.set || {}).name || '',
-        price_eur: null
+        number: c.card_id || '',
+        rarity: c.rarity || '',
+        type: c.card_type || c.type || '',
+        color: c.color ? [c.color] : [],
+        power: c.power || null,
+        cost: c.cost || null,
+        image_url: c.image_url || c.card_image || '',
+        set_id: c.set_id || '',
+        set_name: c.set_name || c.set_id || '',
+        price_eur: c.market_price ? parseFloat(c.market_price) : null,
       };
     });
-    return jsonResponse({ cards: cards, total: data.total || cards.length });
+
+    return jsonResponse({ cards: cards, total: total });
   } catch(e) {
     return jsonResponse({ cards: [], total: 0, error: e.message });
   }
@@ -464,14 +490,20 @@ async function handleOnePieceCards(request) {
 
 async function handleOnePieceSets(request) {
   try {
-    var r = await fetch('https://api.apitcg.com/api/sets?tcg=one-piece&limit=100', {
-      headers: { 'x-api-key': getEnv('APITCG_API_KEY') }
-    });
+    var r = await fetch('https://optcgapi.com/api/allSets/');
     if (!r.ok) return jsonResponse({ sets: [] });
     var data = await r.json();
-    var sets = (data.data || []).map(function(s) {
-      return { id: s._id || s.id, name: s.name, total: s.total || 0 };
+    var sets = (Array.isArray(data) ? data : []).map(function(s) {
+      return { id: s.set_id || s.id, name: s.set_name || s.name, total: s.card_count || 0 };
     });
+    // Añadir starter decks
+    var r2 = await fetch('https://optcgapi.com/api/allDecks/');
+    if (r2.ok) {
+      var decks = await r2.json();
+      (Array.isArray(decks) ? decks : []).forEach(function(d) {
+        sets.push({ id: d.set_id || d.id, name: d.set_name || d.name, total: d.card_count || 0 });
+      });
+    }
     return jsonResponse({ sets: sets });
   } catch(e) {
     return jsonResponse({ sets: [], error: e.message });
