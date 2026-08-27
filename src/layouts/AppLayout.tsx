@@ -4,20 +4,18 @@ import { BottomNav } from './BottomNav';
 import { useAnalytics } from '@/hooks/use-analytics';
 import { useUserStore } from '@/store';
 import { isInsideTelegram } from '@/lib/telegram';
-
-const ROOT_PATHS = ['/', '/collection', '/explorer', '/community', '/profile'];
+import { ROOT_PATHS } from '@/config';
 
 export function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const telegramUser = useUserStore((s) => s.telegramUser);
   const sessionLoaded = useUserStore((s) => s.sessionLoaded);
+  const { track } = useAnalytics();
 
-const { track } = useAnalytics();
-
-useEffect(() => {
-  track('page_view', { page: location.pathname });
-}, [location.pathname]);
+  useEffect(() => {
+    track('page_view', { page: location.pathname });
+  }, [location.pathname]);
 
   useEffect(() => {
     const onboardingDone = localStorage.getItem('collectiq-onboarding-done');
@@ -25,19 +23,15 @@ useEffect(() => {
       navigate('/onboarding');
       return;
     }
-
     const webApp = window.Telegram?.WebApp;
     if (!webApp) return;
-
-    const isRoot = ROOT_PATHS.includes(location.pathname);
-
+    const isRoot = ROOT_PATHS.includes(location.pathname as any);
     if (isRoot) {
       webApp.BackButton?.hide();
     } else {
       webApp.BackButton?.show();
       webApp.BackButton?.onClick(() => navigate(-1));
     }
-
     return () => {
       webApp.BackButton?.offClick(() => navigate(-1));
     };
