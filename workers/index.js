@@ -466,16 +466,24 @@ async function handleOnePieceCards(request) {
     var pageCards = allCards.slice((page - 1) * limit, page * limit);
 
     var cards = pageCards.map(function(c) {
+      // optcgapi devuelve campos como: card_name, card_id, card_type, card_color,
+      // card_rarity, card_power, card_cost, image_url, set_id, set_name, market_price
+      var cardId = c.card_id || c.id || '';
+      var imgUrl = c.image_url || c.card_image || '';
+      // Si la imagen no tiene URL completa, construirla
+      if (imgUrl && !imgUrl.startsWith('http')) {
+        imgUrl = 'https://optcgapi.com' + imgUrl;
+      }
       return {
-        id: String(c.id || c.card_id || ''),
-        name: c.name || '',
-        number: c.card_id || '',
-        rarity: c.rarity || '',
+        id: String(cardId),
+        name: c.card_name || c.name || '',
+        number: cardId,
+        rarity: c.card_rarity || c.rarity || '',
         type: c.card_type || c.type || '',
-        color: c.color ? [c.color] : [],
-        power: c.power || null,
-        cost: c.cost || null,
-        image_url: c.image_url || c.card_image || '',
+        color: c.card_color ? [c.card_color] : (c.color ? [c.color] : []),
+        power: c.card_power || c.power || null,
+        cost: c.card_cost || c.cost || null,
+        image_url: imgUrl,
         set_id: c.set_id || '',
         set_name: c.set_name || c.set_id || '',
         price_eur: c.market_price ? parseFloat(c.market_price) : null,
