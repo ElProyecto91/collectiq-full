@@ -201,7 +201,7 @@ async function handleBotWebhook(request) {
     crypto.getRandomValues(arr);
     var authCode = Array.from(arr).map(function(b) { return b.toString(10).padStart(2, '0'); }).join('').slice(0, 6);
     await sbPost('auth_codes', { code: authCode, telegram_user_id: user.id, user_data: { id: user.id, first_name: user.first_name, last_name: user.last_name, username: user.username } });
-    await sendTgMessage(chatId, '*Tu código de acceso CollectIQ:*\n\n`' + authCode + '`\n\nIntrodúcelo en la app. Válido 5 minutos.');
+    await sendTgMessage(chatId, '*Tu codigo de acceso CollectIQ:*\n\n`' + authCode + '`\n\nIntroducelo en la app. Valido 5 minutos.');
     return new Response('OK', { status: 200 });
   } catch(e) { return new Response('OK', { status: 200 }); }
 }
