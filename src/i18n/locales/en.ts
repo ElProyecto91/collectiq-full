@@ -1,6 +1,4 @@
-import type { es } from './es';
-
-export const en: typeof es = {
+export const en = {
   nav: {
     home: 'Home',
     collection: 'Collection',
