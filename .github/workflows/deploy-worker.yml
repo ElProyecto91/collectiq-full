@@ -19,7 +19,6 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: workers
-          command: deploy index.js --name collectiq-api --compatibility-date 2024-01-01
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.CF_TELEGRAM_BOT_TOKEN }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CF_SUPABASE_SERVICE_ROLE_KEY }}
