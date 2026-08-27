@@ -1,6 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { Compass, Users, Home, LayoutGrid, User, type LucideIcon } from 'lucide-react';
-
+import { Home, LayoutGrid, ShoppingBag, Users, User, type LucideIcon } from 'lucide-react';
 import { NAV_ITEMS, RoutePaths } from '@/config';
 import type { NavItem } from '@/config';
 import { cx } from '@/utils';
@@ -9,19 +8,19 @@ import { useI18n } from '@/i18n';
 const ICONS: Record<NavItem['icon'], LucideIcon> = {
   Home,
   LayoutGrid,
-  Compass,
+  ShoppingBag,
   Users,
   User,
+  Compass: LayoutGrid, // fallback por si queda alguna ref vieja
 };
 
 export function BottomNav() {
   const { t } = useI18n();
-
   return (
     <nav
       className="fixed inset-x-0 bottom-0 z-40 border-t border-line/70 glass-strong"
       style={{ paddingBottom: 'var(--tg-safe-bottom)' }}
-      aria-label={t.nav.ariaPrimary}
+      aria-label="Navegación principal"
     >
       <ul className="mx-auto flex max-w-md items-stretch justify-between px-2">
         {NAV_ITEMS.map((item) => {
@@ -44,9 +43,7 @@ export function BottomNav() {
                     <span
                       className={cx(
                         'flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-[var(--duration-base)] ease-[var(--ease-premium)]',
-                        isActive
-                          ? 'bg-primary/15 scale-105'
-                          : 'scale-100'
+                        isActive ? 'bg-primary/15 scale-105' : 'scale-100'
                       )}
                     >
                       <Icon size={22} strokeWidth={isActive ? 2.4 : 2} />
@@ -74,5 +71,10 @@ function resolveNavLabel(
       current = (current as Record<string, unknown>)[part];
     }
   }
-  return typeof current === 'string' ? current : key;
+  // Fallback legible si no existe la traducción
+  if (typeof current !== 'string') {
+    const last = key.split('.').pop() ?? key;
+    return last.charAt(0).toUpperCase() + last.slice(1);
+  }
+  return current;
 }
