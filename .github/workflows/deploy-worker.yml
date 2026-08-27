@@ -20,3 +20,12 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: workers
           command: deploy index.js --name collectiq-api --compatibility-date 2024-01-01
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.CF_TELEGRAM_BOT_TOKEN }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CF_SUPABASE_SERVICE_ROLE_KEY }}
+          GEMINI_API_KEY: ${{ secrets.CF_GEMINI_API_KEY }}
+          APITCG_API_KEY: ${{ secrets.CF_APITCG_API_KEY }}
+          EBAY_APP_ID: ${{ secrets.CF_EBAY_APP_ID }}
+          EBAY_CERT_ID: ${{ secrets.CF_EBAY_CERT_ID }}
+          VITE_POKEMONTCG_API_KEY: ${{ secrets.CF_POKEMONTCG_API_KEY }}
+          CRON_SECRET: ${{ secrets.CF_CRON_SECRET }}
