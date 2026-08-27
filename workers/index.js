@@ -468,11 +468,15 @@ async function handleOnePieceCards(request) {
     var cards = pageCards.map(function(c) {
       // optcgapi devuelve campos como: card_name, card_id, card_type, card_color,
       // card_rarity, card_power, card_cost, image_url, set_id, set_name, market_price
-      var cardId = c.card_id || c.id || '';
       var imgUrl = c.image_url || c.card_image || '';
-      // Si la imagen no tiene URL completa, construirla
       if (imgUrl && !imgUrl.startsWith('http')) {
         imgUrl = 'https://optcgapi.com' + imgUrl;
+      }
+      // Extraer número de carta del nombre de la imagen (ej: OP01-077.jpg → OP01-077)
+      var cardId = c.card_id || c.id || '';
+      if (!cardId && imgUrl) {
+        var imgMatch = imgUrl.match(/\/([A-Z0-9]+-\d+[a-z]?)\.jpg/i);
+        if (imgMatch) cardId = imgMatch[1];
       }
       return {
         id: String(cardId),
