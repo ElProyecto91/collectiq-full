@@ -8,8 +8,9 @@ var ADMIN_ID = 1299079722;
 var APP_URL = 'https://collectiq-full.vercel.app';
 var FREE_LISTING_LIMIT = 3;
 
+var _ENV = {};
 function getEnv(key) {
-  try { return globalThis[key] || ''; } catch(e) { return ''; }
+  return _ENV[key] || '';
 }
 
 function corsHeaders() {
@@ -201,7 +202,7 @@ async function handleBotWebhook(request) {
     crypto.getRandomValues(arr);
     var authCode = Array.from(arr).map(function(b) { return b.toString(10).padStart(2, '0'); }).join('').slice(0, 6);
     await sbPost('auth_codes', { code: authCode, telegram_user_id: user.id, user_data: { id: user.id, first_name: user.first_name, last_name: user.last_name, username: user.username } });
-    await sendTgMessage(chatId, '*Tu codigo de acceso CollectIQ:*\n\n`' + authCode + '`\n\nIntroducelo en la app. Valido 5 minutos.');
+    await sendTgMessage(chatId, '*Tu código de acceso CollectIQ:*\n\n`' + authCode + '`\n\nIntrodúcelo en la app. Válido 5 minutos.');
     return new Response('OK', { status: 200 });
   } catch(e) { return new Response('OK', { status: 200 }); }
 }
@@ -958,14 +959,16 @@ async function handleCronPrices() {
 }
 
 // ── ROUTER PRINCIPAL ──────────────────────────────────────────
-addEventListener('fetch', function(event) {
-  event.respondWith(handleRequest(event.request));
-});
-
-// Para cron triggers
-addEventListener('scheduled', function(event) {
-  event.waitUntil(handleCronPrices());
-});
+export default {
+  async fetch(request, env, ctx) {
+    _ENV = env || {};
+    return handleRequest(request);
+  },
+  async scheduled(event, env, ctx) {
+    _ENV = env || {};
+    return handleCronPrices();
+  }
+};
 
 async function handleRequest(request) {
   if (request.method === 'OPTIONS') {
