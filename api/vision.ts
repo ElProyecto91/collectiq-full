@@ -11,42 +11,30 @@ async function validateWithPokemonTCG(
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (apiKey) headers['X-Api-Key'] = apiKey;
 
-  // Intento 1: búsqueda exacta por número + set_code (más precisa)
   if (number && set_code) {
     try {
-      const cleanNumber = number.split('/')[0]; // "044/198" → "044"
+      const cleanNumber = number.split('/')[0];
       const q = `number:"${cleanNumber}" set.id:"${set_code}"`;
       const res = await fetch(`${POKEMON_API_BASE}/cards?q=${encodeURIComponent(q)}&pageSize=5`, { headers });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.data?.length > 0) return json.data[0];
-      }
-    } catch { /* continuar con fallbacks */ }
+      if (res.ok) { const json = await res.json(); if (json.data?.length > 0) return json.data[0]; }
+    } catch {}
   }
 
-  // Intento 2: número + nombre (sin set_code porque Gemini lo puede inventar)
   if (number && name) {
     try {
       const cleanNumber = number.split('/')[0];
       const q = `name:"${name}" number:"${cleanNumber}"`;
       const res = await fetch(`${POKEMON_API_BASE}/cards?q=${encodeURIComponent(q)}&pageSize=5&orderBy=-set.releaseDate`, { headers });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.data?.length > 0) return json.data[0];
-      }
-    } catch { /* continuar */ }
+      if (res.ok) { const json = await res.json(); if (json.data?.length > 0) return json.data[0]; }
+    } catch {}
   }
 
-  // Intento 3: solo nombre (fallback amplio, devuelve la carta más reciente)
   if (name) {
     try {
       const q = `name:"${name}"`;
       const res = await fetch(`${POKEMON_API_BASE}/cards?q=${encodeURIComponent(q)}&pageSize=10&orderBy=-set.releaseDate`, { headers });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.data?.length > 0) return json.data[0];
-      }
-    } catch { /* nada */ }
+      if (res.ok) { const json = await res.json(); if (json.data?.length > 0) return json.data[0]; }
+    } catch {}
   }
 
   return null;
@@ -63,8 +51,9 @@ export default async function handler(req: any, res: any): Promise<void> {
     const { image } = req.body;
     if (!image) { res.status(400).json({ error: 'Missing image field' }); return; }
 
+    // ✅ Modelo correcto: gemini-2.0-flash
     const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -128,15 +117,13 @@ Example response:
     const geminiNumber: string | null = parsed.number ?? null;
     const geminiSetCode: string | null = parsed.set_code ?? null;
 
-    // Validar contra pokemontcg.io — esto evita que se guarden sets inventados
     const validated = await validateWithPokemonTCG(geminiName, geminiNumber, geminiSetCode);
 
     res.status(200).json({
-      // Nombre validado (o el de Gemini si no hay match, para que el usuario pueda buscar manualmente)
       text: validated?.name ?? geminiName,
       number: validated?.number ?? geminiNumber,
-      set_code: validated ? null : geminiSetCode, // solo pasamos set_code si fue validado
-      validated_card_id: validated?.id ?? null,   // ID oficial de pokemontcg.io si encontramos match exacto
+      set_code: validated ? null : geminiSetCode,
+      validated_card_id: validated?.id ?? null,
       validated_set_name: validated?.set?.name ?? null,
       language: parsed.language ?? 'en',
       variant: parsed.variant ?? 'normal',
