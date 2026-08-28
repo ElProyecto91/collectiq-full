@@ -33,6 +33,7 @@ import { OnePieceCollectionPage } from '@/features/onepiece/pages/OnePieceCollec
 import { OnePieceWishlistPage } from '@/features/onepiece/pages/OnePieceWishlistPage';
 import { OnePieceStatsPage } from '@/features/onepiece/pages/OnePieceStatsPage';
 import { OnePieceDeckBuilderPage } from '@/features/onepiece/pages/OnePieceDeckBuilderPage';
+import { OnePieceScannerPage } from '@/features/onepiece/pages/OnePieceScannerPage';
 
 // Páginas pendientes de crear (backend ya listo)
 // import { MagicHomePage } from '@/features/magic/pages/MagicHomePage';
@@ -93,11 +94,12 @@ const router = createBrowserRouter([
       // { path: RoutePaths.LorcanaHome, element: <LorcanaHomePage /> },
     ],
   },
-  { path: RoutePaths.Scanner,      element: <ScannerPage /> },
-  { path: RoutePaths.FunkoScanner, element: <FunkoScannerPage /> },
-  { path: '/login',                element: <LoginPage /> },
-  { path: '/onboarding',           element: <OnboardingPage /> },
-  { path: '/u/:telegramId',        element: <PublicProfilePage /> },
+  { path: RoutePaths.Scanner,           element: <ScannerPage /> },
+  { path: RoutePaths.FunkoScanner,      element: <FunkoScannerPage /> },
+  { path: '/onepiece/scanner',          element: <OnePieceScannerPage /> },
+  { path: '/login',                     element: <LoginPage /> },
+  { path: '/onboarding',                element: <OnboardingPage /> },
+  { path: '/u/:telegramId',             element: <PublicProfilePage /> },
 ]);
 
 export function AppRouter() {
