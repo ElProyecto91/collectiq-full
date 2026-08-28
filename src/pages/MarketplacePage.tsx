@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   ArrowLeft, Search, Plus, X, Loader2,
   MessageCircle, ShoppingBag, TrendingDown, TrendingUp,
@@ -79,12 +79,15 @@ const LISTING_INFO: Record<ListingType, { label: string; color: string; bg: stri
 // ── MAIN PAGE ─────────────────────────────────────────────────
 export function MarketplacePage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const telegramUser = useUserStore(s => s.telegramUser);
+  const prefill = (location.state as any)?.prefill;
+  const initialTab = (location.state as any)?.tab as TabType | undefined;
 
   // Premium: se consulta directamente al Worker
   const [isPremium, setIsPremium] = useState(false);
 
-  const [tab, setTab] = useState<TabType>('browse');
+  const [tab, setTab] = useState<TabType>(initialTab || 'browse');
   const [listings, setListings] = useState<Listing[]>([]);
   const [myListings, setMyListings] = useState<Listing[]>([]);
   const [stats, setStats] = useState<any>(null);
@@ -328,6 +331,7 @@ export function MarketplacePage() {
           telegramUser={telegramUser}
           isPremium={isPremium}
           myListingsCount={activeCount}
+          prefill={prefill}
           onCreated={() => { setTab('my_listings'); fetchMyListings(); }}
         />
       )}
@@ -340,21 +344,21 @@ export function MarketplacePage() {
 }
 
 // ── CREATE TAB ────────────────────────────────────────────────
-function CreateTab({ telegramUser, isPremium, myListingsCount, onCreated }: any) {
+function CreateTab({ telegramUser, isPremium, myListingsCount, prefill, onCreated }: any) {
   const [form, setForm] = useState({
-    listing_type: 'sell' as ListingType,
-    tcg: 'pokemon',
-    item_name: '',
-    set_name: '',
-    card_number: '',
+    listing_type: (prefill?.listing_type || 'sell') as ListingType,
+    tcg: prefill?.tcg || 'pokemon',
+    item_name: prefill?.item_name || '',
+    set_name: prefill?.set_name || '',
+    card_number: prefill?.card_number || '',
     condition: 'near_mint',
     variant: '',
     language: 'es',
-    image_url: '',
-    price: '',
+    image_url: prefill?.image_url || '',
+    price: prefill?.price || '',
     accepts_trade: false,
     description: '',
-    contact_telegram: telegramUser?.username || '',
+    contact_telegram: prefill?.contact_telegram || telegramUser?.username || '',
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
