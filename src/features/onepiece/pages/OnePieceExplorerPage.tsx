@@ -133,7 +133,6 @@ export function OnePieceExplorerPage() {
     addToCollection({
       card_id: card.id,
       tcg: 'onepiece',
-      telegram_user_id: telegramUser.id,
       card_name: card.name,
       set_name: card.set_name,
       card_number: card.number,
