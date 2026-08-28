@@ -1,5 +1,5 @@
 // ============================================================
-// CollectIQ API Worker — Cloudflare Workers v3.1
+// CollectIQ API Worker — Cloudflare Workers v3.2
 // URL: https://collectiq-api.esxdinero.workers.dev/
 // ============================================================
 
