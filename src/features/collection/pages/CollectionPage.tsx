@@ -788,7 +788,7 @@ export function CollectionPage() {
       {marketCard && <SellOnMarketModal card={marketCard} onClose={() => setMarketCard(null)} />}
       {editingCard && (
         <EditCardModal card={editingCard}
-          onSave={(update) => { updateEntry(editingCard.id, update); setEditingCard(null); }}
+          onSave={(update) => { updateEntry({ id: editingCard.id, update }); setEditingCard(null); }}
           onClose={() => setEditingCard(null)} />
       )}
       {showExport && <ExportModal cards={cards} setGroups={setGroups} onClose={() => setShowExport(false)} />}
@@ -938,7 +938,7 @@ export function CollectionPage() {
               ) : (
                 <div className="grid grid-cols-2 gap-3">
                   {filtered.map(card => (
-                    <CollectionCard key={card.id} card={card} onUpdate={updateEntry} onRemove={removeEntry}
+                    <CollectionCard key={card.id} card={card} onUpdate={(id, update) => updateEntry({ id, update })} onRemove={removeEntry}
                       onEdit={() => setEditingCard(card)} onZoom={() => setZoomedCard(card)}
                       onQR={() => setQrCard(card)} onMarket={() => setMarketCard(card)}
                       formatPrice={formatPrice} t={t} />
