@@ -16,6 +16,13 @@ jobs:
       - name: Install Wrangler
         run: npm install -g wrangler
 
+      - name: Deploy Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: workers
+
       - name: Upload secrets to Cloudflare
         working-directory: workers
         env:
@@ -30,10 +37,3 @@ jobs:
           echo "${{ secrets.CF_EBAY_CERT_ID }}" | wrangler secret put EBAY_CERT_ID --name collectiq-api
           echo "${{ secrets.CF_POKEMONTCG_API_KEY }}" | wrangler secret put VITE_POKEMONTCG_API_KEY --name collectiq-api
           echo "${{ secrets.CF_CRON_SECRET }}" | wrangler secret put CRON_SECRET --name collectiq-api
-
-      - name: Deploy Worker
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: workers
