@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const STORAGE_KEY = 'collectiq-active-tcg';
 
@@ -10,9 +11,11 @@ export type ActiveTCG =
 export interface TCGOption {
   key: ActiveTCG;
   label: string;
-  icon: string; // SVG string
-  color: string; // color principal
+  icon: string;
+  color: string;
   available: boolean;
+  /** Si está definido, al hacer clic navega aquí en vez de mostrar la colección genérica */
+  route?: string;
 }
 
 export const TCG_OPTIONS: TCGOption[] = [
@@ -55,7 +58,8 @@ export const TCG_OPTIONS: TCGOption[] = [
     key: 'one-piece',
     label: 'One Piece',
     color: '#E74C3C',
-    available: false,
+    available: true,
+    route: '/onepiece/collection',
     icon: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path d="M12 3C10 3 8 4 8 6C8 8 10 9 12 9C14 9 16 8 16 6C16 4 14 3 12 3Z" stroke="currentColor" stroke-width="1.5"/>
       <path d="M12 9V21" stroke="currentColor" stroke-width="1.5"/>
