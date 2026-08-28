@@ -1,5 +1,6 @@
-import { Heart, Layers, Minus, Plus, Trash2, Star, LayoutGrid, Package, Sparkles, X, Download, Upload, BookOpen, ChevronLeft, ChevronRight, QrCode, MapPin } from 'lucide-react';
+import { Heart, Layers, Minus, Plus, Trash2, Star, LayoutGrid, Package, Sparkles, X, Download, Upload, BookOpen, ChevronLeft, ChevronRight, QrCode, MapPin, ShoppingBag } from 'lucide-react';
 import { useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { useCollectionList, useUpdateCollectionItem, useDeleteCollectionItem } from '@/hooks/use-collection';
 import { useCreateWishlistItem, useWishlistList } from '@/hooks/use-wishlist';
@@ -10,6 +11,7 @@ import { useActiveTCG, TCG_OPTIONS } from '@/hooks/use-active-tcg';
 import type { CollectionItem, CardVariant, CardLanguage, CardCondition, GradingCompany, PurchaseSource } from '@/types';
 import { CARD_LANGUAGES, GRADING_COMPANIES, PURCHASE_SOURCES } from '@/types';
 import { ImportCSVModal } from '@/components/ImportCSVModal';
+import { RoutePaths } from '@/config';
 
 type SortOption = 'recent' | 'name' | 'value';
 type ViewMode = 'cards' | 'sets' | 'album';
@@ -92,7 +94,6 @@ function exportToCSV(cards: CollectionItem[], filename: string) {
     'Grading', 'Nota grading', 'Certificado', 'Centrado', 'Esquinas', 'Bordes', 'Superficie',
     'En funda', 'Tipo funda', 'En album', 'Ubicacion', 'Notas', 'Imagen',
   ];
-
   const rows = cards.map(card => [
     card.cardName, card.setName, card.cardNumber, card.rarity ?? '',
     card.variant ?? 'normal',
@@ -110,11 +111,9 @@ function exportToCSV(cards: CollectionItem[], filename: string) {
     card.notes ?? '',
     card.imageUrl ?? '',
   ]);
-
   const csvRows = [headers, ...rows].map(row =>
     row.map(cell => '"' + String(cell).replace(/"/g, '""') + '"').join(',')
   ).join('\n');
-
   const dataUri = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csvRows);
   const a = document.createElement('a');
   a.setAttribute('href', dataUri);
@@ -151,12 +150,10 @@ function AlbumView({ cards, onZoom }: { cards: CollectionItem[]; onZoom: (card: 
   const [page, setPage] = useState(0);
   const [bgKey, setBgKey] = useState('dark');
   const [touchStart, setTouchStart] = useState<number | null>(null);
-
   const bg = ALBUM_BACKGROUNDS.find(b => b.key === bgKey) ?? ALBUM_BACKGROUNDS[0];
   const cardsPerPage = layout * layout;
   const totalPages = Math.ceil(cards.length / cardsPerPage);
   const pageCards = cards.slice(page * cardsPerPage, (page + 1) * cardsPerPage);
-
   const handleTouchStart = (e: React.TouchEvent) => setTouchStart(e.touches[0].clientX);
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (touchStart === null) return;
@@ -167,16 +164,13 @@ function AlbumView({ cards, onZoom }: { cards: CollectionItem[]; onZoom: (card: 
     }
     setTouchStart(null);
   };
-
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex gap-1">
           {([1, 2, 3, 4] as AlbumLayout[]).map(l => (
             <button key={l} onClick={() => { setLayout(l); setPage(0); }}
-              className={'w-8 h-8 rounded-lg text-xs font-bold border transition-all ' + (
-                layout === l ? 'bg-blue-600 text-white border-blue-600' : 'bg-white/5 text-gray-400 border-white/10'
-              )}>
+              className={'w-8 h-8 rounded-lg text-xs font-bold border transition-all ' + (layout === l ? 'bg-blue-600 text-white border-blue-600' : 'bg-white/5 text-gray-400 border-white/10')}>
               {l}x{l}
             </button>
           ))}
@@ -189,7 +183,6 @@ function AlbumView({ cards, onZoom }: { cards: CollectionItem[]; onZoom: (card: 
           ))}
         </div>
       </div>
-
       <div className="rounded-2xl p-3 min-h-64"
         style={{ backgroundColor: bg.bg, border: '2px solid ' + bg.border }}
         onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
@@ -204,8 +197,7 @@ function AlbumView({ cards, onZoom }: { cards: CollectionItem[]; onZoom: (card: 
             <ChevronRight size={14} className="text-white" />
           </button>
         </div>
-
-        <div className={'grid gap-2'} style={{ gridTemplateColumns: 'repeat(' + layout + ', 1fr)' }}>
+        <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(' + layout + ', 1fr)' }}>
           {Array.from({ length: cardsPerPage }).map((_, i) => {
             const card = pageCards[i];
             return (
@@ -224,7 +216,6 @@ function AlbumView({ cards, onZoom }: { cards: CollectionItem[]; onZoom: (card: 
             );
           })}
         </div>
-
         {pageCards.length > 0 && (
           <p className="text-center text-[10px] text-white/30 mt-3">
             Cartas {page * cardsPerPage + 1}–{Math.min((page + 1) * cardsPerPage, cards.length)} de {cards.length}
@@ -238,13 +229,9 @@ function AlbumView({ cards, onZoom }: { cards: CollectionItem[]; onZoom: (card: 
 
 function QRModal({ card, onClose }: { card: CollectionItem; onClose: () => void }) {
   const qrData = JSON.stringify({
-    id: card.cardId,
-    name: card.cardName,
-    set: card.setName,
-    number: card.cardNumber,
-    variant: card.variant ?? 'normal',
+    id: card.cardId, name: card.cardName, set: card.setName,
+    number: card.cardNumber, variant: card.variant ?? 'normal',
   });
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-6" onClick={onClose}>
       <div className="bg-[#111118] border border-white/10 rounded-2xl p-6 space-y-4 w-full max-w-xs" onClick={e => e.stopPropagation()}>
@@ -267,15 +254,12 @@ function QRModal({ card, onClose }: { card: CollectionItem; onClose: () => void 
   );
 }
 
-function ExportModal({ cards, setGroups, onClose }: {
-  cards: CollectionItem[]; setGroups: SetCompletion[]; onClose: () => void;
-}) {
+function ExportModal({ cards, setGroups, onClose }: { cards: CollectionItem[]; setGroups: SetCompletion[]; onClose: () => void }) {
   const [exporting, setExporting] = useState(false);
   const handleExport = (subset: CollectionItem[], filename: string) => {
     setExporting(true);
     setTimeout(() => { exportToCSV(subset, filename); setExporting(false); onClose(); }, 300);
   };
-
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div className="w-full max-w-md bg-[#111118] border border-white/10 rounded-t-2xl p-4 space-y-3 max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
@@ -331,6 +315,93 @@ function CardZoom({ card, onClose }: { card: CollectionItem; onClose: () => void
   );
 }
 
+// ── SELL ON MARKET MODAL ──────────────────────────────────────
+function SellOnMarketModal({ card, onClose }: { card: CollectionItem; onClose: () => void }) {
+  const navigate = useNavigate();
+  const telegramUser = useUserStore(s => s.telegramUser);
+
+  const handleGoToMarket = () => {
+    navigate(RoutePaths.Marketplace, {
+      state: {
+        prefill: {
+          listing_type: 'sell',
+          tcg: card.tcg || 'pokemon',
+          item_name: card.cardName || '',
+          set_name: card.setName || '',
+          card_number: card.cardNumber || '',
+          rarity: card.rarity || '',
+          image_url: card.imageUrl || '',
+          price: card.marketPrice ? card.marketPrice.toFixed(2) : '',
+          contact_telegram: telegramUser?.username || '',
+        }
+      }
+    });
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full max-w-md bg-[#111118] border border-white/10 rounded-t-2xl p-4 space-y-4" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-bold text-white">Vender en Marketplace</p>
+          <button onClick={onClose} className="text-gray-500 text-xs bg-white/5 px-3 py-1.5 rounded-lg">Cancelar</button>
+        </div>
+
+        <div className="flex gap-3 bg-white/5 rounded-xl p-3">
+          {card.imageUrl && (
+            <img src={card.imageUrl} alt={card.cardName ?? ''} className="w-12 h-16 object-cover rounded-lg shrink-0" />
+          )}
+          <div>
+            <p className="text-sm font-bold text-white">{card.cardName}</p>
+            <p className="text-xs text-gray-400">{card.setName}</p>
+            {card.cardNumber && <p className="text-xs text-gray-500">#{card.cardNumber}</p>}
+            {card.marketPrice && (
+              <p className="text-sm font-bold text-green-400 mt-1">Precio mercado: €{card.marketPrice.toFixed(2)}</p>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { type: 'sell', label: '💚 Vender', color: 'bg-green-500/15 border-green-500/25 text-green-400' },
+            { type: 'trade', label: '🔄 Cambiar', color: 'bg-blue-500/15 border-blue-500/25 text-blue-400' },
+            { type: 'want', label: '🔍 Buscar', color: 'bg-purple-500/15 border-purple-500/25 text-purple-400' },
+          ].map(opt => (
+            <button key={opt.type}
+              onClick={() => {
+                navigate(RoutePaths.Marketplace, {
+                  state: {
+                    prefill: {
+                      listing_type: opt.type,
+                      tcg: card.tcg || 'pokemon',
+                      item_name: card.cardName || '',
+                      set_name: card.setName || '',
+                      card_number: card.cardNumber || '',
+                      rarity: card.rarity || '',
+                      image_url: card.imageUrl || '',
+                      price: card.marketPrice ? card.marketPrice.toFixed(2) : '',
+                      contact_telegram: telegramUser?.username || '',
+                    },
+                    tab: 'create',
+                  }
+                });
+                onClose();
+              }}
+              className={`py-2.5 rounded-xl text-xs font-semibold border transition-all active:scale-95 ${opt.color}`}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
+        <p className="text-[10px] text-gray-500 text-center">
+          Se abrirá el Marketplace con los datos de esta carta ya rellenados.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ── EDIT CARD MODAL ───────────────────────────────────────────
 function EditCardModal({ card, onSave, onClose }: {
   card: CollectionItem; onSave: (update: Partial<CollectionItem>) => void; onClose: () => void;
 }) {
@@ -363,11 +434,8 @@ function EditCardModal({ card, onSave, onClose }: {
   const currentLanguage = CARD_LANGUAGES.find(l => l.code === language);
   const conditionColor = CONDITION_KEYS.find(c => c.key === condition)?.color;
   const currentSleeve = SLEEVE_TYPES.find(s => s.key === sleeveType);
-
   const marketPrice = card.marketPrice ?? card.tcgplayerPrice ?? null;
-  const roi = purchasePrice && marketPrice
-    ? ((marketPrice - parseFloat(purchasePrice)) / parseFloat(purchasePrice) * 100)
-    : null;
+  const roi = purchasePrice && marketPrice ? ((marketPrice - parseFloat(purchasePrice)) / parseFloat(purchasePrice) * 100) : null;
 
   const handleSave = () => {
     onSave({
@@ -421,8 +489,7 @@ function EditCardModal({ card, onSave, onClose }: {
               <p className="text-xs text-gray-500">Precio pagado</p>
               <div className="flex items-center gap-2">
                 <input type="number" min="0" step="0.01" value={purchasePrice}
-                  onChange={e => setPurchasePrice(e.target.value)}
-                  placeholder="0.00"
+                  onChange={e => setPurchasePrice(e.target.value)} placeholder="0.00"
                   className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50" />
                 <span className="text-xs text-gray-500">EUR</span>
               </div>
@@ -439,45 +506,24 @@ function EditCardModal({ card, onSave, onClose }: {
               )}
             </div>
 
-            <button onClick={() => setStep('variant')} className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-left">
-              <span className="text-xl">{currentVariant?.emoji}</span>
-              <div className="flex-1"><p className="text-xs text-gray-500">{t.variants.title}</p><p className="text-sm text-white font-medium">{currentVariant?.label}</p></div>
-              <span className="text-gray-500 text-xs">›</span>
-            </button>
-
-            <button onClick={() => setStep('language')} className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-left">
-              <span className="text-xl">{currentLanguage?.flag}</span>
-              <div className="flex-1"><p className="text-xs text-gray-500">{t.cardLanguages.title}</p><p className="text-sm text-white font-medium">{currentLanguage?.label}</p></div>
-              <span className="text-gray-500 text-xs">›</span>
-            </button>
-
-            <button onClick={() => setStep('condition')} className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-left">
-              <span className="text-xl">🔍</span>
-              <div className="flex-1"><p className="text-xs text-gray-500">{t.cardEdit?.condition ?? 'Condicion'}</p>
-                <p className={'text-sm font-medium ' + (conditionColor ?? 'text-gray-400')}>{condition ? getConditionLabel(condition, t) : 'Sin especificar'}</p></div>
-              <span className="text-gray-500 text-xs">›</span>
-            </button>
-
-            <button onClick={() => setStep('sleeve')} className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-left">
-              <span className="text-xl">{currentSleeve?.emoji ?? '❌'}</span>
-              <div className="flex-1"><p className="text-xs text-gray-500">Estado de funda</p>
-                <p className="text-sm text-white font-medium">{currentSleeve?.label ?? 'Sin funda'}</p></div>
-              <span className="text-gray-500 text-xs">›</span>
-            </button>
-
-            <button onClick={() => setStep('grading')} className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-left">
-              <span className="text-xl">🏆</span>
-              <div className="flex-1"><p className="text-xs text-gray-500">{t.cardEdit?.grading ?? 'Grading profesional'}</p>
-                <p className="text-sm text-white font-medium">{gradingCompany ? (gradingCompany + (gradingScore ? ' · ' + gradingScore : '')) : 'Sin grading'}</p></div>
-              <span className="text-gray-500 text-xs">›</span>
-            </button>
-
-            <button onClick={() => setStep('acquisition')} className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-left">
-              <span className="text-xl">📅</span>
-              <div className="flex-1"><p className="text-xs text-gray-500">Adquisicion</p>
-                <p className="text-sm text-white font-medium">{!acquiredAt && !purchaseSource ? 'Sin especificar' : (acquiredAt || '') + (purchaseSource ? ' · ' + (PURCHASE_SOURCES.find(s => s.code === purchaseSource)?.emoji ?? '') : '')}</p></div>
-              <span className="text-gray-500 text-xs">›</span>
-            </button>
+            {[
+              { label: t.variants.title, value: currentVariant?.label, emoji: currentVariant?.emoji, step: 'variant' as const },
+              { label: t.cardLanguages.title, value: currentLanguage?.label, emoji: currentLanguage?.flag, step: 'language' as const },
+              { label: t.cardEdit?.condition ?? 'Condicion', value: condition ? getConditionLabel(condition, t) : 'Sin especificar', emoji: '🔍', step: 'condition' as const, color: conditionColor },
+              { label: 'Estado de funda', value: currentSleeve?.label ?? 'Sin funda', emoji: currentSleeve?.emoji ?? '❌', step: 'sleeve' as const },
+              { label: t.cardEdit?.grading ?? 'Grading', value: gradingCompany ? gradingCompany + (gradingScore ? ' · ' + gradingScore : '') : 'Sin grading', emoji: '🏆', step: 'grading' as const },
+              { label: 'Adquisicion', value: !acquiredAt && !purchaseSource ? 'Sin especificar' : (acquiredAt || '') + (purchaseSource ? ' · ' + (PURCHASE_SOURCES.find(s => s.code === purchaseSource)?.emoji ?? '') : ''), emoji: '📅', step: 'acquisition' as const },
+            ].map(item => (
+              <button key={item.step} onClick={() => setStep(item.step)}
+                className="w-full flex items-center gap-3 bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-left">
+                <span className="text-xl">{item.emoji}</span>
+                <div className="flex-1">
+                  <p className="text-xs text-gray-500">{item.label}</p>
+                  <p className={'text-sm font-medium ' + (item.color ?? 'text-white')}>{item.value}</p>
+                </div>
+                <span className="text-gray-500 text-xs">›</span>
+              </button>
+            ))}
 
             <div className="bg-white/5 border border-white/8 rounded-xl px-4 py-3 space-y-2">
               <p className="text-xs text-gray-500 flex items-center gap-1.5"><MapPin size={12} />Ubicación física</p>
@@ -692,12 +738,10 @@ function EditCardModal({ card, onSave, onClose }: {
               <p className="text-sm font-bold text-white">Corregir carta</p>
               <button onClick={() => setStep('main')} className="text-blue-400 text-xs bg-blue-500/10 px-3 py-1.5 rounded-lg">Volver</button>
             </div>
-            <p className="text-xs text-gray-500">
-              Útil si el escáner identificó mal la carta. Pega el ID oficial de pokemontcg.io o corrige el nombre del set.
-            </p>
+            <p className="text-xs text-gray-500">Útil si el escáner identificó mal la carta.</p>
             <div className="space-y-3">
               <div>
-                <p className="text-xs text-gray-500 mb-1.5">ID de pokemontcg.io</p>
+                <p className="text-xs text-gray-500 mb-1.5">ID de carta</p>
                 <input value={editCardId} onChange={e => setEditCardId(e.target.value)} placeholder="ej: sv3pt5-44"
                   className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50 font-mono" />
                 <p className="text-[10px] text-gray-600 mt-1">Actual: {card.cardId}</p>
@@ -707,18 +751,16 @@ function EditCardModal({ card, onSave, onClose }: {
                 <input value={editSetName} onChange={e => setEditSetName(e.target.value)} placeholder="ej: Scarlet & Violet 151"
                   className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50" />
               </div>
-              <button onClick={() => setStep('main')} className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold">
-                Aplicar corrección
-              </button>
+              <button onClick={() => setStep('main')} className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold">Aplicar corrección</button>
             </div>
           </>
         )}
-
       </div>
     </div>
   );
 }
 
+// ── COLLECTION PAGE ───────────────────────────────────────────
 export function CollectionPage() {
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SortOption>('recent');
@@ -726,6 +768,7 @@ export function CollectionPage() {
   const [editingCard, setEditingCard] = useState<CollectionItem | null>(null);
   const [zoomedCard, setZoomedCard] = useState<CollectionItem | null>(null);
   const [qrCard, setQrCard] = useState<CollectionItem | null>(null);
+  const [marketCard, setMarketCard] = useState<CollectionItem | null>(null);
   const [showExport, setShowExport] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [filterSet, setFilterSet] = useState<string>('');
@@ -784,9 +827,9 @@ export function CollectionPage() {
 
   return (
     <div className="space-y-4 pt-3 pb-24 px-4">
-
       {zoomedCard && <CardZoom card={zoomedCard} onClose={() => setZoomedCard(null)} />}
       {qrCard && <QRModal card={qrCard} onClose={() => setQrCard(null)} />}
+      {marketCard && <SellOnMarketModal card={marketCard} onClose={() => setMarketCard(null)} />}
       {editingCard && (
         <EditCardModal card={editingCard}
           onSave={(update) => { updateEntry(editingCard.id, update); setEditingCard(null); }}
@@ -866,18 +909,16 @@ export function CollectionPage() {
 
           {cards.length > 0 && (
             <div className="flex gap-2 bg-white/5 rounded-xl p-1">
-              <button onClick={() => setView('cards')}
-                className={'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors ' + (view === 'cards' ? 'bg-blue-600 text-white' : 'text-gray-400')}>
-                <LayoutGrid size={13} />Cartas
-              </button>
-              <button onClick={() => setView('sets')}
-                className={'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors ' + (view === 'sets' ? 'bg-blue-600 text-white' : 'text-gray-400')}>
-                <Package size={13} />Sets
-              </button>
-              <button onClick={() => setView('album')}
-                className={'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors ' + (view === 'album' ? 'bg-blue-600 text-white' : 'text-gray-400')}>
-                <BookOpen size={13} />Album
-              </button>
+              {[
+                { key: 'cards', icon: <LayoutGrid size={13} />, label: 'Cartas' },
+                { key: 'sets', icon: <Package size={13} />, label: 'Sets' },
+                { key: 'album', icon: <BookOpen size={13} />, label: 'Album' },
+              ].map(v => (
+                <button key={v.key} onClick={() => setView(v.key as ViewMode)}
+                  className={'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors ' + (view === v.key ? 'bg-blue-600 text-white' : 'text-gray-400')}>
+                  {v.icon}{v.label}
+                </button>
+              ))}
             </div>
           )}
 
@@ -946,7 +987,7 @@ export function CollectionPage() {
                   {filtered.map(card => (
                     <CollectionCard key={card.id} card={card} onUpdate={updateEntry} onRemove={removeEntry}
                       onEdit={() => setEditingCard(card)} onZoom={() => setZoomedCard(card)}
-                      onQR={() => setQrCard(card)}
+                      onQR={() => setQrCard(card)} onMarket={() => setMarketCard(card)}
                       formatPrice={formatPrice} t={t} />
                   ))}
                 </div>
@@ -1032,10 +1073,17 @@ export function CollectionPage() {
   );
 }
 
-function CollectionCard({ card, onUpdate, onRemove, onEdit, onZoom, onQR, formatPrice, t }: {
-  card: CollectionItem; onUpdate: (id: string, update: Partial<CollectionItem>) => void;
-  onRemove: (id: string) => void; onEdit: () => void; onZoom: () => void; onQR: () => void;
-  formatPrice: (price: number | null | undefined) => string; t: any;
+// ── COLLECTION CARD ───────────────────────────────────────────
+function CollectionCard({ card, onUpdate, onRemove, onEdit, onZoom, onQR, onMarket, formatPrice, t }: {
+  card: CollectionItem;
+  onUpdate: (id: string, update: Partial<CollectionItem>) => void;
+  onRemove: (id: string) => void;
+  onEdit: () => void;
+  onZoom: () => void;
+  onQR: () => void;
+  onMarket: () => void;
+  formatPrice: (price: number | null | undefined) => string;
+  t: any;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const handleRemove = () => {
@@ -1049,7 +1097,6 @@ function CollectionCard({ card, onUpdate, onRemove, onEdit, onZoom, onQR, format
   const conditionColor = CONDITION_KEYS.find(c => c.key === card.condition)?.color;
   const sleeveEmoji = SLEEVE_TYPES.find(s => s.key === (card as any).sleeveType)?.emoji;
   const storageLocation = (card as any).storageLocation;
-
   const purchasePrice = card.purchasePrice;
   const roi = purchasePrice && price ? ((price - purchasePrice) / purchasePrice * 100) : null;
 
@@ -1078,6 +1125,7 @@ function CollectionCard({ card, onUpdate, onRemove, onEdit, onZoom, onQR, format
           {card.inBinder && <span className="text-sm bg-black/60 backdrop-blur-sm rounded-full px-1.5 py-0.5">📁</span>}
         </div>
       </div>
+
       <div className="p-2.5 flex-1 space-y-1">
         <p className="text-xs font-bold truncate text-white">{card.cardName}</p>
         <p className="text-[10px] text-gray-500 truncate">{card.setName}</p>
@@ -1094,6 +1142,7 @@ function CollectionCard({ card, onUpdate, onRemove, onEdit, onZoom, onQR, format
           </p>
         )}
       </div>
+
       <div className="flex items-center justify-between gap-1 px-2.5 pb-2.5">
         <div className="flex items-center gap-1">
           <button onClick={() => card.quantity > 1 && onUpdate(card.id, { quantity: card.quantity - 1 })} disabled={card.quantity <= 1}
@@ -1107,6 +1156,9 @@ function CollectionCard({ card, onUpdate, onRemove, onEdit, onZoom, onQR, format
           </button>
         </div>
         <div className="flex gap-1">
+          <button onClick={onMarket} className="w-7 h-7 rounded-lg border border-white/10 bg-white/5 flex items-center justify-center text-green-400" title="Vender en marketplace">
+            <ShoppingBag size={13} />
+          </button>
           <button onClick={onQR} className="w-7 h-7 rounded-lg border border-white/10 bg-white/5 flex items-center justify-center text-purple-400">
             <QrCode size={13} />
           </button>
