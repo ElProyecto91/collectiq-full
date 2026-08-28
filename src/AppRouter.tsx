@@ -29,6 +29,10 @@ import { PokedexPage } from '@/features/pokemon/pages/PokedexPage';
 import { PokedexDetailPage } from '@/features/pokemon/pages/PokedexDetailPage';
 import { OnePieceHomePage } from '@/features/onepiece/pages/OnePieceHomePage';
 import { OnePieceExplorerPage } from '@/features/onepiece/pages/OnePieceExplorerPage';
+import { OnePieceCollectionPage } from '@/features/onepiece/pages/OnePieceCollectionPage';
+import { OnePieceWishlistPage } from '@/features/onepiece/pages/OnePieceWishlistPage';
+import { OnePieceStatsPage } from '@/features/onepiece/pages/OnePieceStatsPage';
+import { OnePieceDeckBuilderPage } from '@/features/onepiece/pages/OnePieceDeckBuilderPage';
 
 // Páginas pendientes de crear (backend ya listo)
 // import { MagicHomePage } from '@/features/magic/pages/MagicHomePage';
@@ -78,6 +82,10 @@ const router = createBrowserRouter([
       // One Piece
       { path: RoutePaths.OnePieceHome,     element: <OnePieceHomePage /> },
       { path: RoutePaths.OnePieceExplorer, element: <OnePieceExplorerPage /> },
+      { path: '/onepiece/collection',      element: <OnePieceCollectionPage /> },
+      { path: '/onepiece/wishlist',        element: <OnePieceWishlistPage /> },
+      { path: '/onepiece/stats',           element: <OnePieceStatsPage /> },
+      { path: '/onepiece/deck-builder',    element: <OnePieceDeckBuilderPage /> },
 
       // Magic, Yu-Gi-Oh, Lorcana — rutas preparadas, páginas pendientes
       // { path: RoutePaths.MagicHome,   element: <MagicHomePage /> },
