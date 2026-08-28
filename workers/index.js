@@ -1,5 +1,5 @@
 // ============================================================
-// CollectIQ API Worker — Cloudflare Workers v3.2
+// CollectIQ API Worker — Cloudflare Workers v3.0
 // URL: https://collectiq-api.esxdinero.workers.dev/
 // ============================================================
 
@@ -427,7 +427,7 @@ async function handleCreateInvoice(request) {
 // ── ONE PIECE (optcgapi.com — gratuita, sin API key) ──────────
 async function handleOnePieceCards(request) {
   var url = new URL(request.url);
-  var q = (url.searchParams.get('q') || '').toLowerCase();
+  var q = (url.searchParams.get('q') || '').toLowerCase().trim();
   var set = url.searchParams.get('set') || '';
   var page = parseInt(url.searchParams.get('page') || '1') || 1;
   var limit = 20;
@@ -435,31 +435,21 @@ async function handleOnePieceCards(request) {
     var allCards = [];
     var total = 0;
 
-    if (set && set.startsWith('ST')) {
-      // Starter decks
-      var r = await fetch('https://optcgapi.com/api/allSTCards/');
-      if (!r.ok) return jsonResponse({ cards: [], total: 0 });
-      var data = await r.json();
-      allCards = (data || []).filter(function(c) {
-        return (!set || (c.set_id || '').toUpperCase() === set.toUpperCase()) &&
-               (!q || (c.name || '').toLowerCase().includes(q));
+    // Cargar todas las cartas (set + starter decks) y filtrar localmente
+    var promises = [
+      fetch('https://optcgapi.com/api/allSetCards/').then(function(r) { return r.ok ? r.json() : []; }).catch(function() { return []; }),
+      fetch('https://optcgapi.com/api/allSTCards/').then(function(r) { return r.ok ? r.json() : []; }).catch(function() { return []; }),
+    ];
+    var results = await Promise.all(promises);
+    allCards = (results[0] || []).concat(results[1] || []);
+
+    // Filtrar por búsqueda y set
+    if (q || set) {
+      allCards = allCards.filter(function(c) {
+        var nameMatch = !q || (c.card_name || c.name || '').toLowerCase().includes(q);
+        var setMatch = !set || (c.set_id || '').toUpperCase() === set.toUpperCase();
+        return nameMatch && setMatch;
       });
-    } else {
-      // Set cards
-      var r2 = await fetch('https://optcgapi.com/api/sets/filtered/?name=' + encodeURIComponent(q) + (set ? '&set_id=' + set : '') + '&limit=500&offset=' + ((page - 1) * limit));
-      if (!r2.ok) {
-        // Fallback: buscar en todas
-        var r3 = await fetch('https://optcgapi.com/api/allSetCards/');
-        if (!r3.ok) return jsonResponse({ cards: [], total: 0 });
-        var allData = await r3.json();
-        allCards = (allData || []).filter(function(c) {
-          return (!q || (c.name || '').toLowerCase().includes(q)) &&
-                 (!set || (c.set_id || '').toUpperCase() === set.toUpperCase());
-        });
-      } else {
-        var data2 = await r2.json();
-        allCards = Array.isArray(data2) ? data2 : (data2.results || data2.cards || []);
-      }
     }
 
     total = allCards.length;
