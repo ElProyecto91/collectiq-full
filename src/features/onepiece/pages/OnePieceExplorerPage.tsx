@@ -4,8 +4,8 @@ import {
   ArrowLeft, Search, Plus, CheckCircle2, Heart, Loader2, SearchX,
   LayoutGrid, Grid3x3, SlidersHorizontal, X, ShoppingBag,
 } from 'lucide-react';
-import { useCreateCollectionItem, useCollectionList } from '@/hooks/use-collection';
-import { useCreateWishlistItem, useWishlistList } from '@/hooks/use-wishlist';
+import { useCollection } from '@/hooks/use-collection';
+import { useWishlist } from '@/hooks/use-wishlist';
 import { useUserStore } from '@/store';
 import { useCurrency } from '@/hooks/use-currency';
 
@@ -78,14 +78,12 @@ export function OnePieceExplorerPage() {
   const sentinelRef = useRef<HTMLDivElement>(null);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  const { data: collectionCards = [] } = useCollectionList();
-  const { data: wishlistItems = [] } = useWishlistList();
-  const { mutate: createItem } = useCreateCollectionItem();
-  const { mutate: createWishlistItem } = useCreateWishlistItem();
+  const { items: collectionCards = [], addItem: addToCollection } = useCollection('onepiece');
+  const { items: wishlistItems = [], addItem: addToWishlist } = useWishlist('onepiece');
   const telegramUser = useUserStore(s => s.telegramUser);
 
-  const addedIds = new Set(collectionCards.filter(c => c.tcg === 'onepiece').map(c => c.cardId ?? ''));
-  const wishlistIds = new Set(wishlistItems.filter(w => w.tcg === 'onepiece').map(w => w.cardId ?? ''));
+  const addedIds = new Set(collectionCards.map(c => c.cardId ?? ''));
+  const wishlistIds = new Set(wishlistItems.map(w => (w as any).card_id ?? (w as any).cardId ?? ''));
 
   useEffect(() => { fetchSets().then(setSets); }, []);
 
@@ -132,24 +130,40 @@ export function OnePieceExplorerPage() {
 
   const handleAdd = (card: OnePieceCard) => {
     if (!telegramUser?.id) return;
-    createItem({
-      cardId: card.id, tcg: 'onepiece', telegramUserId: telegramUser.id,
-      cardName: card.name, setName: card.set_name, cardNumber: card.number,
-      rarity: card.rarity, imageUrl: card.image_url, quantity: 1,
-      favorite: false, marketPrice: card.price_eur ?? null, currency: 'EUR',
+    addToCollection({
+      card_id: card.id,
+      tcg: 'onepiece',
+      telegram_user_id: telegramUser.id,
+      card_name: card.name,
+      set_name: card.set_name,
+      card_number: card.number,
+      rarity: card.rarity,
+      image_url: card.image_url,
+      quantity: 1,
+      favorite: false,
+      market_price: card.price_eur ?? null,
+      currency: 'EUR',
     } as any);
     setStatusMsg(`✅ ${card.name} añadida`);
     setTimeout(() => setStatusMsg(''), 2000);
   };
 
-  const handleWishlist = (card: OnePieceCard) => {
+  const handleWishlist = async (card: OnePieceCard) => {
     if (!telegramUser?.id) return;
-    createWishlistItem({
-      cardId: card.id, tcg: 'onepiece', telegramUserId: telegramUser.id,
-      cardName: card.name, setName: card.set_name, cardNumber: card.number,
-      rarity: card.rarity, imageUrl: card.image_url,
-    } as any);
-    setStatusMsg(`❤️ ${card.name} en wishlist`);
+    try {
+      await addToWishlist({
+        card_id: card.id,
+        tcg: 'onepiece',
+        card_name: card.name,
+        set_name: card.set_name,
+        card_number: card.number,
+        rarity: card.rarity,
+        image_url: card.image_url,
+      } as any);
+      setStatusMsg(`❤️ ${card.name} en wishlist`);
+    } catch {
+      setStatusMsg(`❌ Error al añadir a wishlist`);
+    }
     setTimeout(() => setStatusMsg(''), 2000);
   };
 
