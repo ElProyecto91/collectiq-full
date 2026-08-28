@@ -13,18 +13,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Deploy to Cloudflare Workers
+      - name: Install Wrangler
+        run: npm install -g wrangler
+
+      - name: Upload secrets to Cloudflare
+        working-directory: workers
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          echo "${{ secrets.CF_TELEGRAM_BOT_TOKEN }}" | wrangler secret put TELEGRAM_BOT_TOKEN --name collectiq-api
+          echo "${{ secrets.CF_SUPABASE_SERVICE_ROLE_KEY }}" | wrangler secret put SUPABASE_SERVICE_ROLE_KEY --name collectiq-api
+          echo "${{ secrets.CF_GEMINI_API_KEY }}" | wrangler secret put GEMINI_API_KEY --name collectiq-api
+          echo "${{ secrets.CF_APITCG_API_KEY }}" | wrangler secret put APITCG_API_KEY --name collectiq-api
+          echo "${{ secrets.CF_EBAY_APP_ID }}" | wrangler secret put EBAY_APP_ID --name collectiq-api
+          echo "${{ secrets.CF_EBAY_CERT_ID }}" | wrangler secret put EBAY_CERT_ID --name collectiq-api
+          echo "${{ secrets.CF_POKEMONTCG_API_KEY }}" | wrangler secret put VITE_POKEMONTCG_API_KEY --name collectiq-api
+          echo "${{ secrets.CF_CRON_SECRET }}" | wrangler secret put CRON_SECRET --name collectiq-api
+
+      - name: Deploy Worker
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: workers
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.CF_TELEGRAM_BOT_TOKEN }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CF_SUPABASE_SERVICE_ROLE_KEY }}
-          GEMINI_API_KEY: ${{ secrets.CF_GEMINI_API_KEY }}
-          APITCG_API_KEY: ${{ secrets.CF_APITCG_API_KEY }}
-          EBAY_APP_ID: ${{ secrets.CF_EBAY_APP_ID }}
-          EBAY_CERT_ID: ${{ secrets.CF_EBAY_CERT_ID }}
-          VITE_POKEMONTCG_API_KEY: ${{ secrets.CF_POKEMONTCG_API_KEY }}
-          CRON_SECRET: ${{ secrets.CF_CRON_SECRET }}
