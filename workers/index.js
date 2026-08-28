@@ -1,5 +1,5 @@
 // ============================================================
-// CollectIQ API Worker — Cloudflare Workers v3.0
+// CollectIQ API Worker — Cloudflare Workers v3.1
 // URL: https://collectiq-api.esxdinero.workers.dev/
 // ============================================================
 
@@ -376,14 +376,17 @@ async function handleAdminGiveGo(request) {
   try {
     var body = await request.json();
     var telegramUserId = Number(body.telegramUserId);
-    var targetUserId = Number(body.targetUserId);
-    var months = body.months || 1;
-    var days = body.days || 0;
-    if (telegramUserId !== ADMIN_ID) return jsonResponse({ error: 'Unauthorized' }, 401);
-    var ms = (months * 30 * 24 * 60 * 60 * 1000) + (days * 24 * 60 * 60 * 1000);
-    var expiresAt = new Date(Date.now() + ms).toISOString();
-    await sbPost('user_premium', { telegram_user_id: targetUserId, plan: 'go', expires_at: expiresAt, stars_paid: 0, updated_at: new Date().toISOString() }, 'resolution=merge-duplicates');
-    return jsonResponse({ ok: true, expiresAt: expiresAt });
+    var adminId = Number(body.adminId);
+    if (adminId !== ADMIN_ID) return jsonResponse({ error: 'Unauthorized' }, 401);
+    if (!telegramUserId) return jsonResponse({ error: 'Missing telegramUserId' }, 400);
+    var days = body.days || 30;
+    var expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+    if (body.revoke) {
+      await sbFetch('/user_premium?telegram_user_id=eq.' + telegramUserId, { method: 'PATCH', body: { is_active: false }, prefer: 'return=minimal' });
+      return jsonResponse({ ok: true, revoked: true });
+    }
+    await sbPost('user_premium', { telegram_user_id: telegramUserId, plan: 'go', expires_at: expiresAt, is_active: true, stars_paid: 0, updated_at: new Date().toISOString() }, 'resolution=merge-duplicates');
+    return jsonResponse({ ok: true, expires_at: expiresAt, days: days });
   } catch(e) { return jsonResponse({ error: e.message }, 500); }
 }
 
@@ -392,12 +395,9 @@ async function handleAnalytics(request) {
   if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
   try {
     var body = await request.json();
-    if (!body.eventName) return jsonResponse({ error: 'Missing eventName' }, 400);
     await sbPost('analytics_events', {
-      app_id: body.appId || 'collectiq',
       telegram_user_id: body.telegramUserId || null,
-      session_id: body.sessionId || null,
-      event_name: body.eventName,
+      event_type: body.eventType || 'unknown',
       platform: body.platform || 'unknown',
       app_version: body.appVersion || null,
       is_premium: body.isPremium || false,
@@ -424,67 +424,144 @@ async function handleCreateInvoice(request) {
   } catch(e) { return jsonResponse({ error: e.message }, 500); }
 }
 
-// ── ONE PIECE (optcgapi.com — gratuita, sin API key) ──────────
+// ── ONE PIECE — Cache API + multi-idioma + color normalizado ──
+var OP_CACHE_KEY_SET   = 'https://collectiq-cache/onepiece-set-cards';
+var OP_CACHE_KEY_ST    = 'https://collectiq-cache/onepiece-st-cards';
+var OP_CACHE_KEY_SETS  = 'https://collectiq-cache/onepiece-sets';
+var OP_CACHE_KEY_DECKS = 'https://collectiq-cache/onepiece-decks';
+var OP_CACHE_TTL       = 3600; // 1 hora
+
+function normalizeColor(c) {
+  if (!c) return [];
+  if (Array.isArray(c)) return c.filter(Boolean);
+  if (typeof c === 'string' && c.includes('/')) return c.split('/').map(function(s) { return s.trim(); }).filter(Boolean);
+  if (typeof c === 'string') return [c.trim()].filter(Boolean);
+  return [];
+}
+
+function mapOnePieceCard(c) {
+  var imgUrl = c.image_url || c.card_image || '';
+  if (imgUrl && !imgUrl.startsWith('http')) {
+    imgUrl = 'https://optcgapi.com' + imgUrl;
+  }
+  var cardId = c.card_id || c.id || '';
+  if (!cardId && imgUrl) {
+    var imgMatch = imgUrl.match(/\/([A-Z0-9]+-\d+[a-z]?)\.(?:jpg|png|webp)/i);
+    if (imgMatch) cardId = imgMatch[1];
+  }
+  var setId = c.set_id || '';
+  if (!setId && cardId) {
+    var m = cardId.match(/^([A-Z]+\d+)-/i);
+    if (m) setId = m[1].toUpperCase();
+  }
+  var priceRaw = c.market_price || c.price || c.tcgplayer_price || null;
+  return {
+    id:           String(cardId),
+    name:         c.card_name || c.name || '',
+    number:       String(cardId),
+    rarity:       c.card_rarity || c.rarity || '',
+    type:         c.card_type  || c.type   || '',
+    color:        normalizeColor(c.card_color || c.color),
+    power:        c.card_power != null ? c.card_power : (c.power != null ? c.power : null),
+    cost:         c.card_cost  != null ? c.card_cost  : (c.cost  != null ? c.cost  : null),
+    counter:      c.card_counter != null ? c.card_counter : null,
+    attribute:    c.card_attribute || c.attribute || '',
+    effect:       c.card_effect || c.effect || '',
+    image_url:    imgUrl,
+    image_url_jp: c.image_url_jp || c.card_image_jp || imgUrl,
+    set_id:       setId,
+    set_name:     c.set_name || setId || '',
+    price_eur:    priceRaw ? parseFloat(priceRaw) : null,
+  };
+}
+
+async function opFetchWithCache(cacheKey, apiUrl) {
+  var cache = caches.default;
+  var cached = await cache.match(new Request(cacheKey));
+  if (cached) {
+    return await cached.json();
+  }
+  var r = await fetch(apiUrl);
+  if (!r.ok) return [];
+  var data = await r.json();
+  var toStore = new Response(JSON.stringify(data), {
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'public, max-age=' + OP_CACHE_TTL,
+    }
+  });
+  await cache.put(new Request(cacheKey), toStore);
+  return data;
+}
+
+async function getAllOnePieceCards() {
+  var results = await Promise.all([
+    opFetchWithCache(OP_CACHE_KEY_SET, 'https://optcgapi.com/api/allSetCards/').catch(function() { return []; }),
+    opFetchWithCache(OP_CACHE_KEY_ST,  'https://optcgapi.com/api/allSTCards/').catch(function() { return []; }),
+  ]);
+  return (results[0] || []).concat(results[1] || []);
+}
+
 async function handleOnePieceCards(request) {
-  var url = new URL(request.url);
-  var q = (url.searchParams.get('q') || '').toLowerCase().trim();
-  var set = url.searchParams.get('set') || '';
-  var page = parseInt(url.searchParams.get('page') || '1') || 1;
-  var limit = 20;
+  var url    = new URL(request.url);
+  var q      = (url.searchParams.get('q')      || '').toLowerCase().trim();
+  var set    = (url.searchParams.get('set')    || '').toUpperCase().trim();
+  var lang   = url.searchParams.get('lang')   || 'en';
+  var rarity = (url.searchParams.get('rarity') || '').trim();
+  var color  = (url.searchParams.get('color')  || '').trim();
+  var type   = (url.searchParams.get('type')   || '').trim();
+  var page   = Math.max(1, parseInt(url.searchParams.get('page')  || '1') || 1);
+  var limit  = Math.min(50, parseInt(url.searchParams.get('limit') || '20') || 20);
+
   try {
-    var allCards = [];
-    var total = 0;
+    var allRaw   = await getAllOnePieceCards();
+    var allCards = allRaw.map(mapOnePieceCard);
 
-    // Cargar todas las cartas (set + starter decks) y filtrar localmente
-    var promises = [
-      fetch('https://optcgapi.com/api/allSetCards/').then(function(r) { return r.ok ? r.json() : []; }).catch(function() { return []; }),
-      fetch('https://optcgapi.com/api/allSTCards/').then(function(r) { return r.ok ? r.json() : []; }).catch(function() { return []; }),
-    ];
-    var results = await Promise.all(promises);
-    allCards = (results[0] || []).concat(results[1] || []);
+    // Deduplicar por id
+    var seen = new Set();
+    allCards = allCards.filter(function(c) {
+      if (!c.id || seen.has(c.id)) return false;
+      seen.add(c.id);
+      return true;
+    });
 
-    // Filtrar por búsqueda y set
-    if (q || set) {
-      allCards = allCards.filter(function(c) {
-        var nameMatch = !q || (c.card_name || c.name || '').toLowerCase().includes(q);
-        var setMatch = !set || (c.set_id || '').toUpperCase() === set.toUpperCase();
-        return nameMatch && setMatch;
+    // Filtros
+    if (q)      allCards = allCards.filter(function(c) { return c.name.toLowerCase().includes(q) || c.id.toLowerCase().includes(q); });
+    if (set)    allCards = allCards.filter(function(c) { return c.set_id.toUpperCase() === set; });
+    if (rarity) allCards = allCards.filter(function(c) { return c.rarity === rarity; });
+    if (color)  allCards = allCards.filter(function(c) { return c.color.includes(color); });
+    if (type)   allCards = allCards.filter(function(c) { return c.type === type; });
+
+    var total     = allCards.length;
+    var pageCards = allCards.slice((page - 1) * limit, page * limit);
+
+    // Imagen JP si se pide
+    if (lang === 'jp') {
+      pageCards = pageCards.map(function(c) {
+        return Object.assign({}, c, { image_url: c.image_url_jp || c.image_url });
       });
     }
 
-    total = allCards.length;
-    var pageCards = allCards.slice((page - 1) * limit, page * limit);
-
-    var cards = pageCards.map(function(c) {
-      // optcgapi devuelve campos como: card_name, card_id, card_type, card_color,
-      // card_rarity, card_power, card_cost, image_url, set_id, set_name, market_price
-      var imgUrl = c.image_url || c.card_image || '';
-      if (imgUrl && !imgUrl.startsWith('http')) {
-        imgUrl = 'https://optcgapi.com' + imgUrl;
-      }
-      // Extraer número de carta del nombre de la imagen (ej: OP01-077.jpg → OP01-077)
-      var cardId = c.card_id || c.id || '';
-      if (!cardId && imgUrl) {
-        var imgMatch = imgUrl.match(/\/([A-Z0-9]+-\d+[a-z]?)\.jpg/i);
-        if (imgMatch) cardId = imgMatch[1];
-      }
-      return {
-        id: String(cardId),
-        name: c.card_name || c.name || '',
-        number: cardId,
-        rarity: c.card_rarity || c.rarity || '',
-        type: c.card_type || c.type || '',
-        color: c.card_color ? [c.card_color] : (c.color ? [c.color] : []),
-        power: c.card_power || c.power || null,
-        cost: c.card_cost || c.cost || null,
-        image_url: imgUrl,
-        set_id: c.set_id || '',
-        set_name: c.set_name || c.set_id || '',
-        price_eur: c.market_price ? parseFloat(c.market_price) : null,
-      };
+    var availableColors   = [];
+    var availableRarities = [];
+    var colorSet = new Set();
+    var raritySet = new Set();
+    allCards.forEach(function(c) {
+      c.color.forEach(function(col) { colorSet.add(col); });
+      if (c.rarity) raritySet.add(c.rarity);
     });
+    colorSet.forEach(function(c) { availableColors.push(c); });
+    raritySet.forEach(function(r) { availableRarities.push(r); });
+    availableColors.sort();
 
-    return jsonResponse({ cards: cards, total: total });
+    return jsonResponse({
+      cards:              pageCards,
+      total:              total,
+      page:               page,
+      limit:              limit,
+      available_colors:   availableColors,
+      available_rarities: availableRarities,
+    });
   } catch(e) {
     return jsonResponse({ cards: [], total: 0, error: e.message });
   }
@@ -492,20 +569,25 @@ async function handleOnePieceCards(request) {
 
 async function handleOnePieceSets(request) {
   try {
-    var r = await fetch('https://optcgapi.com/api/allSets/');
-    if (!r.ok) return jsonResponse({ sets: [] });
-    var data = await r.json();
-    var sets = (Array.isArray(data) ? data : []).map(function(s) {
-      return { id: s.set_id || s.id, name: s.set_name || s.name, total: s.card_count || 0 };
-    });
-    // Añadir starter decks
-    var r2 = await fetch('https://optcgapi.com/api/allDecks/');
-    if (r2.ok) {
-      var decks = await r2.json();
-      (Array.isArray(decks) ? decks : []).forEach(function(d) {
-        sets.push({ id: d.set_id || d.id, name: d.set_name || d.name, total: d.card_count || 0 });
+    var rawSets = await opFetchWithCache(OP_CACHE_KEY_SETS, 'https://optcgapi.com/api/allSets/').catch(function() { return []; });
+    var sets = (Array.isArray(rawSets) ? rawSets : []).map(function(s) {
+      return { id: s.set_id || s.id || '', name: s.set_name || s.name || '', total: s.card_count || s.total || 0, type: 'set' };
+    }).filter(function(s) { return s.id; });
+
+    try {
+      var decksRaw = await opFetchWithCache(OP_CACHE_KEY_DECKS, 'https://optcgapi.com/api/allDecks/');
+      (Array.isArray(decksRaw) ? decksRaw : []).forEach(function(d) {
+        var id = d.set_id || d.id || '';
+        if (!id) return;
+        sets.push({ id: id, name: d.set_name || d.name || id, total: d.card_count || d.total || 0, type: 'starter' });
       });
-    }
+    } catch(e2) {}
+
+    sets.sort(function(a, b) {
+      if (a.type !== b.type) return a.type === 'set' ? -1 : 1;
+      return a.id.localeCompare(b.id);
+    });
+
     return jsonResponse({ sets: sets });
   } catch(e) {
     return jsonResponse({ sets: [], error: e.message });
@@ -529,38 +611,20 @@ async function handleMagicCards(request) {
     var cards = items.map(function(c) {
       var images = c.images || {};
       var attrs = c.attributes || {};
-      return {
-        id: String(c._id || c.id || ''),
-        name: c.name || '',
-        number: attrs.Number || '',
-        rarity: attrs.Rarity || '',
-        type: attrs.Type || '',
-        mana_cost: attrs.ManaCost || '',
-        image_url: images.small || images.large || images.full || '',
-        set_id: (c.set || {})._id || (c.set || {}).id || '',
-        set_name: (c.set || {}).name || ''
-      };
+      return { id: String(c._id || c.id || ''), name: c.name || '', number: attrs.Number || '', rarity: attrs.Rarity || '', type: attrs.Type || '', mana_cost: attrs.ManaCost || '', image_url: images.small || images.large || images.full || '', set_id: (c.set || {})._id || (c.set || {}).id || '', set_name: (c.set || {}).name || '' };
     });
     return jsonResponse({ cards: cards, total: data.total || cards.length });
-  } catch(e) {
-    return jsonResponse({ cards: [], total: 0, error: e.message });
-  }
+  } catch(e) { return jsonResponse({ cards: [], total: 0, error: e.message }); }
 }
 
 async function handleMagicSets(request) {
   try {
-    var r = await fetch('https://api.apitcg.com/api/sets?tcg=magic&limit=200', {
-      headers: { 'x-api-key': getEnv('APITCG_API_KEY') }
-    });
+    var r = await fetch('https://api.apitcg.com/api/sets?tcg=magic&limit=200', { headers: { 'x-api-key': getEnv('APITCG_API_KEY') } });
     if (!r.ok) return jsonResponse({ sets: [] });
     var data = await r.json();
-    var sets = (data.data || []).map(function(s) {
-      return { id: s._id || s.id, name: s.name, total: s.total || 0 };
-    });
+    var sets = (data.data || []).map(function(s) { return { id: s._id || s.id, name: s.name, total: s.total || 0 }; });
     return jsonResponse({ sets: sets });
-  } catch(e) {
-    return jsonResponse({ sets: [], error: e.message });
-  }
+  } catch(e) { return jsonResponse({ sets: [], error: e.message }); }
 }
 
 // ── YU-GI-OH ──────────────────────────────────────────────────
@@ -580,41 +644,20 @@ async function handleYugiohCards(request) {
     var cards = items.map(function(c) {
       var images = c.images || {};
       var attrs = c.attributes || {};
-      return {
-        id: String(c._id || c.id || ''),
-        name: c.name || '',
-        number: attrs.Number || attrs.CardNumber || '',
-        rarity: attrs.Rarity || '',
-        type: attrs.Type || attrs.MonsterType || '',
-        attribute: attrs.Attribute || '',
-        atk: attrs.ATK || null,
-        def: attrs.DEF || null,
-        level: attrs.Level || null,
-        image_url: images.small || images.large || images.full || '',
-        set_id: (c.set || {})._id || (c.set || {}).id || '',
-        set_name: (c.set || {}).name || ''
-      };
+      return { id: String(c._id || c.id || ''), name: c.name || '', number: attrs.Number || attrs.CardNumber || '', rarity: attrs.Rarity || '', type: attrs.Type || attrs.MonsterType || '', attribute: attrs.Attribute || '', atk: attrs.ATK || null, def: attrs.DEF || null, level: attrs.Level || null, image_url: images.small || images.large || images.full || '', set_id: (c.set || {})._id || (c.set || {}).id || '', set_name: (c.set || {}).name || '' };
     });
     return jsonResponse({ cards: cards, total: data.total || cards.length });
-  } catch(e) {
-    return jsonResponse({ cards: [], total: 0, error: e.message });
-  }
+  } catch(e) { return jsonResponse({ cards: [], total: 0, error: e.message }); }
 }
 
 async function handleYugiohSets(request) {
   try {
-    var r = await fetch('https://api.apitcg.com/api/sets?tcg=yugioh&limit=200', {
-      headers: { 'x-api-key': getEnv('APITCG_API_KEY') }
-    });
+    var r = await fetch('https://api.apitcg.com/api/sets?tcg=yugioh&limit=200', { headers: { 'x-api-key': getEnv('APITCG_API_KEY') } });
     if (!r.ok) return jsonResponse({ sets: [] });
     var data = await r.json();
-    var sets = (data.data || []).map(function(s) {
-      return { id: s._id || s.id, name: s.name, total: s.total || 0 };
-    });
+    var sets = (data.data || []).map(function(s) { return { id: s._id || s.id, name: s.name, total: s.total || 0 }; });
     return jsonResponse({ sets: sets });
-  } catch(e) {
-    return jsonResponse({ sets: [], error: e.message });
-  }
+  } catch(e) { return jsonResponse({ sets: [], error: e.message }); }
 }
 
 // ── LORCANA ───────────────────────────────────────────────────
@@ -634,39 +677,20 @@ async function handleLorcanaCards(request) {
     var cards = items.map(function(c) {
       var images = c.images || {};
       var attrs = c.attributes || {};
-      return {
-        id: String(c._id || c.id || ''),
-        name: c.name || '',
-        number: attrs.Number || '',
-        rarity: attrs.Rarity || '',
-        type: attrs.Type || '',
-        ink: attrs.Ink || attrs.Color || '',
-        cost: attrs.Cost || null,
-        image_url: images.small || images.large || images.full || '',
-        set_id: (c.set || {})._id || (c.set || {}).id || '',
-        set_name: (c.set || {}).name || ''
-      };
+      return { id: String(c._id || c.id || ''), name: c.name || '', number: attrs.Number || '', rarity: attrs.Rarity || '', type: attrs.Type || '', ink: attrs.Ink || attrs.Color || '', cost: attrs.Cost || null, image_url: images.small || images.large || images.full || '', set_id: (c.set || {})._id || (c.set || {}).id || '', set_name: (c.set || {}).name || '' };
     });
     return jsonResponse({ cards: cards, total: data.total || cards.length });
-  } catch(e) {
-    return jsonResponse({ cards: [], total: 0, error: e.message });
-  }
+  } catch(e) { return jsonResponse({ cards: [], total: 0, error: e.message }); }
 }
 
 async function handleLorcanaSets(request) {
   try {
-    var r = await fetch('https://api.apitcg.com/api/sets?tcg=lorcana&limit=100', {
-      headers: { 'x-api-key': getEnv('APITCG_API_KEY') }
-    });
+    var r = await fetch('https://api.apitcg.com/api/sets?tcg=lorcana&limit=100', { headers: { 'x-api-key': getEnv('APITCG_API_KEY') } });
     if (!r.ok) return jsonResponse({ sets: [] });
     var data = await r.json();
-    var sets = (data.data || []).map(function(s) {
-      return { id: s._id || s.id, name: s.name, total: s.total || 0 };
-    });
+    var sets = (data.data || []).map(function(s) { return { id: s._id || s.id, name: s.name, total: s.total || 0 }; });
     return jsonResponse({ sets: sets });
-  } catch(e) {
-    return jsonResponse({ sets: [], error: e.message });
-  }
+  } catch(e) { return jsonResponse({ sets: [], error: e.message }); }
 }
 
 // ── MARKETPLACE ───────────────────────────────────────────────
@@ -676,7 +700,6 @@ async function notifyWishlistUsers(listing) {
   var set_name = listing.set_name;
   var price = listing.price;
   var wishlistUsers = [];
-
   try {
     if (tcg === 'funko') {
       var res1 = await sbFetch('/funko_wishlist?select=telegram_user_id,target_price,funko_id');
@@ -684,33 +707,22 @@ async function notifyWishlistUsers(listing) {
       var matchIds = new Set((res2.data || []).map(function(i) { return i.id; }));
       wishlistUsers = (res1.data || []).filter(function(w) { return matchIds.has(w.funko_id); });
     } else {
-      var query = '/wishlist_items?tcg=eq.' + encodeURIComponent(tcg) + '&item_name=ilike.*' + encodeURIComponent(item_name) + '*&select=telegram_user_id,max_price';
-      var res3 = await sbFetch(query);
+      var res3 = await sbFetch('/wishlist_items?tcg=eq.' + encodeURIComponent(tcg) + '&item_name=ilike.*' + encodeURIComponent(item_name) + '*&select=telegram_user_id,max_price');
       wishlistUsers = res3.data || [];
     }
-
     wishlistUsers = wishlistUsers.filter(function(w) { return w.telegram_user_id !== listing.telegram_user_id; });
     if (!wishlistUsers.length) return;
-
     var notified = new Set();
     for (var i = 0; i < wishlistUsers.length; i++) {
       var w = wishlistUsers[i];
       if (notified.has(w.telegram_user_id)) continue;
       notified.add(w.telegram_user_id);
-
       var priceText = price != null ? '💰 Precio: *' + Number(price).toFixed(2) + '€*' : '💰 Precio: a negociar';
       var maxAlert = (w.max_price && price != null && price <= w.max_price) ? '\n✅ ¡Está dentro de tu precio máximo!' : '';
       var setText = set_name ? ' (' + set_name + ')' : '';
-
-      var msg = '🔔 *¡Tienes suerte!*\n\n' +
-        'Un artículo de tu wishlist acaba de publicarse en el Marketplace:\n\n' +
-        '📦 *' + item_name + '*' + setText + '\n' +
-        priceText + maxAlert + '\n\n' +
-        '👉 [Ver anuncio](' + APP_URL + '/marketplace)';
-
+      var msg = '🔔 *¡Tienes suerte!*\n\nUn artículo de tu wishlist acaba de publicarse en el Marketplace:\n\n📦 *' + item_name + '*' + setText + '\n' + priceText + maxAlert + '\n\n👉 [Ver anuncio](' + APP_URL + '/marketplace)';
       fetch('https://api.telegram.org/bot' + getEnv('TELEGRAM_BOT_TOKEN') + '/sendMessage', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chat_id: w.telegram_user_id, text: msg, parse_mode: 'Markdown', disable_web_page_preview: false })
       }).catch(function() {});
     }
@@ -727,28 +739,19 @@ async function handleMarketplaceList(request) {
   var limit = parseInt(url.searchParams.get('limit') || '30');
   var user_id = url.searchParams.get('user_id') || '';
   var offset = page * limit;
-
   var query = '/marketplace_listings?status=eq.active&expires_at=gte.' + new Date().toISOString();
   if (tcg) query += '&tcg=eq.' + encodeURIComponent(tcg);
   if (listing_type) query += '&listing_type=eq.' + encodeURIComponent(listing_type);
   if (user_id) query += '&telegram_user_id=eq.' + user_id;
   if (search) query += '&item_name=ilike.*' + encodeURIComponent(search) + '*';
-
   if (sort === 'price_asc') query += '&order=price.asc';
   else if (sort === 'price_desc') query += '&order=price.desc';
   else if (sort === 'recent_change') query += '&order=updated_at.desc';
   else query += '&order=created_at.desc';
-
   query += '&limit=' + limit + '&offset=' + offset;
-
-  // Mis anuncios: incluir todos los estados excepto deleted
-  if (user_id) {
-    query = '/marketplace_listings?telegram_user_id=eq.' + user_id + '&status=neq.deleted&order=created_at.desc&limit=' + limit;
-  }
-
+  if (user_id) query = '/marketplace_listings?telegram_user_id=eq.' + user_id + '&status=neq.deleted&order=created_at.desc&limit=' + limit;
   var result = await sbFetch(query);
   if (!result.ok) return jsonResponse({ error: 'Error fetching listings' }, 500);
-
   var enriched = (result.data || []).map(function(l) {
     var history = l.price_history || [];
     var price_change = null;
@@ -760,7 +763,6 @@ async function handleMarketplaceList(request) {
     }
     return Object.assign({}, l, { price_change: price_change });
   });
-
   return jsonResponse({ listings: enriched, page: page, limit: limit });
 }
 
@@ -769,14 +771,11 @@ async function handleMarketplaceStats(request) {
   var item_name = url.searchParams.get('item_name') || '';
   var set_name = url.searchParams.get('set_name') || '';
   var tcg = url.searchParams.get('tcg') || '';
-
   var allRes = await sbFetch('/marketplace_listings?status=eq.active&select=id,item_name,set_name,tcg,price,original_price,image_url,listing_type,condition,created_at,updated_at&order=created_at.desc&limit=100');
   var all = allRes.data || [];
-
   var drops = all.filter(function(l) { return l.price != null && l.original_price != null && l.price < l.original_price; }).slice(0, 6);
   var rises = all.filter(function(l) { return l.price != null && l.original_price != null && l.price > l.original_price; }).slice(0, 6);
   var newest = all.slice(0, 10);
-
   var itemStats = null;
   if (item_name) {
     var statsQuery = '/marketplace_price_stats?item_name=eq.' + encodeURIComponent(item_name);
@@ -785,7 +784,6 @@ async function handleMarketplaceStats(request) {
     var statsRes = await sbFetch(statsQuery);
     itemStats = (statsRes.data || [])[0] || null;
   }
-
   return jsonResponse({ price_drops: drops, price_rises: rises, newest: newest, item_stats: itemStats });
 }
 
@@ -798,55 +796,33 @@ async function handleMarketplaceCreate(request) {
     var tcg = body.tcg;
     var item_name = body.item_name;
     var contact_telegram = body.contact_telegram;
-
     if (!telegram_user_id || !listing_type || !tcg || !item_name || !contact_telegram) {
       return jsonResponse({ error: 'Faltan campos obligatorios' }, 400);
     }
-
-    // Verificar premium
     var premRes = await sbFetch('/user_premium?telegram_user_id=eq.' + telegram_user_id + '&select=is_active,expires_at');
     var prem = (premRes.data || [])[0];
     var isPremium = prem && prem.is_active && new Date(prem.expires_at) > new Date();
-
-    // Verificar límite FREE
     if (!isPremium) {
       var existRes = await sbFetch('/marketplace_listings?telegram_user_id=eq.' + telegram_user_id + '&status=eq.active&select=id');
       if ((existRes.data || []).length >= FREE_LISTING_LIMIT) {
         return jsonResponse({ error: 'Los usuarios FREE pueden tener máximo ' + FREE_LISTING_LIMIT + ' anuncios activos. Actualiza a GO para publicar ilimitado.', limit_reached: true }, 403);
       }
     }
-
     var price = body.price != null ? body.price : null;
     var listing = {
-      telegram_user_id: telegram_user_id,
-      username: body.username || null,
-      listing_type: listing_type,
-      tcg: tcg,
-      item_name: item_name,
-      set_name: body.set_name || null,
-      card_number: body.card_number || null,
-      rarity: body.rarity || null,
-      condition: body.condition || null,
-      variant: body.variant || null,
-      language: body.language || 'es',
-      image_url: body.image_url || null,
-      price: price,
-      currency: body.currency || 'EUR',
-      accepts_trade: body.accepts_trade || false,
-      description: body.description || null,
-      contact_telegram: contact_telegram,
-      original_price: price,
-      price_history: [],
-      status: 'active'
+      telegram_user_id: telegram_user_id, username: body.username || null,
+      listing_type: listing_type, tcg: tcg, item_name: item_name,
+      set_name: body.set_name || null, card_number: body.card_number || null,
+      rarity: body.rarity || null, condition: body.condition || null,
+      variant: body.variant || null, language: body.language || 'es',
+      image_url: body.image_url || null, price: price, currency: body.currency || 'EUR',
+      accepts_trade: body.accepts_trade || false, description: body.description || null,
+      contact_telegram: contact_telegram, original_price: price, price_history: [], status: 'active'
     };
-
     var createRes = await sbFetch('/marketplace_listings', { method: 'POST', body: listing, prefer: 'return=representation' });
     if (!createRes.ok) return jsonResponse({ error: 'Error creando anuncio' }, 500);
     var created = (createRes.data || [])[0] || createRes.data;
-
-    // Notificar wishlist (fire and forget)
     notifyWishlistUsers(listing).catch(function() {});
-
     return jsonResponse({ listing: created });
   } catch(e) { return jsonResponse({ error: e.message }, 500); }
 }
@@ -858,23 +834,19 @@ async function handleMarketplaceUpdate(request) {
     var id = body.id;
     var telegram_user_id = body.telegram_user_id;
     if (!id || !telegram_user_id) return jsonResponse({ error: 'Faltan id o telegram_user_id' }, 400);
-
     var existRes = await sbFetch('/marketplace_listings?id=eq.' + id + '&telegram_user_id=eq.' + telegram_user_id + '&select=id,price,price_history');
     var current = (existRes.data || [])[0];
     if (!current) return jsonResponse({ error: 'Anuncio no encontrado o no autorizado' }, 404);
-
     var updates = {};
     if (body.status !== undefined) updates.status = body.status;
     if (body.description !== undefined) updates.description = body.description;
     if (body.accepts_trade !== undefined) updates.accepts_trade = body.accepts_trade;
-
     if (body.price !== undefined && body.price !== current.price) {
       var history = current.price_history || [];
       if (current.price != null) history.push({ price: current.price, date: new Date().toISOString() });
       updates.price = body.price;
       updates.price_history = history;
     }
-
     var updRes = await sbFetch('/marketplace_listings?id=eq.' + id, { method: 'PATCH', body: updates, prefer: 'return=representation' });
     if (!updRes.ok) return jsonResponse({ error: 'Error actualizando anuncio' }, 500);
     return jsonResponse({ listing: (updRes.data || [])[0] });
@@ -888,10 +860,7 @@ async function handleMarketplaceDelete(request) {
     var id = body.id;
     var telegram_user_id = body.telegram_user_id;
     if (!id || !telegram_user_id) return jsonResponse({ error: 'Faltan campos' }, 400);
-
-    await sbFetch('/marketplace_listings?id=eq.' + id + '&telegram_user_id=eq.' + telegram_user_id, {
-      method: 'PATCH', body: { status: 'deleted' }, prefer: 'return=minimal'
-    });
+    await sbFetch('/marketplace_listings?id=eq.' + id + '&telegram_user_id=eq.' + telegram_user_id, { method: 'PATCH', body: { status: 'deleted' }, prefer: 'return=minimal' });
     return jsonResponse({ success: true });
   } catch(e) { return jsonResponse({ error: e.message }, 500); }
 }
@@ -904,50 +873,28 @@ async function handleMarketplaceOffer(request) {
     var from_user_id = body.from_user_id;
     var message = body.message;
     if (!listing_id || !from_user_id || !message) return jsonResponse({ error: 'Faltan campos obligatorios' }, 400);
-
     var listRes = await sbFetch('/marketplace_listings?id=eq.' + listing_id + '&status=eq.active&select=telegram_user_id,item_name,set_name,contact_telegram,listing_type,price,offers_count');
     var listing = (listRes.data || [])[0];
     if (!listing) return jsonResponse({ error: 'Anuncio no encontrado o inactivo' }, 404);
     if (listing.telegram_user_id === from_user_id) return jsonResponse({ error: 'No puedes hacer una oferta en tu propio anuncio' }, 400);
-
-    // Guardar oferta
-    await sbFetch('/marketplace_offers', {
-      method: 'POST',
-      body: { listing_id: listing_id, from_user_id: from_user_id, from_username: body.from_username || 'Usuario', message: message, offer_price: body.offer_price || null },
-      prefer: 'return=minimal'
-    });
-
-    // Incrementar contador
-    await sbFetch('/marketplace_listings?id=eq.' + listing_id, {
-      method: 'PATCH', body: { offers_count: (listing.offers_count || 0) + 1 }, prefer: 'return=minimal'
-    });
-
-    // Notificar al vendedor
+    await sbFetch('/marketplace_offers', { method: 'POST', body: { listing_id: listing_id, from_user_id: from_user_id, from_username: body.from_username || 'Usuario', message: message, offer_price: body.offer_price || null }, prefer: 'return=minimal' });
+    await sbFetch('/marketplace_listings?id=eq.' + listing_id, { method: 'PATCH', body: { offers_count: (listing.offers_count || 0) + 1 }, prefer: 'return=minimal' });
     var itemLabel = listing.set_name ? listing.item_name + ' (' + listing.set_name + ')' : listing.item_name;
     var offerText = body.offer_price ? ' — Oferta: ' + body.offer_price + '€' : '';
     var username = body.from_username || 'usuario';
-    var msg = '🛍️ *Nueva oferta en tu anuncio*\n\n' +
-      '📦 ' + itemLabel + '\n' +
-      '👤 De: @' + username + '\n' +
-      '💬 "' + message + '"' + offerText + '\n\n' +
-      'Responde directamente a @' + username + ' en Telegram.';
-
+    var msg = '🛍️ *Nueva oferta en tu anuncio*\n\n📦 ' + itemLabel + '\n👤 De: @' + username + '\n💬 "' + message + '"' + offerText + '\n\nResponde directamente a @' + username + ' en Telegram.';
     fetch('https://api.telegram.org/bot' + getEnv('TELEGRAM_BOT_TOKEN') + '/sendMessage', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id: listing.telegram_user_id, text: msg, parse_mode: 'Markdown' })
     }).catch(function() {});
-
     return jsonResponse({ success: true });
   } catch(e) { return jsonResponse({ error: e.message }, 500); }
 }
 
 // ── CRON PRECIOS ──────────────────────────────────────────────
-// Se activa con un cron trigger diario desde Cloudflare
-// En wrangler.toml añadir: [triggers] crons = ["0 3 * * *"]
 async function handleCronPrices() {
   var results = [];
   try {
-    // 1. Pokémon — actualizar market_price de collection_items usando pokemontcg.io
     var pokemonItems = await sbFetch('/collection_items?tcg=eq.pokemon&card_id=not.is.null&select=id,card_id&limit=100');
     var pokemonBatch = pokemonItems.data || [];
     var pokemonApiKey = getEnv('VITE_POKEMONTCG_API_KEY');
@@ -965,10 +912,7 @@ async function handleCronPrices() {
           if (price) {
             var variants = ['holofoil', 'reverseHolofoil', 'normal', '1stEditionHolofoil'];
             for (var v = 0; v < variants.length; v++) {
-              if (price[variants[v]] && price[variants[v]].market) {
-                marketPrice = price[variants[v]].market;
-                break;
-              }
+              if (price[variants[v]] && price[variants[v]].market) { marketPrice = price[variants[v]].market; break; }
             }
           }
           if (marketPrice) {
@@ -979,16 +923,9 @@ async function handleCronPrices() {
       } catch(e) {}
     }
     results.push({ tcg: 'pokemon', updated: updated });
-
-    // 2. Marketplace — expirar anuncios vencidos
-    await sbFetch('/marketplace_listings?status=eq.active&expires_at=lt.' + new Date().toISOString(), {
-      method: 'PATCH', body: { status: 'expired' }, prefer: 'return=minimal'
-    });
+    await sbFetch('/marketplace_listings?status=eq.active&expires_at=lt.' + new Date().toISOString(), { method: 'PATCH', body: { status: 'expired' }, prefer: 'return=minimal' });
     results.push({ task: 'marketplace_expire', ok: true });
-
-  } catch(e) {
-    results.push({ error: e.message });
-  }
+  } catch(e) { results.push({ error: e.message }); }
   return jsonResponse({ ok: true, results: results, ran_at: new Date().toISOString() });
 }
 
@@ -1011,37 +948,37 @@ async function handleRequest(request) {
   var url = new URL(request.url);
   var route = url.pathname.replace(/^\//, '').split('/')[0] || url.searchParams.get('route') || '';
 
-  if (route === 'auth-telegram') return handleAuthTelegram(request);
-  if (route === 'auth-code') return handleAuthCode(request);
-  if (route === 'bot-webhook') return handleBotWebhook(request);
-  if (route === 'telegram-callback') return handleTelegramCallback(request);
-  if (route === 'vision') return handleVision(request);
-  if (route === 'scanner') return handleScanner(request);
-  if (route === 'funko-import') return handleFunkoImport(request);
-  if (route === 'funko-price') return handleFunkoPrice(request);
-  if (route === 'admin-verify') return handleAdminVerify(request);
-  if (route === 'admin-give-go') return handleAdminGiveGo(request);
-  if (route === 'analytics') return handleAnalytics(request);
-  if (route === 'create-invoice') return handleCreateInvoice(request);
-  if (route === 'onepiece-cards') return handleOnePieceCards(request);
-  if (route === 'onepiece-sets') return handleOnePieceSets(request);
-  if (route === 'magic-cards') return handleMagicCards(request);
-  if (route === 'magic-sets') return handleMagicSets(request);
-  if (route === 'yugioh-cards') return handleYugiohCards(request);
-  if (route === 'yugioh-sets') return handleYugiohSets(request);
-  if (route === 'lorcana-cards') return handleLorcanaCards(request);
-  if (route === 'lorcana-sets') return handleLorcanaSets(request);
-  if (route === 'marketplace-list') return handleMarketplaceList(request);
+  if (route === 'auth-telegram')      return handleAuthTelegram(request);
+  if (route === 'auth-code')          return handleAuthCode(request);
+  if (route === 'bot-webhook')        return handleBotWebhook(request);
+  if (route === 'telegram-callback')  return handleTelegramCallback(request);
+  if (route === 'vision')             return handleVision(request);
+  if (route === 'scanner')            return handleScanner(request);
+  if (route === 'funko-import')       return handleFunkoImport(request);
+  if (route === 'funko-price')        return handleFunkoPrice(request);
+  if (route === 'admin-verify')       return handleAdminVerify(request);
+  if (route === 'admin-give-go')      return handleAdminGiveGo(request);
+  if (route === 'analytics')          return handleAnalytics(request);
+  if (route === 'create-invoice')     return handleCreateInvoice(request);
+  if (route === 'onepiece-cards')     return handleOnePieceCards(request);
+  if (route === 'onepiece-sets')      return handleOnePieceSets(request);
+  if (route === 'magic-cards')        return handleMagicCards(request);
+  if (route === 'magic-sets')         return handleMagicSets(request);
+  if (route === 'yugioh-cards')       return handleYugiohCards(request);
+  if (route === 'yugioh-sets')        return handleYugiohSets(request);
+  if (route === 'lorcana-cards')      return handleLorcanaCards(request);
+  if (route === 'lorcana-sets')       return handleLorcanaSets(request);
+  if (route === 'marketplace-list')   return handleMarketplaceList(request);
   if (route === 'marketplace-create') return handleMarketplaceCreate(request);
   if (route === 'marketplace-update') return handleMarketplaceUpdate(request);
   if (route === 'marketplace-delete') return handleMarketplaceDelete(request);
-  if (route === 'marketplace-offer') return handleMarketplaceOffer(request);
-  if (route === 'marketplace-stats') return handleMarketplaceStats(request);
+  if (route === 'marketplace-offer')  return handleMarketplaceOffer(request);
+  if (route === 'marketplace-stats')  return handleMarketplaceStats(request);
   if (route === 'cron-prices') {
     var cronSecret = url.searchParams.get('secret') || '';
     if (cronSecret !== getEnv('CRON_SECRET')) return jsonResponse({ error: 'Unauthorized' }, 401);
     return handleCronPrices();
   }
 
-  return jsonResponse({ ok: true, service: 'CollectIQ API', version: '3.0', routes: ['auth-telegram','auth-code','bot-webhook','telegram-callback','vision','scanner','funko-import','funko-price','admin-verify','admin-give-go','analytics','create-invoice','onepiece-cards','onepiece-sets','magic-cards','magic-sets','yugioh-cards','yugioh-sets','lorcana-cards','lorcana-sets','marketplace-list','marketplace-create','marketplace-update','marketplace-delete','marketplace-offer','marketplace-stats','cron-prices'] });
+  return jsonResponse({ ok: true, service: 'CollectIQ API', version: '3.1', routes: ['auth-telegram','auth-code','bot-webhook','telegram-callback','vision','scanner','funko-import','funko-price','admin-verify','admin-give-go','analytics','create-invoice','onepiece-cards','onepiece-sets','magic-cards','magic-sets','yugioh-cards','yugioh-sets','lorcana-cards','lorcana-sets','marketplace-list','marketplace-create','marketplace-update','marketplace-delete','marketplace-offer','marketplace-stats','cron-prices'] });
 }
