@@ -448,19 +448,12 @@ function SetCompletionPanel({ group, onAddToWishlist, onZoom }: {
 // ── Precio por región via Worker ──────────────────────────────
 async function fetchPriceByRegion(card: CollectionItem, lang: string): Promise<number | null> {
   try {
-    const name = encodeURIComponent(card.cardName ?? '');
-    const number = encodeURIComponent(card.cardNumber ?? '');
-    // EN → optcgapi (ya en el catálogo), buscar directo
-    if (lang === 'en') {
-      const r = await fetch(`${API}/onepiece-cards?q=${number}&limit=5&page=1`);
-      const d = await r.json();
-      const found = (d.cards ?? []).find((c: any) => c.number === card.cardNumber || c.id === card.cardId);
-      return found?.price_eur ?? null;
-    }
-    // JP / FR / otros → eBay search via funko-price endpoint adaptado
-    // Usamos funko-price que ya tiene la lógica de eBay, pasando nombre + "one piece tcg" + idioma
-    const query = `${card.cardName} ${card.cardNumber} one piece tcg ${lang === 'jp' ? 'japanese' : lang === 'fr' ? 'french' : lang}`;
-    const r = await fetch(`${API}/funko-price?name=${encodeURIComponent(query)}`);
+    const params = new URLSearchParams({
+      lang,
+      name: card.cardName ?? '',
+      number: card.cardNumber ?? '',
+    });
+    const r = await fetch(`${API}/onepiece-price?${params}`);
     const d = await r.json();
     return d.price ?? null;
   } catch { return null; }
