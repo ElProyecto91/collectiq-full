@@ -171,11 +171,11 @@ export async function handleOnePieceScanner(request) {
         },
         { inline_data: { mime_type: 'image/jpeg', data: body.image_base64 } }
       ]}],
-      generationConfig: { temperature: 0, maxOutputTokens: 512 }
+      generationConfig: { temperature: 0, maxOutputTokens: 1024 }
     };
 
     var gr = await fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=' + getEnv('GEMINI_API_KEY'),
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + getEnv('GEMINI_API_KEY'),
       { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(geminiBody) }
     );
 
