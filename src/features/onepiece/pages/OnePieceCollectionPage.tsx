@@ -694,7 +694,8 @@ export function OnePieceCollectionPage() {
                         {roi !== null && <p className={'text-[10px] font-medium ' + (roi >= 0 ? 'text-green-400' : 'text-red-400')}>ROI: {roi >= 0 ? '+' : ''}{roi.toFixed(1)}%</p>}
                       </div>
 
-                      <div className="flex items-center justify-between px-2.5 pb-2.5">
+                      <div className="px-2.5 pb-2.5 space-y-1.5">
+                        {/* Cantidad */}
                         <div className="flex items-center gap-1">
                           <button onClick={() => card.quantity > 1 && updateItem(card.id, { quantity: card.quantity - 1 } as any)} disabled={card.quantity <= 1}
                             className="w-6 h-6 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center disabled:opacity-40">
@@ -706,14 +707,15 @@ export function OnePieceCollectionPage() {
                             <Plus size={11} className="text-gray-400" />
                           </button>
                         </div>
-                        <div className="flex gap-1">
-                          <button onClick={() => setEditCard(card)} className="w-6 h-6 rounded-lg border border-white/10 bg-white/5 flex items-center justify-center text-blue-400">
+                        {/* Acciones — fila completa */}
+                        <div className="grid grid-cols-3 gap-1">
+                          <button onClick={() => setEditCard(card)} className="h-7 rounded-lg border border-white/10 bg-white/5 flex items-center justify-center text-blue-400 active:scale-95">
                             <Edit2 size={11} />
                           </button>
-                          <button onClick={() => setMarketCard(card)} className="w-6 h-6 rounded-lg border border-white/10 bg-white/5 flex items-center justify-center text-green-400">
+                          <button onClick={() => setMarketCard(card)} className="h-7 rounded-lg border border-white/10 bg-white/5 flex items-center justify-center text-green-400 active:scale-95">
                             <ShoppingBag size={11} />
                           </button>
-                          <button onClick={() => removeItem(card.id)} className="w-6 h-6 rounded-lg border border-white/10 bg-white/5 flex items-center justify-center text-gray-500">
+                          <button onClick={() => removeItem(card.id)} className="h-7 rounded-lg border border-red-500/20 bg-red-500/10 flex items-center justify-center text-red-400 active:scale-95">
                             <Trash2 size={11} />
                           </button>
                         </div>
