@@ -31,15 +31,6 @@ const COLOR_MAP: Record<string, string> = {
   Purple: '🟣', Black: '⚫', Yellow: '🟡',
 };
 
-async function blobToBase64(blob: Blob): Promise<string> {
-  return new Promise((res, rej) => {
-    const reader = new FileReader();
-    reader.onload = () => res((reader.result as string).split(',')[1]);
-    reader.onerror = rej;
-    reader.readAsDataURL(blob);
-  });
-}
-
 export function OnePieceScannerPage() {
   const navigate = useNavigate();
   const { formatPrice } = useCurrency();
@@ -93,10 +84,7 @@ export function OnePieceScannerPage() {
     const track = streamRef.current?.getVideoTracks()[0];
     if (!track) return;
     const next = !torchOn;
-    try {
-      await (track as any).applyConstraints({ advanced: [{ torch: next }] });
-      setTorchOn(next);
-    } catch {}
+    try { await (track as any).applyConstraints({ advanced: [{ torch: next }] }); setTorchOn(next); } catch {}
   };
 
   const handleTapFocus = async (e: React.TouchEvent<HTMLDivElement>) => {
@@ -106,20 +94,10 @@ export function OnePieceScannerPage() {
     const touch = e.touches[0];
     const x = (touch.clientX - rect.left) / rect.width;
     const y = (touch.clientY - rect.top) / rect.height;
-    try {
-      await (track as any).applyConstraints({
-        advanced: [{ pointOfInterest: { x, y }, focusMode: 'single-shot' }]
-      });
-    } catch {}
+    try { await (track as any).applyConstraints({ advanced: [{ pointOfInterest: { x, y }, focusMode: 'single-shot' }] }); } catch {}
     if (overlayRef.current) {
       const dot = document.createElement('div');
-      dot.style.cssText = `
-        position:absolute;width:48px;height:48px;
-        border:2px solid #ef4444;border-radius:50%;
-        left:${touch.clientX - rect.left - 24}px;
-        top:${touch.clientY - rect.top - 24}px;
-        pointer-events:none;animation:focusFade 0.8s ease forwards;
-      `;
+      dot.style.cssText = `position:absolute;width:48px;height:48px;border:2px solid #ef4444;border-radius:50%;left:${touch.clientX - rect.left - 24}px;top:${touch.clientY - rect.top - 24}px;pointer-events:none;animation:focusFade 0.8s ease forwards;`;
       overlayRef.current.appendChild(dot);
       setTimeout(() => dot.remove(), 800);
     }
@@ -139,12 +117,12 @@ export function OnePieceScannerPage() {
     const cw = canvas.width * 0.8;
     const ch = canvas.height * 0.8;
     const crop = document.createElement('canvas');
-    crop.width = cw;
-    crop.height = ch;
+    crop.width = cw; crop.height = ch;
     crop.getContext('2d')!.drawImage(canvas, cx, cy, cw, ch, 0, 0, cw, ch);
     return crop.toDataURL('image/jpeg', 0.85).split(',')[1];
   };
 
+  // Validar contra catálogo y obtener imagen + datos completos
   const validateAgainstCatalog = async (name: string, number: string, setId: string): Promise<ScanResult | null> => {
     const params = new URLSearchParams({ page: '1', limit: '5' });
     if (number) params.set('q', number);
@@ -154,9 +132,29 @@ export function OnePieceScannerPage() {
       const r = await fetch(`${API}/onepiece-cards?${params}`);
       if (!r.ok) return null;
       const d = await r.json();
-      const cards: ScanResult[] = d.cards || [];
-      const byNumber = cards.find(c => c.number?.toUpperCase() === number?.toUpperCase());
-      return byNumber || cards[0] || null;
+      const cards: any[] = d.cards || [];
+      // Buscar por número exacto primero
+      const byNumber = cards.find(c =>
+        c.number?.toUpperCase() === number?.toUpperCase() ||
+        c.id?.toUpperCase() === number?.toUpperCase()
+      );
+      const card = byNumber || cards[0];
+      if (!card) return null;
+      return {
+        id: card.id || card.number || '',
+        name: card.name || name,
+        number: card.number || number,
+        set_id: card.set_id || setId,
+        set_name: card.set_name || setId,
+        rarity: card.rarity || '',
+        type: card.type || '',
+        color: Array.isArray(card.color) ? card.color : [],
+        power: card.power ?? null,
+        cost: card.cost ?? null,
+        image_url: card.image_url || '',
+        price_eur: card.price_eur ?? null,
+        confidence: 0.9,
+      };
     } catch { return null; }
   };
 
@@ -169,58 +167,52 @@ export function OnePieceScannerPage() {
     setResult(null);
     setAdded(false);
     try {
-      // Escanear via Worker — tiene GEMINI_API_KEY, no expone clave en frontend
       const scanRes = await fetch(`${API}/onepiece-scanner`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image_base64: b64 }),
       });
-      if (!scanRes.ok) { const errData = await scanRes.json(); throw new Error(errData.error || 'Error ' + scanRes.status); }
+      if (!scanRes.ok) {
+        const errData = await scanRes.json();
+        throw new Error(errData.error || 'Error ' + scanRes.status);
+      }
       const scanData = await scanRes.json();
-console.log('scanData:', JSON.stringify(scanData));
-const geminiResult = scanData?.result;
-if (!geminiResult) throw new Error(JSON.stringify(scanData));
+      const geminiResult = scanData?.result;
+      if (!geminiResult) {
+        throw new Error(scanData?.error || 'No se pudo identificar la carta');
+      }
 
-      const parsed: any = {
-        is_onepiece_card: geminiResult.tcg === 'onepiece',
-        name: geminiResult.name || '',
-        number: geminiResult.number || '',
-        set_id: (geminiResult.number || '').split('-')[0] || '',
-        rarity: geminiResult.rarity || '',
-        type: '',
-        color: [],
-        cost: null,
-        power: null,
-        confidence: geminiResult.confidence || 0.5,
-      };
-
-      if (!parsed.is_onepiece_card) {
+      if (geminiResult.tcg !== 'onepiece') {
         setScanError('No parece una carta de One Piece TCG. Inténtalo con mejor iluminación.');
         setScanning(false);
         return;
       }
+
+      // Buscar en catálogo para obtener imagen y datos completos
       const validated = await validateAgainstCatalog(
-        parsed.name || '',
-        parsed.number || '',
-        parsed.set_id || ''
+        geminiResult.name || '',
+        geminiResult.number || '',
+        geminiResult.set_id || (geminiResult.number || '').split('-')[0] || ''
       );
+
       if (validated) {
-        setResult({ ...validated, confidence: parsed.confidence ?? 0.8 });
+        setResult({ ...validated, confidence: geminiResult.confidence ?? 0.8 });
       } else {
+        // Sin imagen del catálogo, usar datos de Gemini
         setResult({
-          id: parsed.number || '',
-          name: parsed.name || 'Carta desconocida',
-          number: parsed.number || '',
-          set_id: parsed.set_id || '',
-          set_name: parsed.set_id || '',
-          rarity: parsed.rarity || '',
-          type: parsed.type || '',
-          color: Array.isArray(parsed.color) ? parsed.color : [],
-          power: parsed.power ?? null,
-          cost: parsed.cost ?? null,
+          id: geminiResult.number || '',
+          name: geminiResult.name || 'Carta desconocida',
+          number: geminiResult.number || '',
+          set_id: geminiResult.set_id || '',
+          set_name: geminiResult.set_id || '',
+          rarity: geminiResult.rarity || '',
+          type: geminiResult.type || '',
+          color: Array.isArray(geminiResult.color) ? geminiResult.color : [],
+          power: geminiResult.power ?? null,
+          cost: geminiResult.cost ?? null,
           image_url: '',
           price_eur: null,
-          confidence: parsed.confidence ?? 0.4,
+          confidence: geminiResult.confidence ?? 0.4,
         });
       }
       setScanCount(c => c + 1);
@@ -281,10 +273,9 @@ if (!geminiResult) throw new Error(JSON.stringify(scanData));
       <div className="relative flex-1 overflow-hidden bg-black">
         <video ref={videoRef} playsInline muted autoPlay className="w-full h-full object-cover" />
         <canvas ref={canvasRef} className="hidden" />
-
         <div ref={overlayRef} className="absolute inset-0" onTouchStart={handleTapFocus} />
 
-        {/* Marco de escaneo */}
+        {/* Marco */}
         {cameraReady && !result && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="absolute inset-0 bg-black/40" style={{
@@ -319,8 +310,7 @@ if (!geminiResult) throw new Error(JSON.stringify(scanData));
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/80 px-6 text-center">
             <AlertCircle size={32} className="text-red-400" />
             <p className="text-sm text-gray-300">{cameraError}</p>
-            <button onClick={startCamera}
-              className="bg-red-600 text-white rounded-2xl px-6 py-3 font-semibold flex items-center gap-2">
+            <button onClick={startCamera} className="bg-red-600 text-white rounded-2xl px-6 py-3 font-semibold flex items-center gap-2">
               <RotateCcw size={16} /> Reintentar
             </button>
           </div>
@@ -330,14 +320,12 @@ if (!geminiResult) throw new Error(JSON.stringify(scanData));
       {/* Panel inferior */}
       <div className="bg-[#0a0a0f] border-t border-white/8 px-4 pt-3 pb-4 space-y-3 z-10">
 
-        {/* Error escaneo */}
+        {/* Error */}
         {scanError && (
           <div className="bg-red-500/10 border border-red-500/25 rounded-2xl px-4 py-3 flex items-center gap-3">
             <AlertCircle size={16} className="text-red-400 shrink-0" />
             <p className="text-xs text-red-300 flex-1">{scanError}</p>
-            <button onClick={() => setScanError('')} className="text-gray-500">
-              <X size={14} />
-            </button>
+            <button onClick={() => setScanError('')} className="text-gray-500"><X size={14} /></button>
           </div>
         )}
 
@@ -367,21 +355,15 @@ if (!geminiResult) throw new Error(JSON.stringify(scanData));
                     </span>
                   ))}
                 </div>
-                {result.cost != null && (
-                  <span className="text-[10px] bg-white/8 px-1.5 py-0.5 rounded-full inline-block">⚡ {result.cost}</span>
-                )}
-                {result.power != null && (
-                  <span className="text-[10px] bg-white/8 px-1.5 py-0.5 rounded-full inline-block ml-1">💪 {result.power.toLocaleString()}</span>
-                )}
-                {result.price_eur != null && (
-                  <p className="text-xs font-bold text-green-400">{formatPrice(result.price_eur)}</p>
-                )}
+                <div className="flex gap-1">
+                  {result.cost != null && <span className="text-[10px] bg-white/8 px-1.5 py-0.5 rounded-full">⚡ {result.cost}</span>}
+                  {result.power != null && <span className="text-[10px] bg-white/8 px-1.5 py-0.5 rounded-full">💪 {result.power.toLocaleString()}</span>}
+                </div>
+                {result.price_eur != null && <p className="text-xs font-bold text-green-400">{formatPrice(result.price_eur)}</p>}
                 <div className="flex items-center gap-1.5">
                   <div className="flex-1 bg-white/8 rounded-full h-1">
-                    <div
-                      className={`h-1 rounded-full ${result.confidence >= 0.8 ? 'bg-green-500' : result.confidence >= 0.5 ? 'bg-yellow-500' : 'bg-red-500'}`}
-                      style={{ width: `${Math.round(result.confidence * 100)}%` }}
-                    />
+                    <div className={`h-1 rounded-full ${result.confidence >= 0.8 ? 'bg-green-500' : result.confidence >= 0.5 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                      style={{ width: `${Math.round(result.confidence * 100)}%` }} />
                   </div>
                   <span className="text-[9px] text-gray-500">{Math.round(result.confidence * 100)}%</span>
                 </div>
@@ -413,22 +395,13 @@ if (!geminiResult) throw new Error(JSON.stringify(scanData));
 
         {/* Botón escanear */}
         {!result && !added && (
-          <button
-            onClick={scan}
-            disabled={!cameraReady || scanning}
+          <button onClick={scan} disabled={!cameraReady || scanning}
             className="w-full py-4 rounded-2xl font-bold text-sm flex items-center justify-center gap-3 active:scale-95 transition-all disabled:opacity-50"
-            style={{ background: scanning ? '#1a1a2e' : 'linear-gradient(135deg, #dc2626, #b91c1c)' }}
-          >
+            style={{ background: scanning ? '#1a1a2e' : 'linear-gradient(135deg, #dc2626, #b91c1c)' }}>
             {scanning ? (
-              <>
-                <Loader2 size={20} className="animate-spin" />
-                Analizando carta...
-              </>
+              <><Loader2 size={20} className="animate-spin" />Analizando carta...</>
             ) : (
-              <>
-                <ScanLine size={20} />
-                Escanear carta
-              </>
+              <><ScanLine size={20} />Escanear carta</>
             )}
           </button>
         )}
