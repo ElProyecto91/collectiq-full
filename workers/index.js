@@ -6,7 +6,7 @@ import { _ENV, getEnv, corsHeaders, jsonResponse } from './lib/cors.js';
 import { handleAuthTelegram, handleAuthCode, handleBotWebhook, handleTelegramCallback, handleAdminVerify, handleAdminGiveGo, handleCreateInvoice, handleAnalytics } from './handlers/auth.js';
 import { handleVision, handleScanner, handleCronPrices } from './handlers/pokemon.js';
 import { handleFunkoImport, handleFunkoPrice } from './handlers/funko.js';
-import { handleOnePieceCards, handleOnePieceSets, handleOnePiecePrice } from './handlers/onepiece.js';
+import { handleOnePieceCards, handleOnePieceSets, handleOnePiecePrice, handleOnePieceScanner } from './handlers/onepiece.js';
 import { handleMagicCards, handleMagicSets, handleYugiohCards, handleYugiohSets, handleLorcanaCards, handleLorcanaSets } from './handlers/tcg.js';
 import { handleMarketplaceList, handleMarketplaceCreate, handleMarketplaceUpdate, handleMarketplaceDelete, handleMarketplaceOffer, handleMarketplaceStats } from './handlers/marketplace.js';
 
@@ -38,7 +38,8 @@ async function handleRequest(request) {
   // One Piece
   if (route === 'onepiece-cards')     return handleOnePieceCards(request);
   if (route === 'onepiece-sets')      return handleOnePieceSets(request);
-  if (route === 'onepiece-price')     return handleOnePiecePrice(request); // nuevo: precio por región
+  if (route === 'onepiece-price')     return handleOnePiecePrice(request);
+  if (route === 'onepiece-scanner')   return handleOnePieceScanner(request); // nuevo: precio por región
 
   // Magic
   if (route === 'magic-cards')        return handleMagicCards(request);
