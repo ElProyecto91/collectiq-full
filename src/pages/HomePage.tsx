@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, ChevronRight, Star, Zap, ShoppingBag, AlertTriangle, Scan } from 'lucide-react';
+import { Bell, ChevronRight, Star, Zap, ShoppingBag, AlertTriangle } from 'lucide-react';
 import { RoutePaths } from '@/config';
 import { useUserStore } from '@/store';
 import { useDisplayName } from '@/hooks';
@@ -113,113 +113,22 @@ const RiftboundLogo = () => (
   </svg>
 );
 
-// ── COLECCIONES ────────────────────────────────────────────────
 const COLLECTIONS = [
-  {
-    key: 'pokemon', label: 'Pokémon TCG', Logo: PokemonLogo,
-    desc: 'Cartas, escáner IA, deck builder',
-    route: RoutePaths.PokemonHome,
-    bg: 'from-yellow-500/15 to-blue-600/15', border: 'border-yellow-500/20',
-    color: '#FFCB05', active: true,
-  },
-  {
-    key: 'funko', label: 'Funko Pop', Logo: FunkoLogo,
-    desc: 'Colección, precios eBay, wishlist',
-    route: RoutePaths.FunkoHome,
-    bg: 'from-red-600/15 to-pink-500/15', border: 'border-red-500/20',
-    color: '#E31837', active: true,
-  },
-  {
-    key: 'onepiece', label: 'One Piece TCG', Logo: OnePieceLogo,
-    desc: 'Explorador de cartas',
-    route: RoutePaths.OnePieceHome,
-    bg: 'from-yellow-500/10 to-red-500/10', border: 'border-yellow-500/15',
-    color: '#D4AF37', active: true,
-  },
-  {
-    key: 'magic', label: 'Magic: The Gathering', Logo: MagicLogo,
-    desc: 'Próximamente',
-    route: null,
-    bg: 'from-amber-700/10 to-amber-500/10', border: 'border-amber-700/10',
-    color: '#B5860D', active: false,
-  },
-  {
-    key: 'yugioh', label: 'Yu-Gi-Oh!', Logo: YugiohLogo,
-    desc: 'Próximamente',
-    route: null,
-    bg: 'from-yellow-700/10 to-yellow-500/10', border: 'border-yellow-700/10',
-    color: '#C8A951', active: false,
-  },
-  {
-    key: 'lorcana', label: 'Lorcana', Logo: LorcanaLogo,
-    desc: 'Próximamente',
-    route: null,
-    bg: 'from-purple-500/10 to-blue-500/10', border: 'border-purple-500/10',
-    color: '#7B68EE', active: false,
-  },
-  {
-    key: 'digimon', label: 'Digimon TCG', Logo: DigimonLogo,
-    desc: 'Próximamente',
-    route: null,
-    bg: 'from-blue-500/10 to-cyan-500/10', border: 'border-blue-500/10',
-    color: '#00AEEF', active: false,
-  },
-  {
-    key: 'dragonball', label: 'Dragon Ball SCG', Logo: DragonBallLogo,
-    desc: 'Próximamente',
-    route: null,
-    bg: 'from-orange-500/10 to-yellow-500/10', border: 'border-orange-500/10',
-    color: '#FF6600', active: false,
-  },
-  {
-    key: 'starwars', label: 'Star Wars Unlimited', Logo: StarWarsLogo,
-    desc: 'Próximamente',
-    route: null,
-    bg: 'from-yellow-400/10 to-gray-700/10', border: 'border-yellow-400/10',
-    color: '#FFE81F', active: false,
-  },
-  {
-    key: 'wow', label: 'World of Warcraft', Logo: WoWLogo,
-    desc: 'Próximamente',
-    route: null,
-    bg: 'from-yellow-600/10 to-orange-700/10', border: 'border-yellow-600/10',
-    color: '#F4C430', active: false,
-  },
-  {
-    key: 'gundam', label: 'Gundam TCG', Logo: GundamLogo,
-    desc: 'Próximamente',
-    route: null,
-    bg: 'from-gray-500/10 to-blue-500/10', border: 'border-gray-500/10',
-    color: '#C0C0C0', active: false,
-  },
-  {
-    key: 'weisschwarz', label: 'Weiss Schwarz', Logo: WeissSchwarzLogo,
-    desc: 'Próximamente',
-    route: null,
-    bg: 'from-white/5 to-gray-500/10', border: 'border-white/10',
-    color: '#FFFFFF', active: false,
-  },
-  {
-    key: 'vanguard', label: 'Cardfight!! Vanguard', Logo: VanguardLogo,
-    desc: 'Próximamente',
-    route: null,
-    bg: 'from-red-500/10 to-orange-500/10', border: 'border-red-500/10',
-    color: '#E74C3C', active: false,
-  },
-  {
-    key: 'fleshandblood', label: 'Flesh & Blood', Logo: FleshBloodLogo,
-    desc: 'Próximamente',
-    route: null,
-    bg: 'from-red-800/10 to-gray-700/10', border: 'border-red-800/10',
-    color: '#CC0000', active: false,
-  },
-  {
-    key: 'riftbound', label: 'Riftbound', Logo: RiftboundLogo,
-    desc: 'Próximamente',
-    route: null,
-    bg: 'from-purple-600/10 to-indigo-500/10', border: 'border-purple-600/10',
-    color: '#9B59B6', active: false,
-  },
+  { key: 'pokemon', label: 'Pokémon TCG', Logo: PokemonLogo, desc: 'Cartas, escáner IA, deck builder', route: RoutePaths.PokemonHome, bg: 'from-yellow-500/15 to-blue-600/15', border: 'border-yellow-500/20', color: '#FFCB05', active: true },
+  { key: 'funko', label: 'Funko Pop', Logo: FunkoLogo, desc: 'Colección, precios eBay, wishlist', route: RoutePaths.FunkoHome, bg: 'from-red-600/15 to-pink-500/15', border: 'border-red-500/20', color: '#E31837', active: true },
+  { key: 'onepiece', label: 'One Piece TCG', Logo: OnePieceLogo, desc: 'Explorador, escáner, deck builder', route: RoutePaths.OnePieceHome, bg: 'from-yellow-500/10 to-red-500/10', border: 'border-yellow-500/15', color: '#D4AF37', active: true },
+  { key: 'magic', label: 'Magic: The Gathering', Logo: MagicLogo, desc: 'Próximamente', route: null, bg: 'from-amber-700/10 to-amber-500/10', border: 'border-amber-700/10', color: '#B5860D', active: false },
+  { key: 'yugioh', label: 'Yu-Gi-Oh!', Logo: YugiohLogo, desc: 'Próximamente', route: null, bg: 'from-yellow-700/10 to-yellow-500/10', border: 'border-yellow-700/10', color: '#C8A951', active: false },
+  { key: 'lorcana', label: 'Lorcana', Logo: LorcanaLogo, desc: 'Próximamente', route: null, bg: 'from-purple-500/10 to-blue-500/10', border: 'border-purple-500/10', color: '#7B68EE', active: false },
+  { key: 'digimon', label: 'Digimon TCG', Logo: DigimonLogo, desc: 'Próximamente', route: null, bg: 'from-blue-500/10 to-cyan-500/10', border: 'border-blue-500/10', color: '#00AEEF', active: false },
+  { key: 'dragonball', label: 'Dragon Ball SCG', Logo: DragonBallLogo, desc: 'Próximamente', route: null, bg: 'from-orange-500/10 to-yellow-500/10', border: 'border-orange-500/10', color: '#FF6600', active: false },
+  { key: 'starwars', label: 'Star Wars Unlimited', Logo: StarWarsLogo, desc: 'Próximamente', route: null, bg: 'from-yellow-400/10 to-gray-700/10', border: 'border-yellow-400/10', color: '#FFE81F', active: false },
+  { key: 'wow', label: 'World of Warcraft', Logo: WoWLogo, desc: 'Próximamente', route: null, bg: 'from-yellow-600/10 to-orange-700/10', border: 'border-yellow-600/10', color: '#F4C430', active: false },
+  { key: 'gundam', label: 'Gundam TCG', Logo: GundamLogo, desc: 'Próximamente', route: null, bg: 'from-gray-500/10 to-blue-500/10', border: 'border-gray-500/10', color: '#C0C0C0', active: false },
+  { key: 'weisschwarz', label: 'Weiss Schwarz', Logo: WeissSchwarzLogo, desc: 'Próximamente', route: null, bg: 'from-white/5 to-gray-500/10', border: 'border-white/10', color: '#FFFFFF', active: false },
+  { key: 'vanguard', label: 'Cardfight!! Vanguard', Logo: VanguardLogo, desc: 'Próximamente', route: null, bg: 'from-red-500/10 to-orange-500/10', border: 'border-red-500/10', color: '#E74C3C', active: false },
+  { key: 'fleshandblood', label: 'Flesh & Blood', Logo: FleshBloodLogo, desc: 'Próximamente', route: null, bg: 'from-red-800/10 to-gray-700/10', border: 'border-red-800/10', color: '#CC0000', active: false },
+  { key: 'riftbound', label: 'Riftbound', Logo: RiftboundLogo, desc: 'Próximamente', route: null, bg: 'from-purple-600/10 to-indigo-500/10', border: 'border-purple-600/10', color: '#9B59B6', active: false },
 ];
 
 function greetingByHour(): string {
@@ -229,7 +138,6 @@ function greetingByHour(): string {
   return 'Buenas noches';
 }
 
-// ── MAIN ───────────────────────────────────────────────────────
 export function HomePage() {
   const navigate = useNavigate();
   const telegramUser = useUserStore(s => s.telegramUser);
@@ -239,66 +147,22 @@ export function HomePage() {
     localStorage.getItem('collectiq_default_collection')
   );
   const [isPremium, setIsPremium] = useState(false);
-
-  // Stats por colección
   const [stats, setStats] = useState<Record<string, { items: number; value: number }>>({});
 
   useEffect(() => {
     if (!telegramUser?.id) return;
-
-    // Premium
-    supabase
-      .from('user_premium')
-      .select('plan, expires_at')
-      .eq('telegram_user_id', telegramUser.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data?.plan === 'go' && data.expires_at) {
-          setIsPremium(new Date(data.expires_at) > new Date());
-        }
-      });
-
-    // Stats Pokémon
-    supabase
-      .from('collection_items')
-      .select('market_price')
-      .eq('telegram_user_id', telegramUser.id)
-      .eq('tcg', 'pokemon')
-      .then(({ data }) => {
-        if (data) setStats(prev => ({
-          ...prev,
-          pokemon: {
-            items: data.length,
-            value: data.reduce((s, c) => s + (c.market_price ?? 0), 0),
-          },
-        }));
-      });
-
-    // Stats Funko
-    supabase
-      .from('funko_collection')
-      .select('quantity, market_value')
-      .eq('telegram_user_id', telegramUser.id)
-      .then(({ data }) => {
-        if (data) setStats(prev => ({
-          ...prev,
-          funko: {
-            items: data.reduce((s, f) => s + f.quantity, 0),
-            value: data.reduce((s, f) => s + ((f.market_value ?? 0) * f.quantity), 0),
-          },
-        }));
-      });
+    supabase.from('user_premium').select('plan, expires_at').eq('telegram_user_id', telegramUser.id).maybeSingle()
+      .then(({ data }) => { if (data?.plan === 'go' && data.expires_at) setIsPremium(new Date(data.expires_at) > new Date()); });
+    supabase.from('collection_items').select('market_price').eq('telegram_user_id', telegramUser.id).eq('tcg', 'pokemon')
+      .then(({ data }) => { if (data) setStats(prev => ({ ...prev, pokemon: { items: data.length, value: data.reduce((s, c) => s + (c.market_price ?? 0), 0) } })); });
+    supabase.from('funko_collection').select('quantity, market_value').eq('telegram_user_id', telegramUser.id)
+      .then(({ data }) => { if (data) setStats(prev => ({ ...prev, funko: { items: data.reduce((s, f) => s + f.quantity, 0), value: data.reduce((s, f) => s + ((f.market_value ?? 0) * f.quantity), 0) } })); });
+    supabase.from('collection_items').select('market_price').eq('telegram_user_id', telegramUser.id).eq('tcg', 'onepiece')
+      .then(({ data }) => { if (data) setStats(prev => ({ ...prev, onepiece: { items: data.length, value: data.reduce((s, c) => s + (c.market_price ?? 0), 0) } })); });
   }, [telegramUser?.id]);
 
-  const setDefault = (key: string) => {
-    localStorage.setItem('collectiq_default_collection', key);
-    setDefaultCollection(key);
-  };
-
-  const clearDefault = () => {
-    localStorage.removeItem('collectiq_default_collection');
-    setDefaultCollection(null);
-  };
+  const setDefault = (key: string) => { localStorage.setItem('collectiq_default_collection', key); setDefaultCollection(key); };
+  const clearDefault = () => { localStorage.removeItem('collectiq_default_collection'); setDefaultCollection(null); };
 
   const activeCollections = COLLECTIONS.filter(c => c.active);
   const comingCollections = COLLECTIONS.filter(c => !c.active);
@@ -306,63 +170,43 @@ export function HomePage() {
 
   return (
     <div className="min-h-screen bg-[#080810] text-white pb-28">
-
       {/* Header */}
       <div className="px-4 pt-8 pb-2 flex items-center justify-between">
         <div>
           <p className="text-xs text-gray-500">{greetingByHour()},</p>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
             {name}
-            {isPremium && (
-              <span className="text-xs bg-yellow-500/20 border border-yellow-500/30 text-yellow-400 px-2 py-0.5 rounded-full font-bold">GO ⚡</span>
-            )}
+            {isPremium && <span className="text-xs bg-yellow-500/20 border border-yellow-500/30 text-yellow-400 px-2 py-0.5 rounded-full font-bold">GO ⚡</span>}
           </h1>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => navigate(RoutePaths.BugReport)}
-            className="w-9 h-9 rounded-xl bg-white/5 border border-white/8 flex items-center justify-center"
-            title="Reportar fallo">
+          <button onClick={() => navigate(RoutePaths.BugReport)} className="w-9 h-9 rounded-xl bg-white/5 border border-white/8 flex items-center justify-center">
             <AlertTriangle className="w-4 h-4 text-orange-400" />
           </button>
-          <button
-            onClick={() => navigate(RoutePaths.Notifications)}
-            className="w-9 h-9 rounded-xl bg-white/5 border border-white/8 flex items-center justify-center">
+          <button onClick={() => navigate(RoutePaths.Notifications)} className="w-9 h-9 rounded-xl bg-white/5 border border-white/8 flex items-center justify-center">
             <Bell className="w-4 h-4 text-gray-400" />
           </button>
-          <button
-            onClick={() => navigate(RoutePaths.Profile)}
-            className="w-9 h-9 rounded-xl bg-white/5 border border-white/8 flex items-center justify-center overflow-hidden">
+          <button onClick={() => navigate(RoutePaths.Profile)} className="w-9 h-9 rounded-xl bg-white/5 border border-white/8 flex items-center justify-center overflow-hidden">
             {telegramUser?.photo_url
               ? <img src={telegramUser.photo_url} className="w-9 h-9 object-cover" alt="avatar" />
-              : <span className="text-sm font-bold text-white">{name?.[0]?.toUpperCase()}</span>
-            }
+              : <span className="text-sm font-bold text-white">{name?.[0]?.toUpperCase()}</span>}
           </button>
         </div>
       </div>
 
       <div className="px-4 space-y-5 mt-4">
-
         {/* Colección principal */}
         {defaultCol ? (
-          <button
-            onClick={() => navigate(defaultCol.route!)}
+          <button onClick={() => navigate(defaultCol.route!)}
             className={`w-full relative overflow-hidden bg-gradient-to-br ${defaultCol.bg} border ${defaultCol.border} rounded-3xl p-5 active:scale-[0.98] transition-transform text-left`}>
-            <div className="absolute top-0 right-0 w-40 h-40 rounded-full blur-3xl opacity-15 pointer-events-none"
-              style={{ background: defaultCol.color }} />
+            <div className="absolute top-0 right-0 w-40 h-40 rounded-full blur-3xl opacity-15 pointer-events-none" style={{ background: defaultCol.color }} />
             <div className="relative z-10">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-[10px] font-bold text-white/40 uppercase tracking-[0.2em]">MI COLECCIÓN PRINCIPAL</span>
-                <button
-                  onClick={e => { e.stopPropagation(); clearDefault(); }}
-                  className="text-[10px] text-white/30 hover:text-white/60 transition-colors">
-                  cambiar
-                </button>
+                <button onClick={e => { e.stopPropagation(); clearDefault(); }} className="text-[10px] text-white/30 hover:text-white/60 transition-colors">cambiar</button>
               </div>
               <defaultCol.Logo />
               <p className="text-xs text-white/40 mt-1 mb-3">{defaultCol.desc}</p>
-
-              {/* Stats inline */}
               {stats[defaultCol.key] && (
                 <div className="flex gap-3 mb-3">
                   <div className="bg-white/10 rounded-xl px-3 py-2">
@@ -377,7 +221,6 @@ export function HomePage() {
                   )}
                 </div>
               )}
-
               <div className="flex items-center gap-1 text-white/50">
                 <span className="text-xs font-medium">Abrir colección</span>
                 <ChevronRight className="w-3 h-3" />
@@ -394,44 +237,26 @@ export function HomePage() {
           </div>
         )}
 
-        {/* Accesos rápidos */}
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            onClick={() => navigate(RoutePaths.Marketplace)}
-            className="bg-gradient-to-br from-green-600/15 to-emerald-500/15 border border-green-500/20 rounded-2xl p-4 flex items-center gap-3 active:scale-95 transition-transform text-left">
-            <div className="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center shrink-0">
-              <ShoppingBag className="w-5 h-5 text-green-400" />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-white">Marketplace</p>
-              <p className="text-[10px] text-gray-400">Compra y vende</p>
-            </div>
-          </button>
-          <button
-            onClick={() => navigate(RoutePaths.Scanner)}
-            className="bg-gradient-to-br from-blue-600/15 to-indigo-500/15 border border-blue-500/20 rounded-2xl p-4 flex items-center gap-3 active:scale-95 transition-transform text-left">
-            <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center shrink-0">
-              <Scan className="w-5 h-5 text-blue-400" />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-white">Escáner IA</p>
-              <p className="text-[10px] text-gray-400">Identifica cartas</p>
-            </div>
-          </button>
-        </div>
+        {/* Acceso rápido — solo Marketplace */}
+        <button onClick={() => navigate(RoutePaths.Marketplace)}
+          className="w-full bg-gradient-to-br from-green-600/15 to-emerald-500/15 border border-green-500/20 rounded-2xl p-4 flex items-center gap-3 active:scale-95 transition-transform text-left">
+          <div className="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center shrink-0">
+            <ShoppingBag className="w-5 h-5 text-green-400" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-white">Marketplace</p>
+            <p className="text-[10px] text-gray-400">Compra, vende e intercambia</p>
+          </div>
+          <ChevronRight className="w-4 h-4 text-gray-500 ml-auto" />
+        </button>
 
         {/* Mis colecciones activas */}
         <div className="space-y-2">
           <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Mis colecciones</p>
           {activeCollections.map(col => (
-            <div key={col.key}
-              className={`bg-gradient-to-r ${col.bg} border ${col.border} rounded-2xl p-4 flex items-center gap-3`}>
-              <button
-                onClick={() => navigate(col.route!)}
-                className="flex items-center gap-3 flex-1 min-w-0">
-                <div className="w-16 h-10 flex items-center justify-center shrink-0">
-                  <col.Logo />
-                </div>
+            <div key={col.key} className={`bg-gradient-to-r ${col.bg} border ${col.border} rounded-2xl p-4 flex items-center gap-3`}>
+              <button onClick={() => navigate(col.route!)} className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="w-16 h-10 flex items-center justify-center shrink-0"><col.Logo /></div>
                 <div className="flex-1 min-w-0 text-left">
                   <p className="text-sm font-bold text-white">{col.label}</p>
                   <p className="text-xs text-white/40">
@@ -444,11 +269,7 @@ export function HomePage() {
               </button>
               <button
                 onClick={() => defaultCollection === col.key ? clearDefault() : setDefault(col.key)}
-                className={`shrink-0 w-7 h-7 rounded-xl flex items-center justify-center transition-all ${
-                  defaultCollection === col.key
-                    ? 'bg-yellow-500 text-black'
-                    : 'bg-white/5 border border-white/10 text-gray-600'
-                }`}>
+                className={`shrink-0 w-7 h-7 rounded-xl flex items-center justify-center transition-all ${defaultCollection === col.key ? 'bg-yellow-500 text-black' : 'bg-white/5 border border-white/10 text-gray-600'}`}>
                 <Star className="w-3.5 h-3.5" fill={defaultCollection === col.key ? 'currentColor' : 'none'} />
               </button>
             </div>
@@ -457,8 +278,7 @@ export function HomePage() {
 
         {/* Banner GO */}
         {!isPremium && (
-          <button
-            onClick={() => navigate(RoutePaths.Premium)}
+          <button onClick={() => navigate(RoutePaths.Premium)}
             className="w-full bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border border-yellow-500/20 rounded-2xl p-4 flex items-center gap-3 active:scale-[0.98] transition-transform">
             <div className="w-10 h-10 rounded-xl bg-yellow-500/20 flex items-center justify-center shrink-0">
               <Zap className="w-5 h-5 text-yellow-400" />
@@ -476,15 +296,13 @@ export function HomePage() {
           <p className="text-xs font-bold text-gray-600 uppercase tracking-wider">Próximamente</p>
           <div className="grid grid-cols-2 gap-3">
             {comingCollections.map(col => (
-              <div key={col.key}
-                className={`bg-gradient-to-br ${col.bg} border ${col.border} rounded-2xl p-3 flex flex-col items-center gap-2 opacity-50`}>
+              <div key={col.key} className={`bg-gradient-to-br ${col.bg} border ${col.border} rounded-2xl p-3 flex flex-col items-center gap-2 opacity-50`}>
                 <col.Logo />
                 <p className="text-[10px] font-bold text-gray-500 text-center">{col.label}</p>
               </div>
             ))}
           </div>
         </div>
-
       </div>
     </div>
   );
