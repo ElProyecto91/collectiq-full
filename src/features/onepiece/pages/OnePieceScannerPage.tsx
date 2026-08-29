@@ -177,8 +177,9 @@ export function OnePieceScannerPage() {
       });
       if (!scanRes.ok) { const errData = await scanRes.json(); throw new Error(errData.error || 'Error ' + scanRes.status); }
       const scanData = await scanRes.json();
-      const geminiResult = scanData?.result;
-      if (!geminiResult) throw new Error('No se pudo leer la respuesta de IA');
+console.log('scanData:', JSON.stringify(scanData));
+const geminiResult = scanData?.result;
+if (!geminiResult) throw new Error(JSON.stringify(scanData));
 
       const parsed: any = {
         is_onepiece_card: geminiResult.tcg === 'onepiece',
