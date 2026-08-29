@@ -167,7 +167,7 @@ export async function handleOnePieceScanner(request) {
     var geminiBody = {
       contents: [{ parts: [
         {
-          text: 'You are an expert in One Piece TCG cards. Analyze this card image and return ONLY JSON with these fields: { "is_onepiece_card": boolean, "name": "card name in English", "number": "card number like OP01-077 or ST01-001", "set_id": "set code like OP01 or ST01", "rarity": "Common|Uncommon|Rare|Super Rare|Secret Rare|Leader|Promo", "type": "Character|Event|Stage|Leader|DON!!", "color": ["Red","Blue","Green","Purple","Black","Yellow"], "cost": number or null, "power": number or null, "confidence": 0.0-1.0 }. Return ONLY the JSON object, nothing else.'
+          text: 'You are an expert in One Piece TCG cards. Analyze this card image and return ONLY a JSON object with these fields: is_onepiece_card (boolean), name (string in English), number (string like OP01-077), set_id (string like OP01), rarity (string), type (string), color (array of strings), cost (number or null), power (number or null), confidence (number 0-1). Return ONLY valid JSON, no markdown.'
         },
         { inline_data: { mime_type: 'image/jpeg', data: body.image_base64 } }
       ]}],
@@ -178,10 +178,26 @@ export async function handleOnePieceScanner(request) {
       'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + getEnv('GEMINI_API_KEY'),
       { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(geminiBody) }
     );
+
+    if (!gr.ok) {
+      var errText = await gr.text();
+      return jsonResponse({ error: 'Gemini error ' + gr.status + ': ' + errText.slice(0, 200) }, 500);
+    }
+
     var gd = await gr.json();
-    var text = (((gd.candidates || [])[0] || {}).content || {});
-    text = ((text.parts || [])[0] || {}).text || '';
-    var parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+    var rawContent = (((gd.candidates || [])[0] || {}).content || {});
+    var text = ((rawContent.parts || [])[0] || {}).text || '';
+
+    if (!text) {
+      return jsonResponse({ error: 'Gemini vacio', debug: JSON.stringify(gd).slice(0, 200) }, 500);
+    }
+
+    var parsed;
+    try {
+      parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+    } catch(pe) {
+      return jsonResponse({ error: 'Parse error: ' + pe.message, raw: text.slice(0, 200) }, 500);
+    }
 
     if (!parsed.is_onepiece_card) {
       return jsonResponse({ result: null, error: 'No es una carta de One Piece TCG' });
@@ -196,8 +212,8 @@ export async function handleOnePieceScanner(request) {
         rarity: parsed.rarity || '',
         type: parsed.type || '',
         color: Array.isArray(parsed.color) ? parsed.color : [],
-        cost: parsed.cost ?? null,
-        power: parsed.power ?? null,
+        cost: parsed.cost != null ? parsed.cost : null,
+        power: parsed.power != null ? parsed.power : null,
         confidence: parsed.confidence || 0.5,
       }
     });
