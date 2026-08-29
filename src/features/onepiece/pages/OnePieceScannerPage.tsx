@@ -170,10 +170,10 @@ export function OnePieceScannerPage() {
     setAdded(false);
     try {
       // Escanear via Worker — tiene GEMINI_API_KEY, no expone clave en frontend
-      const scanRes = await fetch(`${API}/scanner`, {
+      const scanRes = await fetch(`${API}/onepiece-scanner`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image_base64: b64, tcg_hint: 'onepiece' }),
+        body: JSON.stringify({ image_base64: b64 }),
       });
       if (!scanRes.ok) throw new Error('Error al conectar con el servidor');
       const scanData = await scanRes.json();
