@@ -1,5 +1,5 @@
 // ============================================================
-// CollectIQ API Worker v4.0 — Cloudflare Workers
+// CollectIQ API Worker v4.1 — Cloudflare Workers
 // Arquitectura modular: handlers/ + lib/
 // ============================================================
 import { _ENV, getEnv, corsHeaders, jsonResponse } from './lib/cors.js';
