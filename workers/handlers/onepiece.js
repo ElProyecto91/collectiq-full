@@ -156,3 +156,52 @@ export async function handleOnePiecePrice(request) {
     return jsonResponse({ error: e.message }, 500);
   }
 }
+
+// ── Scanner One Piece con prompt especializado ────────────────
+export async function handleOnePieceScanner(request) {
+  if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
+  try {
+    var body = await request.json();
+    if (!body.image_base64) return jsonResponse({ error: 'image_base64 requerido' }, 400);
+
+    var geminiBody = {
+      contents: [{ parts: [
+        {
+          text: 'You are an expert in One Piece TCG cards. Analyze this card image and return ONLY JSON with these fields: { "is_onepiece_card": boolean, "name": "card name in English", "number": "card number like OP01-077 or ST01-001", "set_id": "set code like OP01 or ST01", "rarity": "Common|Uncommon|Rare|Super Rare|Secret Rare|Leader|Promo", "type": "Character|Event|Stage|Leader|DON!!", "color": ["Red","Blue","Green","Purple","Black","Yellow"], "cost": number or null, "power": number or null, "confidence": 0.0-1.0 }. Return ONLY the JSON object, nothing else.'
+        },
+        { inline_data: { mime_type: 'image/jpeg', data: body.image_base64 } }
+      ]}],
+      generationConfig: { temperature: 0, maxOutputTokens: 512 }
+    };
+
+    var gr = await fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + getEnv('GEMINI_API_KEY'),
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(geminiBody) }
+    );
+    var gd = await gr.json();
+    var text = (((gd.candidates || [])[0] || {}).content || {});
+    text = ((text.parts || [])[0] || {}).text || '';
+    var parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+
+    if (!parsed.is_onepiece_card) {
+      return jsonResponse({ result: null, error: 'No es una carta de One Piece TCG' });
+    }
+
+    return jsonResponse({
+      result: {
+        tcg: 'onepiece',
+        name: parsed.name || '',
+        number: parsed.number || '',
+        set_id: parsed.set_id || (parsed.number || '').split('-')[0] || '',
+        rarity: parsed.rarity || '',
+        type: parsed.type || '',
+        color: Array.isArray(parsed.color) ? parsed.color : [],
+        cost: parsed.cost ?? null,
+        power: parsed.power ?? null,
+        confidence: parsed.confidence || 0.5,
+      }
+    });
+  } catch(e) {
+    return jsonResponse({ error: e.message }, 500);
+  }
+}
