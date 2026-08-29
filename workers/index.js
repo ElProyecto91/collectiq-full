@@ -71,7 +71,7 @@ async function handleRequest(request) {
 
   return jsonResponse({
     ok: true, service: 'CollectIQ API', version: '4.0',
-    routes: ['auth-telegram','auth-code','bot-webhook','telegram-callback','admin-verify','admin-give-go','create-invoice','analytics','vision','scanner','funko-import','funko-price','onepiece-cards','onepiece-sets','onepiece-price','magic-cards','magic-sets','yugioh-cards','yugioh-sets','lorcana-cards','lorcana-sets','marketplace-list','marketplace-create','marketplace-update','marketplace-delete','marketplace-offer','marketplace-stats','cron-prices'],
+    routes: ['auth-telegram','auth-code','bot-webhook','telegram-callback','admin-verify','admin-give-go','create-invoice','analytics','vision','scanner','funko-import','funko-price','onepiece-cards','onepiece-sets','onepiece-price','onepiece-scanner','magic-cards','magic-sets','yugioh-cards','yugioh-sets','lorcana-cards','lorcana-sets','marketplace-list','marketplace-create','marketplace-update','marketplace-delete','marketplace-offer','marketplace-stats','cron-prices'],
   });
 }
 
