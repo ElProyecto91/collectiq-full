@@ -31,7 +31,15 @@ export function OnePieceHomePage() {
   ];
 
   return (
-    <div className="min-h-screen text-white pb-24" style={{ background: 'linear-gradient(180deg, #1a0505 0%, #0a0a0f 20%)' }}>
+    <div className="min-h-screen text-white pb-24" style={{ 
+      background: 'linear-gradient(180deg, #1a0505 0%, #0a0a0f 20%)',
+      backgroundImage: 'url(/one-piece-carteles-de-se-busca-13171.jpg)',
+      backgroundSize: 'cover',
+      backgroundPosition: 'center top',
+      backgroundRepeat: 'no-repeat',
+    }}>
+      {/* Overlay oscuro para legibilidad */}
+      <div className="min-h-screen pb-24" style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(10,10,15,0.92) 40%, rgba(10,10,15,1) 70%)' }}>
       {/* Header */}
       <div className="relative px-4 pt-6 pb-6 overflow-hidden">
         <div className="absolute inset-0 pointer-events-none">
@@ -154,6 +162,7 @@ export function OnePieceHomePage() {
           </div>
         )}
       </div>
+    </div>
     </div>
   );
 }
