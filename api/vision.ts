@@ -51,7 +51,7 @@ export default async function handler(req: any, res: any): Promise<void> {
     const { image } = req.body;
     if (!image) { res.status(400).json({ error: 'Missing image field' }); return; }
 
-    // ✅ Modelo correcto: gemini-2.0-flash
+    // ✅ Modelo correcto: gemini-3.5-flash
     const geminiRes = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`,
       {
