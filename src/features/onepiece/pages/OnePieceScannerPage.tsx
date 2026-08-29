@@ -169,35 +169,30 @@ export function OnePieceScannerPage() {
     setResult(null);
     setAdded(false);
     try {
-      const geminiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
-      const geminiRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{
-              parts: [
-                {
-                  text: `Eres un experto en One Piece TCG. Analiza esta imagen y devuelve SOLO JSON:
-{"is_onepiece_card":boolean,"name":"nombre en inglés","number":"ej OP01-077","set_id":"ej OP01","rarity":"Common|Uncommon|Rare|Super Rare|Secret Rare|Leader|Promo","type":"Character|Event|Stage|Leader|DON!!","color":["Red","Blue","Green","Purple","Black","Yellow"],"cost":número_o_null,"power":número_o_null,"confidence":0.0-1.0}
-Solo JSON, sin texto adicional.`
-                },
-                { inline_data: { mime_type: 'image/jpeg', data: b64 } }
-              ]
-            }],
-            generationConfig: { temperature: 0, maxOutputTokens: 512 }
-          })
-        }
-      );
-      const geminiData = await geminiRes.json();
-      const rawText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-      let parsed: any = {};
-      try {
-        parsed = JSON.parse(rawText.replace(/```json|```/g, '').trim());
-      } catch {
-        throw new Error('No se pudo leer la respuesta de IA');
-      }
+      // Escanear via Worker — tiene GEMINI_API_KEY, no expone clave en frontend
+      const scanRes = await fetch(`${API}/scanner`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image_base64: b64, tcg_hint: 'onepiece' }),
+      });
+      if (!scanRes.ok) throw new Error('Error al conectar con el servidor');
+      const scanData = await scanRes.json();
+      const geminiResult = scanData?.result;
+      if (!geminiResult) throw new Error('No se pudo leer la respuesta de IA');
+
+      const parsed: any = {
+        is_onepiece_card: geminiResult.tcg === 'onepiece',
+        name: geminiResult.name || '',
+        number: geminiResult.number || '',
+        set_id: (geminiResult.number || '').split('-')[0] || '',
+        rarity: geminiResult.rarity || '',
+        type: '',
+        color: [],
+        cost: null,
+        power: null,
+        confidence: geminiResult.confidence || 0.5,
+      };
+
       if (!parsed.is_onepiece_card) {
         setScanError('No parece una carta de One Piece TCG. Inténtalo con mejor iluminación.');
         setScanning(false);
@@ -332,7 +327,7 @@ Solo JSON, sin texto adicional.`
       </div>
 
       {/* Panel inferior */}
-      <div className="bg-[#0a0a0f] border-t border-white/8 px-4 pt-4 pb-8 space-y-4 z-10">
+      <div className="bg-[#0a0a0f] border-t border-white/8 px-4 pt-3 pb-4 space-y-3 z-10">
 
         {/* Error escaneo */}
         {scanError && (
