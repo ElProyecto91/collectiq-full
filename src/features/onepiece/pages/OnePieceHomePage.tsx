@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Search, Heart, BarChart2, Layers, ChevronRight, Sparkles, ShoppingBag, Swords, TrendingUp } from 'lucide-react';
+import { ArrowLeft, Search, Heart, BarChart2, Layers, ChevronRight, Sparkles, ShoppingBag, Swords, ScanLine } from 'lucide-react';
 import { RoutePaths } from '@/config';
 import { useCollectionList } from '@/hooks/use-collection';
 import { useWishlistList } from '@/hooks/use-wishlist';
@@ -14,7 +14,6 @@ export function OnePieceHomePage() {
   const cards = allCards.filter(c => c.tcg === 'onepiece');
   const wishlist = allWishlist.filter(w => w.tcg === 'onepiece');
   const totalCards = cards.reduce((s, c) => s + c.quantity, 0);
-  const uniqueCards = cards.length;
   const totalValue = cards.reduce((s, c) => s + (c.marketPrice ?? 0) * c.quantity, 0);
   const recentCards = [...cards]
     .sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime())
@@ -22,11 +21,12 @@ export function OnePieceHomePage() {
   const topCards = [...cards].sort((a, b) => (b.marketPrice ?? 0) - (a.marketPrice ?? 0)).slice(0, 3);
 
   const quickActions = [
-    { icon: Search, label: 'Explorador', color: 'bg-red-500/15 text-red-400 border-red-500/20', path: '/onepiece/explorer' },
-    { icon: Layers, label: 'Colección', color: 'bg-green-500/15 text-green-400 border-green-500/20', path: '/onepiece/collection' },
-    { icon: Heart, label: 'Wishlist', color: 'bg-pink-500/15 text-pink-400 border-pink-500/20', path: '/onepiece/wishlist' },
-    { icon: BarChart2, label: 'Stats', color: 'bg-orange-500/15 text-orange-400 border-orange-500/20', path: '/onepiece/stats' },
-    { icon: Swords, label: 'Deck Builder', color: 'bg-blue-500/15 text-blue-400 border-blue-500/20', path: '/onepiece/deck-builder' },
+    { icon: Search,    label: 'Explorador',   color: 'bg-red-500/15 text-red-400 border-red-500/20',     path: '/onepiece/explorer' },
+    { icon: Layers,    label: 'Colección',    color: 'bg-green-500/15 text-green-400 border-green-500/20', path: '/onepiece/collection' },
+    { icon: Heart,     label: 'Wishlist',     color: 'bg-pink-500/15 text-pink-400 border-pink-500/20',   path: '/onepiece/wishlist' },
+    { icon: BarChart2, label: 'Stats',        color: 'bg-orange-500/15 text-orange-400 border-orange-500/20', path: '/onepiece/stats' },
+    { icon: Swords,    label: 'Deck Builder', color: 'bg-blue-500/15 text-blue-400 border-blue-500/20',   path: '/onepiece/deck-builder' },
+    { icon: ScanLine,  label: 'Escáner',      color: 'bg-purple-500/15 text-purple-400 border-purple-500/20', path: '/onepiece/scanner' },
     { icon: ShoppingBag, label: 'Marketplace', color: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/20', path: RoutePaths.Marketplace },
   ];
 
@@ -75,15 +75,15 @@ export function OnePieceHomePage() {
           </div>
         </div>
 
-        {/* Acciones */}
+        {/* Acciones rápidas — 4 columnas para 7 botones */}
         <div>
           <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-3">Accesos rápidos</p>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-4 gap-2">
             {quickActions.map(({ icon: Icon, label, color, path }) => (
               <button key={label} onClick={() => navigate(path)}
-                className={`flex flex-col items-center gap-2 border rounded-2xl py-3.5 px-2 active:scale-95 transition-transform ${color}`}>
-                <Icon size={20} />
-                <span className="text-[10px] font-semibold">{label}</span>
+                className={`flex flex-col items-center gap-2 border rounded-2xl py-3 px-1 active:scale-95 transition-transform ${color}`}>
+                <Icon size={18} />
+                <span className="text-[9px] font-semibold text-center leading-tight">{label}</span>
               </button>
             ))}
           </div>
@@ -102,7 +102,7 @@ export function OnePieceHomePage() {
               {topCards.map((card, i) => (
                 <div key={card.id} className="bg-[#111118] border border-white/8 rounded-2xl p-3 flex items-center gap-3">
                   <span className="text-xs text-gray-600 font-bold w-4">#{i + 1}</span>
-                  {card.imageUrl && <img src={card.imageUrl} alt={card.cardName ?? ''} className="w-9 h-13 object-cover rounded-lg shrink-0" style={{ height: '3.25rem' }} />}
+                  {card.imageUrl && <img src={card.imageUrl} alt={card.cardName ?? ''} className="w-9 object-cover rounded-lg shrink-0" style={{ height: '3.25rem' }} />}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-bold text-white truncate">{card.cardName}</p>
                     <p className="text-xs text-gray-500 truncate">{card.setName}</p>
@@ -123,9 +123,7 @@ export function OnePieceHomePage() {
             <div className="flex gap-2 overflow-x-auto pb-1">
               {recentCards.map(card => (
                 <div key={card.id} className="shrink-0 w-20">
-                  {card.imageUrl && (
-                    <img src={card.imageUrl} alt={card.cardName ?? ''} className="w-20 h-28 object-cover rounded-xl" loading="lazy" />
-                  )}
+                  {card.imageUrl && <img src={card.imageUrl} alt={card.cardName ?? ''} className="w-20 h-28 object-cover rounded-xl" loading="lazy" />}
                   <p className="text-[9px] text-gray-500 truncate mt-1 text-center">{card.cardName}</p>
                 </div>
               ))}
@@ -143,10 +141,16 @@ export function OnePieceHomePage() {
               <p className="text-white font-bold text-lg">Sin cartas todavía</p>
               <p className="text-sm text-gray-500 mt-1">Explora el catálogo y añade cartas a tu tripulación</p>
             </div>
-            <button onClick={() => navigate('/onepiece/explorer')}
-              className="bg-gradient-to-r from-red-600 to-red-500 text-white rounded-2xl px-6 py-3 font-semibold flex items-center gap-2 active:scale-95 transition-transform">
-              <Search size={18} /> Explorar cartas
-            </button>
+            <div className="flex gap-3">
+              <button onClick={() => navigate('/onepiece/explorer')}
+                className="bg-gradient-to-r from-red-600 to-red-500 text-white rounded-2xl px-5 py-3 font-semibold flex items-center gap-2 active:scale-95 transition-transform">
+                <Search size={16} /> Explorar
+              </button>
+              <button onClick={() => navigate('/onepiece/scanner')}
+                className="bg-purple-600/20 border border-purple-500/30 text-purple-400 rounded-2xl px-5 py-3 font-semibold flex items-center gap-2 active:scale-95 transition-transform">
+                <ScanLine size={16} /> Escanear
+              </button>
+            </div>
           </div>
         )}
       </div>
