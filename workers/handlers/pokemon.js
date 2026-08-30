@@ -31,7 +31,7 @@ export async function handleVision(request) {
       ]}],
       generationConfig: { temperature: 0, maxOutputTokens: 256 },
     };
-    var gr = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + getEnv('GEMINI_API_KEY'), {
+    var gr = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=' + getEnv('GEMINI_API_KEY'), {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(geminiBody),
     });
     var gd = await gr.json();
@@ -66,7 +66,7 @@ export async function handleScanner(request) {
         { inline_data: { mime_type: 'image/jpeg', data: body.image_base64 } },
       ]}],
     };
-    var gr = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + getEnv('GEMINI_API_KEY'), {
+    var gr = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=' + getEnv('GEMINI_API_KEY'), {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(geminiBody),
     });
     var gd = await gr.json();
@@ -110,6 +110,7 @@ export async function handleCronPrices() {
     results.push({ tcg: 'pokemon', updated: updated });
     await sbFetch('/marketplace_listings?status=eq.active&expires_at=lt.' + new Date().toISOString(), { method: 'PATCH', body: { status: 'expired' }, prefer: 'return=minimal' });
     results.push({ task: 'marketplace_expire', ok: true });
+
   } catch(e) { results.push({ error: e.message }); }
   return results;
 }
