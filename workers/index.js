@@ -8,6 +8,7 @@ import { handleAuthTelegram, handleAuthCode, handleBotWebhook, handleTelegramCal
 import { handleVision, handleScanner, handleCronPrices } from './handlers/pokemon.js';
 import { handleFunkoImport, handleFunkoPrice } from './handlers/funko.js';
 import { handleFunkoSync } from './handlers/funko-sync.js';
+import { handleFunkoImages } from './handlers/funko-images.js';
 import { handleOnePieceCards, handleOnePieceSets, handleOnePiecePrice, handleOnePieceScanner, handleOnePieceCronPrices } from './handlers/onepiece.js';
 import { handleMagicCards, handleMagicSets, handleYugiohCards, handleYugiohSets, handleLorcanaCards, handleLorcanaSets } from './handlers/tcg.js';
 import { handleMarketplaceList, handleMarketplaceCreate, handleMarketplaceUpdate, handleMarketplaceDelete, handleMarketplaceOffer, handleMarketplaceStats } from './handlers/marketplace.js';
@@ -37,6 +38,7 @@ async function handleRequest(request) {
   if (route === 'funko-import')       return handleFunkoImport(request);
   if (route === 'funko-price')        return handleFunkoPrice(request);
   if (route === 'funko-sync')         return handleFunkoSync(request);
+  if (route === 'funko-images')       return handleFunkoImages(request);
 
   // One Piece
   if (route === 'onepiece-cards')     return handleOnePieceCards(request);
@@ -64,7 +66,7 @@ async function handleRequest(request) {
   if (route === 'marketplace-offer')  return handleMarketplaceOffer(request);
   if (route === 'marketplace-stats')  return handleMarketplaceStats(request);
 
-  // Cron manual — Pokémon + One Piece
+  // Cron manual
   if (route === 'cron-prices') {
     var cronSecret = url.searchParams.get('secret') || '';
     if (cronSecret !== getEnv('CRON_SECRET')) return jsonResponse({ error: 'Unauthorized' }, 401);
@@ -78,7 +80,7 @@ async function handleRequest(request) {
       'auth-telegram','auth-code','bot-webhook','telegram-callback',
       'admin-verify','admin-give-go','create-invoice','analytics',
       'vision','scanner',
-      'funko-import','funko-price','funko-sync',
+      'funko-import','funko-price','funko-sync','funko-images',
       'onepiece-cards','onepiece-sets','onepiece-price','onepiece-scanner',
       'magic-cards','magic-sets',
       'yugioh-cards','yugioh-sets',
@@ -93,7 +95,6 @@ async function handleRequest(request) {
 // ── Export default (ES modules) ───────────────────────────────
 export default {
   async fetch(request, env, ctx) {
-    // Poblar _ENV con las variables de Cloudflare
     Object.assign(_ENV, env || {});
     return handleRequest(request);
   },
@@ -107,7 +108,7 @@ export default {
       console.log('Cron 3am ran:', JSON.stringify(pokemonResults.concat(onepieceResults)));
     }
 
-    // 4am cada domingo — sync catálogo Funko (Soda, Rides, Moments, Gold, etc.)
+    // 4am cada domingo — sync catálogo Funko completo
     if (event.cron === '0 4 * * 0') {
       var funkoResults = await handleFunkoSync(null);
       console.log('Cron funko-sync ran:', JSON.stringify(funkoResults));
