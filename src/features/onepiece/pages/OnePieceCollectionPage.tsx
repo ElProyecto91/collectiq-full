@@ -190,39 +190,42 @@ function SetPanel({ group, onAddWishlist, onZoom }: { group: SetGroup; onAddWish
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [missing, setMissing] = useState<any[]>([]);
+  const [catalogTotal, setCatalogTotal] = useState(0);
   const { formatPrice } = useCurrency();
-  const pct = group.total>0?Math.round((group.cards.length/group.total)*100):0;
-  const missingCount = group.total-group.cards.length;
+  const pct = catalogTotal>0?Math.round((group.cards.length/catalogTotal)*100):0;
+  const missingCount = catalogTotal>0?catalogTotal-group.cards.length:0;
 
   const loadMissing = async () => {
-    if (missing.length>0) return;
+    if (loading) return;
     setLoading(true);
     try {
-      // Cargar todas las cartas del set — paginando si hace falta
+      // Cargar todas las cartas del set paginando
       const allSetCards: any[] = [];
       let page = 1;
       while (true) {
         const r = await fetch(`${API}/onepiece-cards?set=${encodeURIComponent(group.setId)}&limit=50&page=${page}`);
+        if (!r.ok) break;
         const d = await r.json();
         const batch = d.cards || [];
         allSetCards.push(...batch);
-        if (batch.length < 50 || allSetCards.length >= (d.total || 999)) break;
+        if (batch.length < 50 || allSetCards.length >= (d.total || 9999)) break;
         page++;
       }
-      const ownedIds = new Set(group.cards.map((c:any)=>c.cardId??c.cardNumber??c.card_number??'').filter(Boolean));
-      const missingCards = allSetCards.filter((c:any)=>!ownedIds.has(c.id)&&!ownedIds.has(c.number));
+      setCatalogTotal(allSetCards.length);
+      const ownedIds = new Set(
+        group.cards.flatMap((c:any) => [c.cardId, c.cardNumber, c.card_number].filter(Boolean))
+      );
+      const missingCards = allSetCards.filter((c:any) =>
+        !ownedIds.has(c.id) && !ownedIds.has(c.number)
+      );
       setMissing(missingCards);
-      // Actualizar total del grupo si no lo teníamos
-      if (group.total===0 && allSetCards.length>0) {
-        // no podemos mutar group aquí pero lo usamos para mostrar el total real
-      }
-    } catch(e) { console.error('loadMissing error:', e); }
+    } catch(e) {}
     setLoading(false);
   };
 
   return (
     <div className="bg-[#111118] border border-white/8 rounded-2xl overflow-hidden">
-      <button onClick={()=>{setExpanded(!expanded);if(!expanded)loadMissing();}} className="w-full p-4 text-left">
+      <button onClick={()=>{const next=!expanded;setExpanded(next);if(next&&missing.length===0)loadMissing();}} className="w-full p-4 text-left">
         <div className="flex items-start justify-between gap-2 mb-3">
           <div className="min-w-0"><p className="text-sm font-bold text-white truncate">{group.setName||group.setId}</p><p className="text-xs text-gray-500 mt-0.5">{group.cards.length}{group.total>0?`/${group.total}`:''} únicas · {group.owned} total</p></div>
           <div className="text-right shrink-0">{pct===100&&<span className="text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-medium block mb-1">✓ Completo</span>}{group.totalValue>0&&<p className="text-xs text-green-400 font-bold">{formatPrice(group.totalValue)}</p>}</div>
@@ -244,7 +247,7 @@ function SetPanel({ group, onAddWishlist, onZoom }: { group: SetGroup; onAddWish
               </div>
             ))}
           </div>
-          {group.total>0&&missingCount>0&&(
+          {missingCount>0&&(
             <>
               <p className="text-xs font-bold text-red-400 flex items-center gap-1.5 mt-2"><AlertCircle size={12}/> Faltan ({missingCount})</p>
               {loading?<div className="flex justify-center py-4"><Loader2 size={16} className="animate-spin text-gray-500"/></div>:missing.length>0?(
