@@ -1,5 +1,5 @@
 // ============================================================
-// CollectIQ API Worker v4.0 — Cloudflare Workers
+// CollectIQ API Worker v4.1 — Cloudflare Workers
 // Arquitectura modular: handlers/ + lib/
 // ============================================================
 import { _ENV, getEnv, corsHeaders, jsonResponse } from './lib/cors.js';
@@ -7,6 +7,7 @@ import { sbFetch } from './lib/supabase.js';
 import { handleAuthTelegram, handleAuthCode, handleBotWebhook, handleTelegramCallback, handleAdminVerify, handleAdminGiveGo, handleCreateInvoice, handleAnalytics } from './handlers/auth.js';
 import { handleVision, handleScanner, handleCronPrices } from './handlers/pokemon.js';
 import { handleFunkoImport, handleFunkoPrice } from './handlers/funko.js';
+import { handleFunkoSync } from './handlers/funko-sync.js';
 import { handleOnePieceCards, handleOnePieceSets, handleOnePiecePrice, handleOnePieceScanner, handleOnePieceCronPrices } from './handlers/onepiece.js';
 import { handleMagicCards, handleMagicSets, handleYugiohCards, handleYugiohSets, handleLorcanaCards, handleLorcanaSets } from './handlers/tcg.js';
 import { handleMarketplaceList, handleMarketplaceCreate, handleMarketplaceUpdate, handleMarketplaceDelete, handleMarketplaceOffer, handleMarketplaceStats } from './handlers/marketplace.js';
@@ -35,12 +36,13 @@ async function handleRequest(request) {
   // Funko
   if (route === 'funko-import')       return handleFunkoImport(request);
   if (route === 'funko-price')        return handleFunkoPrice(request);
+  if (route === 'funko-sync')         return handleFunkoSync(request);
 
   // One Piece
   if (route === 'onepiece-cards')     return handleOnePieceCards(request);
   if (route === 'onepiece-sets')      return handleOnePieceSets(request);
   if (route === 'onepiece-price')     return handleOnePiecePrice(request);
-  if (route === 'onepiece-scanner')   return handleOnePieceScanner(request); // nuevo: precio por región
+  if (route === 'onepiece-scanner')   return handleOnePieceScanner(request);
 
   // Magic
   if (route === 'magic-cards')        return handleMagicCards(request);
@@ -62,7 +64,7 @@ async function handleRequest(request) {
   if (route === 'marketplace-offer')  return handleMarketplaceOffer(request);
   if (route === 'marketplace-stats')  return handleMarketplaceStats(request);
 
-  // Cron manual
+  // Cron manual — Pokémon + One Piece
   if (route === 'cron-prices') {
     var cronSecret = url.searchParams.get('secret') || '';
     if (cronSecret !== getEnv('CRON_SECRET')) return jsonResponse({ error: 'Unauthorized' }, 401);
@@ -71,8 +73,20 @@ async function handleRequest(request) {
   }
 
   return jsonResponse({
-    ok: true, service: 'CollectIQ API', version: '4.0',
-    routes: ['auth-telegram','auth-code','bot-webhook','telegram-callback','admin-verify','admin-give-go','create-invoice','analytics','vision','scanner','funko-import','funko-price','onepiece-cards','onepiece-sets','onepiece-price','magic-cards','magic-sets','yugioh-cards','yugioh-sets','lorcana-cards','lorcana-sets','marketplace-list','marketplace-create','marketplace-update','marketplace-delete','marketplace-offer','marketplace-stats','cron-prices'],
+    ok: true, service: 'CollectIQ API', version: '4.1',
+    routes: [
+      'auth-telegram','auth-code','bot-webhook','telegram-callback',
+      'admin-verify','admin-give-go','create-invoice','analytics',
+      'vision','scanner',
+      'funko-import','funko-price','funko-sync',
+      'onepiece-cards','onepiece-sets','onepiece-price','onepiece-scanner',
+      'magic-cards','magic-sets',
+      'yugioh-cards','yugioh-sets',
+      'lorcana-cards','lorcana-sets',
+      'marketplace-list','marketplace-create','marketplace-update',
+      'marketplace-delete','marketplace-offer','marketplace-stats',
+      'cron-prices',
+    ],
   });
 }
 
@@ -85,8 +99,18 @@ export default {
   },
   async scheduled(event, env, ctx) {
     Object.assign(_ENV, env || {});
-    var pokemonResults = await handleCronPrices();
-    var onepieceResults = await handleOnePieceCronPrices(sbFetch);
-    console.log('Cron ran:', JSON.stringify(pokemonResults.concat(onepieceResults)));
+
+    // 3am diario — precios Pokémon + One Piece + expirar marketplace
+    if (event.cron === '0 3 * * *') {
+      var pokemonResults = await handleCronPrices();
+      var onepieceResults = await handleOnePieceCronPrices(sbFetch);
+      console.log('Cron 3am ran:', JSON.stringify(pokemonResults.concat(onepieceResults)));
+    }
+
+    // 4am cada domingo — sync catálogo Funko (Soda, Rides, Moments, Gold, etc.)
+    if (event.cron === '0 4 * * 0') {
+      var funkoResults = await handleFunkoSync(null);
+      console.log('Cron funko-sync ran:', JSON.stringify(funkoResults));
+    }
   },
 };
