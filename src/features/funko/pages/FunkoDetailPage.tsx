@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Heart, Plus, Check, ShoppingBag, TrendingUp, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Heart, Plus, Check, ShoppingBag, TrendingUp, AlertTriangle, Tag } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useUserStore } from '@/store';
 
@@ -79,12 +79,8 @@ export function FunkoDetailPage() {
         .then(async data => {
           if (data.price) {
             setPriceData(data);
-            // Guardar market_value automáticamente si está en colección
             if (colData?.id) {
-              await supabase
-                .from('funko_collection')
-                .update({ market_value: data.price })
-                .eq('id', colData.id);
+              await supabase.from('funko_collection').update({ market_value: data.price }).eq('id', colData.id);
             }
           }
           setLoadingPrice(false);
@@ -108,7 +104,6 @@ export function FunkoDetailPage() {
       setCollectionEntry(data);
       setStatusMsg('✅ Añadido a tu colección');
       setTimeout(() => setStatusMsg(''), 3000);
-      // Guardar precio de mercado si ya lo tenemos
       if (priceData?.price && data?.id) {
         await supabase.from('funko_collection').update({ market_value: priceData.price }).eq('id', data.id);
       }
@@ -127,6 +122,23 @@ export function FunkoDetailPage() {
       setStatusMsg('✅ Añadido a tu wishlist');
       setTimeout(() => setStatusMsg(''), 3000);
     }
+  };
+
+  // Navega al marketplace con datos prefilled para vender este Funko
+  const handleSellInMarketplace = () => {
+    navigate('/marketplace', {
+      state: {
+        tab: 'create',
+        prefill: {
+          tcg: 'funko',
+          item_name: funko?.name || '',
+          image_url: funko?.image_url || '',
+          price: priceData?.price?.toString() || '',
+          listing_type: 'sell',
+          contact_telegram: telegramUser?.username || '',
+        },
+      },
+    });
   };
 
   if (isLoading) return (
@@ -150,9 +162,9 @@ export function FunkoDetailPage() {
   ].filter(Boolean) as { label: string; color: string }[];
 
   const confidenceConfig = {
-    high: { label: '🟢 Alta confianza', color: 'bg-green-500/20 text-green-400' },
+    high:   { label: '🟢 Alta confianza',  color: 'bg-green-500/20 text-green-400' },
     medium: { label: '🟡 Media confianza', color: 'bg-yellow-500/20 text-yellow-400' },
-    low: { label: '🔴 Baja confianza', color: 'bg-red-500/20 text-red-400' },
+    low:    { label: '🔴 Baja confianza',  color: 'bg-red-500/20 text-red-400' },
   };
 
   const roi = collectionEntry?.purchase_price && priceData?.price
@@ -179,52 +191,57 @@ export function FunkoDetailPage() {
           </div>
         )}
 
-        {/* Sistema ¿Lo tengo? */}
+        {/* En colección */}
         {inCollection && (
-  <div className="bg-green-500/10 border border-green-500/30 rounded-2xl p-4 space-y-2">
-    <div className="flex items-center justify-between">
-      <div className="flex items-center gap-2">
-        <Check className="w-4 h-4 text-green-400" />
-        <p className="text-sm font-bold text-green-400">✅ Ya lo tienes</p>
-      </div>
-      <button
-        onClick={async () => {
-          if (!collectionEntry?.id) return;
-          const { error } = await supabase
-            .from('funko_collection')
-            .delete()
-            .eq('id', collectionEntry.id);
-          if (!error) {
-            setInCollection(false);
-            setCollectionEntry(null);
-            setStatusMsg('🗑️ Eliminado de tu colección');
-            setTimeout(() => setStatusMsg(''), 3000);
-          }
-        }}
-        className="w-7 h-7 rounded-lg bg-red-500/10 flex items-center justify-center active:scale-95">
-        <span className="text-red-400 text-xs">✕</span>
-      </button>
-    </div>
-    <div className="grid grid-cols-3 gap-2">
-      <div className="text-center">
-        <p className="text-lg font-bold text-white">{collectionEntry?.quantity ?? 1}</p>
-        <p className="text-[10px] text-gray-500">Cantidad</p>
-      </div>
-      <div className="text-center">
-        <p className="text-lg font-bold text-white">
-          {collectionEntry?.purchase_price ? `€${collectionEntry.purchase_price}` : '—'}
-        </p>
-        <p className="text-[10px] text-gray-500">Pagado</p>
-      </div>
-      <div className="text-center">
-        <p className={`text-lg font-bold ${roi !== null ? (roi >= 0 ? 'text-green-400' : 'text-red-400') : 'text-white'}`}>
-          {roi !== null ? `${roi >= 0 ? '+' : ''}${roi.toFixed(0)}%` : '—'}
-        </p>
-        <p className="text-[10px] text-gray-500">ROI</p>
-      </div>
-    </div>
-  </div>
-)}
+          <div className="bg-green-500/10 border border-green-500/30 rounded-2xl p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Check className="w-4 h-4 text-green-400" />
+                <p className="text-sm font-bold text-green-400">✅ Ya lo tienes</p>
+              </div>
+              <button
+                onClick={async () => {
+                  if (!collectionEntry?.id) return;
+                  const { error } = await supabase.from('funko_collection').delete().eq('id', collectionEntry.id);
+                  if (!error) {
+                    setInCollection(false);
+                    setCollectionEntry(null);
+                    setStatusMsg('🗑️ Eliminado de tu colección');
+                    setTimeout(() => setStatusMsg(''), 3000);
+                  }
+                }}
+                className="w-7 h-7 rounded-lg bg-red-500/10 flex items-center justify-center active:scale-95">
+                <span className="text-red-400 text-xs">✕</span>
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="text-center">
+                <p className="text-lg font-bold text-white">{collectionEntry?.quantity ?? 1}</p>
+                <p className="text-[10px] text-gray-500">Cantidad</p>
+              </div>
+              <div className="text-center">
+                <p className="text-lg font-bold text-white">
+                  {collectionEntry?.purchase_price ? `€${collectionEntry.purchase_price}` : '—'}
+                </p>
+                <p className="text-[10px] text-gray-500">Pagado</p>
+              </div>
+              <div className="text-center">
+                <p className={`text-lg font-bold ${roi !== null ? (roi >= 0 ? 'text-green-400' : 'text-red-400') : 'text-white'}`}>
+                  {roi !== null ? `${roi >= 0 ? '+' : ''}${roi.toFixed(0)}%` : '—'}
+                </p>
+                <p className="text-[10px] text-gray-500">ROI</p>
+              </div>
+            </div>
+
+            {/* Botón vender en marketplace — solo si está en colección */}
+            <button
+              onClick={handleSellInMarketplace}
+              className="w-full mt-1 py-2.5 rounded-xl bg-green-600/20 border border-green-500/30 text-green-400 text-xs font-bold active:scale-95 transition-transform flex items-center justify-center gap-2">
+              <Tag className="w-3.5 h-3.5" />
+              Poner a la venta en Marketplace
+            </button>
+          </div>
+        )}
 
         {inWishlist && !inCollection && (
           <div className="bg-pink-500/10 border border-pink-500/30 rounded-2xl p-3 flex items-center gap-2">
@@ -317,6 +334,7 @@ export function FunkoDetailPage() {
             {inWishlist ? 'En wishlist' : 'Wishlist'}
           </button>
         </div>
+
         {inCollection && collectionEntry?.id && (
           <button onClick={() => navigate(`/funko/edit/${collectionEntry.id}`)}
             className="w-full py-3 rounded-xl bg-white/10 text-white text-sm font-bold active:scale-95 transition-transform flex items-center justify-center gap-2">
