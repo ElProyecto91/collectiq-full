@@ -299,7 +299,9 @@ export function OnePieceCollectionPage() {
 
   const setGroups: SetGroup[] = Object.values(
     cards.reduce((acc,c)=>{
-      const numKey = c.cardNumber?.match(/^([A-Z]+\d+)-/i)?.[1]?.toUpperCase();
+      const numKeyRaw = c.cardNumber?.match(/^([A-Z]+)(\d+)-/i);
+      // Normalizar: OP01 → OP-01, EB01 → EB-01, ST01 → ST-01
+      const numKey = numKeyRaw ? (numKeyRaw[1].toUpperCase() + '-' + numKeyRaw[2]) : null;
       const key = numKey || c.setName || 'Sin set';
       if(!acc[key]) acc[key]={setId:key,setName:c.setName||key,owned:0,total:0,cards:[],totalValue:0};
       acc[key].owned+=c.quantity; acc[key].cards.push(c); acc[key].totalValue+=(c.marketPrice??0)*c.quantity;
