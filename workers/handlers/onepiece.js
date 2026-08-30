@@ -194,9 +194,12 @@ export async function handleOnePieceScanner(request) {
 
     var parsed;
     try {
-      parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+      // Extraer solo el JSON del texto — Gemini a veces añade texto antes/después
+      var jsonMatch = text.match(/\{[\s\S]*\}/);
+      var jsonStr = jsonMatch ? jsonMatch[0] : text.replace(/```json|```/g, '').trim();
+      parsed = JSON.parse(jsonStr);
     } catch(pe) {
-      return jsonResponse({ error: 'Parse error: ' + pe.message, raw: text.slice(0, 200) }, 500);
+      return jsonResponse({ error: 'Parse error: ' + pe.message, raw: text.slice(0, 300) }, 500);
     }
 
     if (!parsed.is_onepiece_card) {
