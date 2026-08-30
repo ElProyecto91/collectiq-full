@@ -1,58 +1,59 @@
 // workers/handlers/funko-sync.js
-// Fase 1: Sincroniza slugs y nombres de TODOS los tipos Funko desde funkypriceguide.com
-// Sin imágenes (eso lo hace funko-images.js en Fase 2)
-// Cron: cada domingo 4am | Manual: /funko-sync?secret=CRON_SECRET
+// Sincroniza slugs de funkypriceguide.com en grupos de 10 checklists por llamada
+// Llama varias veces: /funko-sync?secret=X&page=0, page=1, page=2, page=3
+// Cron domingo 4am ejecuta todas las páginas secuencialmente
 
 import { getEnv, jsonResponse, corsHeaders } from '../lib/cors.js';
 
-// Catálogo completo de checklists de funkypriceguide.com
 const FUNKO_CHECKLISTS = [
-  // Main Lines
-  { type: 'pop',     line: '8-Bit',          url: 'https://funkypriceguide.com/checklist/funko-pop-8-bit/' },
-  { type: 'pop',     line: 'Ad Icons',        url: 'https://funkypriceguide.com/checklist/funko-pop-ad-icons/' },
-  { type: 'pop',     line: 'Albums',          url: 'https://funkypriceguide.com/checklist/funko-pop-albums/' },
-  { type: 'pop',     line: 'Animation',       url: 'https://funkypriceguide.com/checklist/funko-pop-animation/' },
-  { type: 'pop',     line: 'Art Series',      url: 'https://funkypriceguide.com/checklist/funko-pop-art-series/' },
-  { type: 'pop',     line: 'Asia',            url: 'https://funkypriceguide.com/checklist/funko-pop-asia/' },
-  { type: 'pop',     line: 'Basketball',      url: 'https://funkypriceguide.com/checklist/funko-pop-basketball/' },
-  { type: 'bitty',   line: 'Bitty Pop',       url: 'https://funkypriceguide.com/checklist/bitty-pop/' },
-  { type: 'pop',     line: 'Books',           url: 'https://funkypriceguide.com/checklist/funko-pop-books/' },
-  { type: 'pop',     line: 'Comics',          url: 'https://funkypriceguide.com/checklist/funko-pop-comics/' },
-  { type: 'pop',     line: 'DC',              url: 'https://funkypriceguide.com/checklist/funko-pop-dc/' },
-  { type: 'pop',     line: 'Deluxe',          url: 'https://funkypriceguide.com/checklist/funko-pop-deluxe/' },
-  { type: 'pop',     line: 'Digital',         url: 'https://funkypriceguide.com/checklist/funko-pop-digital/' },
-  { type: 'pop',     line: 'Disney',          url: 'https://funkypriceguide.com/checklist/funko-pop-disney/' },
-  { type: 'pop',     line: 'Football',        url: 'https://funkypriceguide.com/checklist/funko-pop-football/' },
-  { type: 'pop',     line: 'Games',           url: 'https://funkypriceguide.com/checklist/funko-pop-games/' },
-  { type: 'pop',     line: 'Gold',            url: 'https://funkypriceguide.com/checklist/funko-pop-gold-vinyl-figures/' },
-  { type: 'pop',     line: 'Harry Potter',    url: 'https://funkypriceguide.com/checklist/funko-pop-harry-potter/' },
-  { type: 'pop',     line: 'Heroes',          url: 'https://funkypriceguide.com/checklist/funko-pop-heroes/' },
-  { type: 'pop',     line: 'Marvel',          url: 'https://funkypriceguide.com/checklist/funko-pop-marvel/' },
-  { type: 'moments', line: 'Moments',         url: 'https://funkypriceguide.com/checklist/funko-pop-movie-moments/' },
-  { type: 'pop',     line: 'Movies',          url: 'https://funkypriceguide.com/checklist/funko-pop-movies/' },
-  { type: 'pop',     line: 'Myths',           url: 'https://funkypriceguide.com/checklist/funko-pop-myths/' },
-  { type: 'pop',     line: 'Rocks',           url: 'https://funkypriceguide.com/checklist/funko-pop-rocks/' },
-  { type: 'rides',   line: 'Rides',           url: 'https://funkypriceguide.com/checklist/funko-pop-rides/' },
-  { type: 'pop',     line: 'Sports',          url: 'https://funkypriceguide.com/checklist/funko-pop-sports/' },
-  { type: 'pop',     line: 'Star Wars',       url: 'https://funkypriceguide.com/checklist/funko-pop-star-wars/' },
-  { type: 'pop',     line: 'Television',      url: 'https://funkypriceguide.com/checklist/funko-pop-television/' },
-  { type: 'pop',     line: 'Town',            url: 'https://funkypriceguide.com/checklist/funko-pop-town/' },
-  { type: 'pop',     line: 'Trains',          url: 'https://funkypriceguide.com/checklist/funko-pop-trains/' },
-  // Soda
-  { type: 'soda',    line: 'Soda',            url: 'https://funkypriceguide.com/checklist/all-funko-soda-figures/' },
-  // Variants
-  { type: 'pop',     line: 'Black Light',     url: 'https://funkypriceguide.com/checklist/funko-pop-black-light/' },
-  { type: 'pop',     line: 'Chase',           url: 'https://funkypriceguide.com/checklist/funko-pop-chases/' },
-  { type: 'pop',     line: 'Diamond',         url: 'https://funkypriceguide.com/checklist/funko-pop-diamond-collection/' },
-  { type: 'pop',     line: 'Flocked',         url: 'https://funkypriceguide.com/checklist/funko-pop-flocked/' },
-  { type: 'pop',     line: 'Glow',            url: 'https://funkypriceguide.com/checklist/funko-pop-glow-in-the-dark/' },
-  { type: 'pop',     line: 'Metallic',        url: 'https://funkypriceguide.com/checklist/funko-pop-metallic/' },
-  // Special sizes
-  { type: 'pop',     line: '10 Inch',         url: 'https://funkypriceguide.com/checklist/funko-pop-10-inch/' },
-  { type: 'pop',     line: '6 Inch',          url: 'https://funkypriceguide.com/checklist/funko-pop-6-inch/' },
-  { type: 'pop',     line: '2-Pack',          url: 'https://funkypriceguide.com/checklist/funko-pop-2-pack/' },
-  { type: 'pop',     line: 'Jumbo',           url: 'https://funkypriceguide.com/checklist/jumbo/' },
+  // Página 0
+  { type: 'pop',     line: '8-Bit',        url: 'https://funkypriceguide.com/checklist/funko-pop-8-bit/' },
+  { type: 'pop',     line: 'Ad Icons',     url: 'https://funkypriceguide.com/checklist/funko-pop-ad-icons/' },
+  { type: 'pop',     line: 'Albums',       url: 'https://funkypriceguide.com/checklist/funko-pop-albums/' },
+  { type: 'pop',     line: 'Animation',    url: 'https://funkypriceguide.com/checklist/funko-pop-animation/' },
+  { type: 'pop',     line: 'Art Series',   url: 'https://funkypriceguide.com/checklist/funko-pop-art-series/' },
+  { type: 'pop',     line: 'Asia',         url: 'https://funkypriceguide.com/checklist/funko-pop-asia/' },
+  { type: 'pop',     line: 'Basketball',   url: 'https://funkypriceguide.com/checklist/funko-pop-basketball/' },
+  { type: 'bitty',   line: 'Bitty Pop',    url: 'https://funkypriceguide.com/checklist/bitty-pop/' },
+  { type: 'pop',     line: 'Books',        url: 'https://funkypriceguide.com/checklist/funko-pop-books/' },
+  { type: 'pop',     line: 'Comics',       url: 'https://funkypriceguide.com/checklist/funko-pop-comics/' },
+  // Página 1
+  { type: 'pop',     line: 'DC',           url: 'https://funkypriceguide.com/checklist/funko-pop-dc/' },
+  { type: 'pop',     line: 'Deluxe',       url: 'https://funkypriceguide.com/checklist/funko-pop-deluxe/' },
+  { type: 'pop',     line: 'Digital',      url: 'https://funkypriceguide.com/checklist/funko-pop-digital/' },
+  { type: 'pop',     line: 'Disney',       url: 'https://funkypriceguide.com/checklist/funko-pop-disney/' },
+  { type: 'pop',     line: 'Football',     url: 'https://funkypriceguide.com/checklist/funko-pop-football/' },
+  { type: 'pop',     line: 'Games',        url: 'https://funkypriceguide.com/checklist/funko-pop-games/' },
+  { type: 'pop',     line: 'Gold',         url: 'https://funkypriceguide.com/checklist/funko-pop-gold-vinyl-figures/' },
+  { type: 'pop',     line: 'Harry Potter', url: 'https://funkypriceguide.com/checklist/funko-pop-harry-potter/' },
+  { type: 'pop',     line: 'Heroes',       url: 'https://funkypriceguide.com/checklist/funko-pop-heroes/' },
+  { type: 'pop',     line: 'Marvel',       url: 'https://funkypriceguide.com/checklist/funko-pop-marvel/' },
+  // Página 2
+  { type: 'moments', line: 'Moments',      url: 'https://funkypriceguide.com/checklist/funko-pop-movie-moments/' },
+  { type: 'pop',     line: 'Movies',       url: 'https://funkypriceguide.com/checklist/funko-pop-movies/' },
+  { type: 'pop',     line: 'Myths',        url: 'https://funkypriceguide.com/checklist/funko-pop-myths/' },
+  { type: 'pop',     line: 'Rocks',        url: 'https://funkypriceguide.com/checklist/funko-pop-rocks/' },
+  { type: 'rides',   line: 'Rides',        url: 'https://funkypriceguide.com/checklist/funko-pop-rides/' },
+  { type: 'pop',     line: 'Sports',       url: 'https://funkypriceguide.com/checklist/funko-pop-sports/' },
+  { type: 'pop',     line: 'Star Wars',    url: 'https://funkypriceguide.com/checklist/funko-pop-star-wars/' },
+  { type: 'pop',     line: 'Television',   url: 'https://funkypriceguide.com/checklist/funko-pop-television/' },
+  { type: 'pop',     line: 'Town',         url: 'https://funkypriceguide.com/checklist/funko-pop-town/' },
+  { type: 'pop',     line: 'Trains',       url: 'https://funkypriceguide.com/checklist/funko-pop-trains/' },
+  // Página 3
+  { type: 'soda',    line: 'Soda',         url: 'https://funkypriceguide.com/checklist/all-funko-soda-figures/' },
+  { type: 'pop',     line: 'Black Light',  url: 'https://funkypriceguide.com/checklist/funko-pop-black-light/' },
+  { type: 'pop',     line: 'Chase',        url: 'https://funkypriceguide.com/checklist/funko-pop-chases/' },
+  { type: 'pop',     line: 'Diamond',      url: 'https://funkypriceguide.com/checklist/funko-pop-diamond-collection/' },
+  { type: 'pop',     line: 'Flocked',      url: 'https://funkypriceguide.com/checklist/funko-pop-flocked/' },
+  { type: 'pop',     line: 'Glow',         url: 'https://funkypriceguide.com/checklist/funko-pop-glow-in-the-dark/' },
+  { type: 'pop',     line: 'Metallic',     url: 'https://funkypriceguide.com/checklist/funko-pop-metallic/' },
+  { type: 'pop',     line: '10 Inch',      url: 'https://funkypriceguide.com/checklist/funko-pop-10-inch/' },
+  { type: 'pop',     line: '6 Inch',       url: 'https://funkypriceguide.com/checklist/funko-pop-6-inch/' },
+  { type: 'pop',     line: '2-Pack',       url: 'https://funkypriceguide.com/checklist/funko-pop-2-pack/' },
 ];
+
+const PAGE_SIZE = 10;
+const TOTAL_PAGES = Math.ceil(FUNKO_CHECKLISTS.length / PAGE_SIZE); // 4 páginas
 
 function parseSlugs(html) {
   const matches = [...html.matchAll(/href="\/collectible\/([^"\/]+)\/"/g)];
@@ -64,11 +65,7 @@ function parseItem(slug, type, line) {
   const isNumber = /^\d+$/.test(parts[0]);
   const number = isNumber ? parts[0] : null;
   const nameParts = isNumber ? parts.slice(1) : parts;
-  const name = nameParts
-    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ')
-    .trim();
-
+  const name = nameParts.map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ').trim();
   return {
     tcg: 'funko',
     funko_type: type,
@@ -89,7 +86,6 @@ function parseItem(slug, type, line) {
 async function upsertBatch(items) {
   const SUPABASE_URL = 'https://ajuinjefipjrnbimcdxz.supabase.co';
   const SUPABASE_KEY = getEnv('SUPABASE_SERVICE_ROLE_KEY');
-
   const res = await fetch(`${SUPABASE_URL}/rest/v1/catalog_items`, {
     method: 'POST',
     headers: {
@@ -100,23 +96,16 @@ async function upsertBatch(items) {
     },
     body: JSON.stringify(items),
   });
-
   return res.ok;
 }
 
-export async function handleFunkoSync(request) {
-  if (request) {
-    if (request.method === 'OPTIONS') return new Response(null, { status: 200, headers: corsHeaders() });
-    const url = new URL(request.url);
-    const secret = url.searchParams.get('secret');
-    if (secret !== getEnv('CRON_SECRET')) return jsonResponse({ error: 'Unauthorized' }, 401);
-  }
-
-  const results = { checklists: {}, total_slugs: 0, total_inserted: 0, errors: [] };
-  const startedAt = Date.now();
+async function syncPage(page) {
+  const start = page * PAGE_SIZE;
+  const checklists = FUNKO_CHECKLISTS.slice(start, start + PAGE_SIZE);
+  const results = { page, checklists: {}, total_slugs: 0, total_inserted: 0, errors: [] };
   const seenSlugs = new Set();
 
-  for (const { type, line, url: checklistUrl } of FUNKO_CHECKLISTS) {
+  for (const { type, line, url: checklistUrl } of checklists) {
     try {
       const html = await fetch(checklistUrl, {
         headers: { 'User-Agent': 'CollectIQ/1.0' },
@@ -127,11 +116,9 @@ export async function handleFunkoSync(request) {
 
       results.checklists[line] = { found: slugs.length, inserted: 0 };
       results.total_slugs += slugs.length;
-
       if (slugs.length === 0) continue;
 
       const items = slugs.map(slug => parseItem(slug, type, line));
-
       for (let i = 0; i < items.length; i += 100) {
         const batch = items.slice(i, i + 100);
         const ok = await upsertBatch(batch);
@@ -140,18 +127,33 @@ export async function handleFunkoSync(request) {
           results.total_inserted += batch.length;
         }
       }
-
-      console.log(`[funko-sync] ${line}: ${slugs.length} slugs, ${results.checklists[line].inserted} upserted`);
-
     } catch (err) {
-      console.error(`[funko-sync] Error on ${line}:`, err.message);
       results.errors.push({ line, error: err.message });
     }
   }
 
-  results.duration_ms = Date.now() - startedAt;
+  results.total_pages = TOTAL_PAGES;
+  results.next_page = page + 1 < TOTAL_PAGES ? page + 1 : null;
   results.ran_at = new Date().toISOString();
-
-  if (request) return jsonResponse({ ok: true, ...results });
   return results;
+}
+
+export async function handleFunkoSync(request) {
+  if (request) {
+    if (request.method === 'OPTIONS') return new Response(null, { status: 200, headers: corsHeaders() });
+    const url = new URL(request.url);
+    const secret = url.searchParams.get('secret');
+    if (secret !== getEnv('CRON_SECRET')) return jsonResponse({ error: 'Unauthorized' }, 401);
+    const page = parseInt(url.searchParams.get('page') || '0');
+    const results = await syncPage(page);
+    return jsonResponse({ ok: true, ...results });
+  }
+
+  // Desde cron: ejecuta todas las páginas secuencialmente
+  const allResults = [];
+  for (let p = 0; p < TOTAL_PAGES; p++) {
+    const r = await syncPage(p);
+    allResults.push(r);
+  }
+  return allResults;
 }
