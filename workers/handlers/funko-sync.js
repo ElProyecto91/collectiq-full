@@ -53,7 +53,7 @@ const FUNKO_CHECKLISTS = [
 ];
 
 const PAGE_SIZE = 10;
-const TOTAL_PAGES = Math.ceil(FUNKO_CHECKLISTS.length / PAGE_SIZE); // 4 páginas
+const TOTAL_PAGES = Math.ceil(FUNKO_CHECKLISTS.length / PAGE_SIZE);
 
 function parseSlugs(html) {
   const matches = [...html.matchAll(/href="\/collectible\/([^"\/]+)\/"/g)];
@@ -86,7 +86,7 @@ function parseItem(slug, type, line) {
 async function upsertBatch(items) {
   const SUPABASE_URL = 'https://ajuinjefipjrnbimcdxz.supabase.co';
   const SUPABASE_KEY = getEnv('SUPABASE_SERVICE_ROLE_KEY');
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/catalog_items`, {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/catalog_items?on_conflict=funko_slug`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
