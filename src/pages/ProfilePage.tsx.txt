@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { LogOut, Star, BarChart2, Package, Heart, ChevronRight, Zap, Settings, Eye, EyeOff } from 'lucide-react';
 import { useUserStore } from '@/store';
 import { useDisplayName } from '@/hooks';
-import { supabase } from '@/lib/supabase';
+import { getSupabase } from '@/lib/supabase';
 import { RoutePaths } from '@/config';
 import { useCurrency } from '@/hooks/use-currency';
 
@@ -50,7 +50,7 @@ export function ProfilePage() {
     setLoading(true);
     try {
       // Premium
-      const { data: prem } = await supabase.from('user_premium')
+      const { data: prem } = await getSupabase().from('user_premium')
         .select('plan, expires_at, is_active')
         .eq('telegram_user_id', telegramUser!.id)
         .maybeSingle();
@@ -63,7 +63,7 @@ export function ProfilePage() {
       }
 
       // Escaneos hoy
-      const { data: scans } = await supabase.from('user_scans')
+      const { data: scans } = await getSupabase().from('user_scans')
         .select('scans_today, last_scan_date')
         .eq('telegram_user_id', telegramUser!.id)
         .maybeSingle();
@@ -74,9 +74,9 @@ export function ProfilePage() {
       const stats: TCGStats[] = [];
 
       // Pokémon
-      const { data: pkCards } = await supabase.from('collection_items')
+      const { data: pkCards } = await getSupabase().from('collection_items')
         .select('market_price, quantity').eq('telegram_user_id', telegramUser!.id).eq('tcg', 'pokemon');
-      const { count: pkWish } = await supabase.from('wishlist_items')
+      const { count: pkWish } = await getSupabase().from('wishlist_items')
         .select('id', { count: 'exact', head: true })
         .eq('telegram_user_id', telegramUser!.id).eq('tcg', 'pokemon');
       stats.push({
@@ -88,9 +88,9 @@ export function ProfilePage() {
       });
 
       // One Piece
-      const { data: opCards } = await supabase.from('collection_items')
+      const { data: opCards } = await getSupabase().from('collection_items')
         .select('market_price, quantity').eq('telegram_user_id', telegramUser!.id).eq('tcg', 'onepiece');
-      const { count: opWish } = await supabase.from('wishlist_items')
+      const { count: opWish } = await getSupabase().from('wishlist_items')
         .select('id', { count: 'exact', head: true })
         .eq('telegram_user_id', telegramUser!.id).eq('tcg', 'onepiece');
       stats.push({
@@ -102,9 +102,9 @@ export function ProfilePage() {
       });
 
       // Funko
-      const { data: fkItems } = await supabase.from('funko_collection')
+      const { data: fkItems } = await getSupabase().from('funko_collection')
         .select('market_value, quantity').eq('telegram_user_id', telegramUser!.id);
-      const { count: fkWish } = await supabase.from('funko_wishlist')
+      const { count: fkWish } = await getSupabase().from('funko_wishlist')
         .select('id', { count: 'exact', head: true })
         .eq('telegram_user_id', telegramUser!.id);
       stats.push({
