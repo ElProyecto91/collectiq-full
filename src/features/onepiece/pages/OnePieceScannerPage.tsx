@@ -198,34 +198,35 @@ export function OnePieceScannerPage() {
         return;
       }
 
-      // Buscar en catálogo para obtener imagen y datos completos
-      const validated = await validateAgainstCatalog(
-        geminiResult.name || '',
-        geminiResult.number || '',
-        geminiResult.set_id || (geminiResult.number || '').split('-')[0] || ''
-      );
+      // El Worker ya incluye image_url del catálogo
+      let finalResult: ScanResult = {
+        id: geminiResult.number || '',
+        name: geminiResult.name || 'Carta desconocida',
+        number: geminiResult.number || '',
+        set_id: geminiResult.set_id || '',
+        set_name: geminiResult.set_id || '',
+        rarity: geminiResult.rarity || '',
+        type: geminiResult.type || '',
+        color: Array.isArray(geminiResult.color) ? geminiResult.color : [],
+        power: geminiResult.power ?? null,
+        cost: geminiResult.cost ?? null,
+        image_url: geminiResult.image_url || '',
+        price_eur: geminiResult.price_eur ?? null,
+        confidence: geminiResult.confidence || 0.5,
+      };
 
-      if (validated) {
-        setResult({ ...validated, confidence: geminiResult.confidence ?? 0.8 });
-      } else {
-        // Sin imagen del catálogo, usar datos de Gemini
-        setResult({
-          id: geminiResult.number || '',
-          name: geminiResult.name || 'Carta desconocida',
-          number: geminiResult.number || '',
-          set_id: geminiResult.set_id || '',
-          set_name: geminiResult.set_id || '',
-          rarity: geminiResult.rarity || '',
-          type: geminiResult.type || '',
-          color: Array.isArray(geminiResult.color) ? geminiResult.color : [],
-          power: geminiResult.power ?? null,
-          cost: geminiResult.cost ?? null,
-          image_url: '',
-          price_eur: null,
-          confidence: geminiResult.confidence ?? 0.4,
-        });
+      // Si no tiene imagen, buscar en catálogo
+      if (!finalResult.image_url) {
+        const validated = await validateAgainstCatalog(
+          geminiResult.name || '',
+          geminiResult.number || '',
+          geminiResult.set_id || (geminiResult.number || '').split('-')[0] || ''
+        );
+        if (validated) finalResult = { ...finalResult, ...validated, confidence: geminiResult.confidence ?? 0.8 };
       }
-      setScanCount(c => c + 1);
+
+      setResult(finalResult);
+            setScanCount(c => c + 1);
     } catch (e: any) {
       setScanError(e.message || 'Error al escanear');
     } finally {
