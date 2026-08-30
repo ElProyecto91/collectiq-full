@@ -52,6 +52,7 @@ export function OnePieceScannerPage() {
   const [scanError, setScanError] = useState('');
   const [added, setAdded] = useState(false);
   const [scanCount, setScanCount] = useState(0);
+  const [zoomedResult, setZoomedResult] = useState(false);
 
   const startCamera = useCallback(async () => {
     try {
@@ -124,37 +125,46 @@ export function OnePieceScannerPage() {
 
   // Validar contra catálogo y obtener imagen + datos completos
   const validateAgainstCatalog = async (name: string, number: string, setId: string): Promise<ScanResult | null> => {
-    const params = new URLSearchParams({ page: '1', limit: '5' });
-    if (number) params.set('q', number);
-    else if (name) params.set('q', name.toLowerCase());
-    if (setId) params.set('set', setId.toUpperCase());
     try {
-      const r = await fetch(`${API}/onepiece-cards?${params}`);
-      if (!r.ok) return null;
-      const d = await r.json();
-      const cards: any[] = d.cards || [];
-      // Buscar por número exacto primero
-      const byNumber = cards.find(c =>
-        c.number?.toUpperCase() === number?.toUpperCase() ||
-        c.id?.toUpperCase() === number?.toUpperCase()
-      );
-      const card = byNumber || cards[0];
-      if (!card) return null;
-      return {
-        id: card.id || card.number || '',
-        name: card.name || name,
-        number: card.number || number,
-        set_id: card.set_id || setId,
-        set_name: card.set_name || setId,
-        rarity: card.rarity || '',
-        type: card.type || '',
-        color: Array.isArray(card.color) ? card.color : [],
-        power: card.power ?? null,
-        cost: card.cost ?? null,
-        image_url: card.image_url || '',
-        price_eur: card.price_eur ?? null,
-        confidence: 0.9,
-      };
+      // Intentar primero por número exacto con el set
+      const queries = [];
+      if (number) queries.push({ q: number, set: setId });
+      if (name) queries.push({ q: name.toLowerCase(), set: setId });
+      if (name && !setId) queries.push({ q: name.toLowerCase(), set: '' });
+
+      for (const query of queries) {
+        const params = new URLSearchParams({ page: '1', limit: '10' });
+        if (query.q) params.set('q', query.q);
+        if (query.set) params.set('set', query.set.toUpperCase());
+        const r = await fetch(`${API}/onepiece-cards?${params}`);
+        if (!r.ok) continue;
+        const d = await r.json();
+        const cards: any[] = d.cards || [];
+        if (!cards.length) continue;
+        // Buscar coincidencia exacta por número
+        const byNumber = cards.find(c =>
+          c.number?.toUpperCase() === number?.toUpperCase() ||
+          c.id?.toUpperCase() === number?.toUpperCase()
+        );
+        const card = byNumber || cards[0];
+        if (!card) continue;
+        return {
+          id: card.id || card.number || '',
+          name: card.name || name,
+          number: card.number || number,
+          set_id: card.set_id || setId,
+          set_name: card.set_name || setId,
+          rarity: card.rarity || '',
+          type: card.type || '',
+          color: Array.isArray(card.color) ? card.color : [],
+          power: card.power ?? null,
+          cost: card.cost ?? null,
+          image_url: card.image_url || '',
+          price_eur: card.price_eur ?? null,
+          confidence: 0.9,
+        };
+      }
+      return null;
     } catch { return null; }
   };
 
@@ -250,6 +260,20 @@ export function OnePieceScannerPage() {
         .scan-line { animation: scanLine 2s ease-in-out infinite; }
       `}</style>
 
+      {/* Modal zoom imagen resultado */}
+      {zoomedResult && result?.image_url && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 p-6" onClick={() => setZoomedResult(false)}>
+          <button onClick={() => setZoomedResult(false)} className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 flex items-center justify-center">
+            <X size={20} className="text-white" />
+          </button>
+          <div onClick={e => e.stopPropagation()} className="w-full max-w-xs">
+            <img src={result.image_url} alt={result.name} className="w-full rounded-2xl shadow-2xl" />
+            <p className="text-white text-center font-bold mt-3">{result.name}</p>
+            <p className="text-gray-400 text-center text-sm">{result.number} · {result.set_name || result.set_id}</p>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="absolute top-0 left-0 right-0 z-20 px-4 pt-6 pb-3 bg-gradient-to-b from-black/80 to-transparent">
         <div className="flex items-center gap-3">
@@ -335,8 +359,9 @@ export function OnePieceScannerPage() {
             <div className="flex gap-3 p-3">
               {result.image_url ? (
                 <img src={result.image_url} alt={result.name}
-                  className="w-16 object-cover rounded-xl shrink-0"
+                  className="w-16 object-cover rounded-xl shrink-0 cursor-pointer active:scale-95 transition-transform"
                   style={{ height: '5.5rem' }}
+                  onClick={() => setZoomedResult(true)}
                   onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
                 />
               ) : (
