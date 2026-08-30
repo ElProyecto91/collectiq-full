@@ -262,3 +262,43 @@ export async function handleOnePieceScanner(request) {
     return jsonResponse({ error: e.message }, 500);
   }
 }
+
+// ── Cron precios One Piece ────────────────────────────────────
+export async function handleOnePieceCronPrices(sbFetch) {
+  var results = [];
+  try {
+    var opItems = await sbFetch('/collection_items?tcg=eq.onepiece&select=id,card_id,card_number&limit=500');
+    var opBatch = opItems.data || [];
+    if (!opBatch.length) return [{ tcg: 'onepiece', updated: 0, total: 0 }];
+
+    // Cargar catálogo completo (usa la misma cache que el explorador)
+    var allRaw = await getAllCards();
+    var priceMap = {};
+    allRaw.forEach(function(c) {
+      var cardId = c.card_id || c.id || '';
+      var price = c.market_price || c.price || c.tcgplayer_price || null;
+      if (cardId && price) priceMap[cardId] = parseFloat(price);
+    });
+
+    var updated = 0;
+    for (var i = 0; i < opBatch.length; i++) {
+      try {
+        var item = opBatch[i];
+        var id = item.card_id || item.card_number || '';
+        var price = priceMap[id] || null;
+        if (price) {
+          await sbFetch('/collection_items?id=eq.' + item.id, {
+            method: 'PATCH',
+            body: { market_price: price, updated_at: new Date().toISOString() },
+            prefer: 'return=minimal'
+          });
+          updated++;
+        }
+      } catch(e2) {}
+    }
+    results.push({ tcg: 'onepiece', updated: updated, total: opBatch.length });
+  } catch(e) {
+    results.push({ tcg: 'onepiece', error: e.message });
+  }
+  return results;
+}
