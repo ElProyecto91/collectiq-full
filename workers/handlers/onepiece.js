@@ -203,18 +203,56 @@ export async function handleOnePieceScanner(request) {
       return jsonResponse({ result: null, error: 'No es una carta de One Piece TCG' });
     }
 
+    // Buscar imagen y datos en catálogo
+    var cardNumber = parsed.number || '';
+    var setId = parsed.set_id || cardNumber.split('-')[0] || '';
+    var imageUrl = '';
+    var priceEur = null;
+    var catalogColor = Array.isArray(parsed.color) ? parsed.color : [];
+    var catalogRarity = parsed.rarity || '';
+    var catalogType = parsed.type || '';
+    var catalogCost = parsed.cost != null ? parsed.cost : null;
+    var catalogPower = parsed.power != null ? parsed.power : null;
+
+    try {
+      var allRaw = await getAllCards();
+      var allCards = allRaw.map(mapCard);
+      // Buscar por número exacto
+      var found = allCards.find(function(c) {
+        return c.id && cardNumber && c.id.toUpperCase() === cardNumber.toUpperCase();
+      });
+      // Si no, buscar por nombre
+      if (!found && parsed.name) {
+        var nameLower = parsed.name.toLowerCase();
+        found = allCards.find(function(c) {
+          return c.name && c.name.toLowerCase().includes(nameLower);
+        });
+      }
+      if (found) {
+        imageUrl = found.image_url || '';
+        priceEur = found.price_eur;
+        if (found.color && found.color.length) catalogColor = found.color;
+        if (found.rarity) catalogRarity = found.rarity;
+        if (found.type) catalogType = found.type;
+        if (found.cost != null) catalogCost = found.cost;
+        if (found.power != null) catalogPower = found.power;
+      }
+    } catch(e2) {}
+
     return jsonResponse({
       result: {
         tcg: 'onepiece',
         name: parsed.name || '',
-        number: parsed.number || '',
-        set_id: parsed.set_id || (parsed.number || '').split('-')[0] || '',
-        rarity: parsed.rarity || '',
-        type: parsed.type || '',
-        color: Array.isArray(parsed.color) ? parsed.color : [],
-        cost: parsed.cost != null ? parsed.cost : null,
-        power: parsed.power != null ? parsed.power : null,
+        number: cardNumber,
+        set_id: setId,
+        rarity: catalogRarity,
+        type: catalogType,
+        color: catalogColor,
+        cost: catalogCost,
+        power: catalogPower,
         confidence: parsed.confidence || 0.5,
+        image_url: imageUrl,
+        price_eur: priceEur,
       }
     });
   } catch(e) {
