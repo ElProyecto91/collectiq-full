@@ -100,7 +100,7 @@ export function OnePieceStatsPage() {
     const unique = s.cards.length;
     const missing = total > 0 ? total - unique : 0;
     const pct = total > 0 ? Math.round((unique / total) * 100) : 0;
-    return { setId: s.setId, setName: s.setName, owned: s.owned, total, missing, value: s.value, pct };
+    return { setId: s.setId, setName: s.setName, owned: unique, total, missing, value: s.value, pct };
   }).sort((a, b) => b.value - a.value);
 
   const maxSetValue = Math.max(...setStats.map(s => s.value), 1);
@@ -176,7 +176,7 @@ export function OnePieceStatsPage() {
                   <div className="min-w-0">
                     <p className="text-sm font-bold text-white truncate">{s.setName || s.setId}</p>
                     <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                      <span className="text-[10px] text-gray-500">{s.cards?.length || 0}{s.total > 0 ? `/${s.total}` : ''} únicas</span>
+                      <span className="text-[10px] text-gray-500">{s.owned}{s.total > 0 ? `/${s.total}` : ''} únicas</span>
                       {s.total > 0 && s.pct === 100 && <span className="text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded-full">✓ Completo</span>}
                       {s.missing > 0 && (
                         <span className="text-[10px] bg-red-500/10 text-red-400 px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
