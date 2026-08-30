@@ -195,14 +195,28 @@ function SetPanel({ group, onAddWishlist, onZoom }: { group: SetGroup; onAddWish
   const missingCount = group.total-group.cards.length;
 
   const loadMissing = async () => {
-    if (missing.length>0||group.total===0) return;
+    if (missing.length>0) return;
     setLoading(true);
     try {
-      const r = await fetch(`${API}/onepiece-cards?set=${encodeURIComponent(group.setId)}&limit=50&page=1`);
-      const d = await r.json();
-      const ownedIds = new Set(group.cards.map(c=>c.cardId??c.cardNumber??''));
-      setMissing((d.cards||[]).filter((c:any)=>!ownedIds.has(c.id)&&!ownedIds.has(c.number)));
-    } catch {}
+      // Cargar todas las cartas del set — paginando si hace falta
+      const allSetCards: any[] = [];
+      let page = 1;
+      while (true) {
+        const r = await fetch(`${API}/onepiece-cards?set=${encodeURIComponent(group.setId)}&limit=50&page=${page}`);
+        const d = await r.json();
+        const batch = d.cards || [];
+        allSetCards.push(...batch);
+        if (batch.length < 50 || allSetCards.length >= (d.total || 999)) break;
+        page++;
+      }
+      const ownedIds = new Set(group.cards.map((c:any)=>c.cardId??c.cardNumber??c.card_number??'').filter(Boolean));
+      const missingCards = allSetCards.filter((c:any)=>!ownedIds.has(c.id)&&!ownedIds.has(c.number));
+      setMissing(missingCards);
+      // Actualizar total del grupo si no lo teníamos
+      if (group.total===0 && allSetCards.length>0) {
+        // no podemos mutar group aquí pero lo usamos para mostrar el total real
+      }
+    } catch(e) { console.error('loadMissing error:', e); }
     setLoading(false);
   };
 
@@ -282,7 +296,8 @@ export function OnePieceCollectionPage() {
 
   const setGroups: SetGroup[] = Object.values(
     cards.reduce((acc,c)=>{
-      const key = c.cardNumber?.split('-')[0]||c.setName||'Sin set';
+      const numKey = c.cardNumber?.match(/^([A-Z]+\d+)-/i)?.[1]?.toUpperCase();
+      const key = numKey || c.setName || 'Sin set';
       if(!acc[key]) acc[key]={setId:key,setName:c.setName||key,owned:0,total:0,cards:[],totalValue:0};
       acc[key].owned+=c.quantity; acc[key].cards.push(c); acc[key].totalValue+=(c.marketPrice??0)*c.quantity;
       return acc;
