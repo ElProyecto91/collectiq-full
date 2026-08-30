@@ -1,12 +1,13 @@
 // ============================================================
-// CollectIQ API Worker v4.1 — Cloudflare Workers
+// CollectIQ API Worker v4.0 — Cloudflare Workers
 // Arquitectura modular: handlers/ + lib/
 // ============================================================
 import { _ENV, getEnv, corsHeaders, jsonResponse } from './lib/cors.js';
+import { sbFetch } from './lib/supabase.js';
 import { handleAuthTelegram, handleAuthCode, handleBotWebhook, handleTelegramCallback, handleAdminVerify, handleAdminGiveGo, handleCreateInvoice, handleAnalytics } from './handlers/auth.js';
 import { handleVision, handleScanner, handleCronPrices } from './handlers/pokemon.js';
 import { handleFunkoImport, handleFunkoPrice } from './handlers/funko.js';
-import { handleOnePieceCards, handleOnePieceSets, handleOnePiecePrice, handleOnePieceScanner } from './handlers/onepiece.js';
+import { handleOnePieceCards, handleOnePieceSets, handleOnePiecePrice, handleOnePieceScanner, handleOnePieceCronPrices } from './handlers/onepiece.js';
 import { handleMagicCards, handleMagicSets, handleYugiohCards, handleYugiohSets, handleLorcanaCards, handleLorcanaSets } from './handlers/tcg.js';
 import { handleMarketplaceList, handleMarketplaceCreate, handleMarketplaceUpdate, handleMarketplaceDelete, handleMarketplaceOffer, handleMarketplaceStats } from './handlers/marketplace.js';
 
@@ -71,7 +72,7 @@ async function handleRequest(request) {
 
   return jsonResponse({
     ok: true, service: 'CollectIQ API', version: '4.0',
-    routes: ['auth-telegram','auth-code','bot-webhook','telegram-callback','admin-verify','admin-give-go','create-invoice','analytics','vision','scanner','funko-import','funko-price','onepiece-cards','onepiece-sets','onepiece-price','onepiece-scanner','magic-cards','magic-sets','yugioh-cards','yugioh-sets','lorcana-cards','lorcana-sets','marketplace-list','marketplace-create','marketplace-update','marketplace-delete','marketplace-offer','marketplace-stats','cron-prices'],
+    routes: ['auth-telegram','auth-code','bot-webhook','telegram-callback','admin-verify','admin-give-go','create-invoice','analytics','vision','scanner','funko-import','funko-price','onepiece-cards','onepiece-sets','onepiece-price','magic-cards','magic-sets','yugioh-cards','yugioh-sets','lorcana-cards','lorcana-sets','marketplace-list','marketplace-create','marketplace-update','marketplace-delete','marketplace-offer','marketplace-stats','cron-prices'],
   });
 }
 
@@ -84,7 +85,8 @@ export default {
   },
   async scheduled(event, env, ctx) {
     Object.assign(_ENV, env || {});
-    var results = await handleCronPrices();
-    console.log('Cron ran:', JSON.stringify(results));
+    var pokemonResults = await handleCronPrices();
+    var onepieceResults = await handleOnePieceCronPrices(sbFetch);
+    console.log('Cron ran:', JSON.stringify(pokemonResults.concat(onepieceResults)));
   },
 };
