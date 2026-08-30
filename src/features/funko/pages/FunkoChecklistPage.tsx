@@ -5,10 +5,27 @@ import { RoutePaths } from '@/config';
 import { supabase } from '@/lib/supabase';
 import { useUserStore } from '@/store';
 
+// Mapeo de líneas a tipo legible
+const LINE_LABELS: Record<string, string> = {
+  pop: '🎭 Pop',
+  soda: '🥤 Soda',
+  rides: '🚗 Rides',
+  moments: '🎬 Moments',
+  gold: '✨ Gold',
+  bitty: '🔬 Bitty Pop',
+  deluxe: '📦 Deluxe',
+  digital: '💻 Digital',
+  '8bit': '🕹️ 8-Bit',
+  albums: '🎵 Albums',
+  rewind: '📼 Rewind',
+  otros: '❓ Otros',
+};
+
 interface FranchiseStats {
   franchise: string;
   total: number;
   owned: number;
+  funko_type: string;
 }
 
 interface FunkoInSeries {
@@ -17,6 +34,7 @@ interface FunkoInSeries {
   image_url: string | null;
   number: string | null;
   is_chase: boolean;
+  funko_type: string;
   owned: boolean;
 }
 
@@ -25,10 +43,12 @@ export function FunkoChecklistPage() {
   const telegramUser = useUserStore(s => s.telegramUser);
   const [franchises, setFranchises] = useState<FranchiseStats[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  const [selectedType, setSelectedType] = useState<string>('');
   const [series, setSeries] = useState<FunkoInSeries[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingSeries, setIsLoadingSeries] = useState(false);
   const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState<string>('');
 
   useEffect(() => {
     if (!telegramUser?.id) return;
@@ -38,20 +58,36 @@ export function FunkoChecklistPage() {
   const loadFranchises = async () => {
     setIsLoading(true);
 
-    // Obtener todas las franquicias del catálogo
-    const { data: allFranchises } = await supabase
+    // Obtener franquicias desde catalog_items (nuevo catálogo completo)
+    const { data: catalogItems } = await supabase
+      .from('catalog_items')
+      .select('franchise, funko_type')
+      .eq('tcg', 'funko')
+      .not('franchise', 'is', null);
+
+    // Contar por franquicia + tipo
+    const franchiseMap: Record<string, { total: number; funko_type: string }> = {};
+    catalogItems?.forEach(item => {
+      const f = item.franchise ?? 'Otros';
+      const key = `${f}|||${item.funko_type ?? 'pop'}`;
+      if (!franchiseMap[key]) franchiseMap[key] = { total: 0, funko_type: item.funko_type ?? 'pop' };
+      franchiseMap[key].total++;
+    });
+
+    // También contar desde funko_items (catálogo legacy)
+    const { data: legacyItems } = await supabase
       .from('funko_items')
       .select('franchise')
       .not('franchise', 'is', null);
 
-    // Contar por franquicia
-    const franchiseCount: Record<string, number> = {};
-    allFranchises?.forEach(item => {
+    legacyItems?.forEach(item => {
       const f = item.franchise ?? 'Otros';
-      franchiseCount[f] = (franchiseCount[f] ?? 0) + 1;
+      const key = `${f}|||pop`;
+      if (!franchiseMap[key]) franchiseMap[key] = { total: 0, funko_type: 'pop' };
+      franchiseMap[key].total++;
     });
 
-    // Obtener colección del usuario
+    // Obtener colección del usuario (funko_collection legacy)
     const { data: collection } = await supabase
       .from('funko_collection')
       .select('funko_id, funko_items(franchise)')
@@ -60,42 +96,99 @@ export function FunkoChecklistPage() {
     const ownedByFranchise: Record<string, number> = {};
     collection?.forEach((item: any) => {
       const f = item.funko_items?.franchise ?? 'Otros';
-      ownedByFranchise[f] = (ownedByFranchise[f] ?? 0) + 1;
+      const key = `${f}|||pop`;
+      ownedByFranchise[key] = (ownedByFranchise[key] ?? 0) + 1;
     });
 
-    const result = Object.entries(franchiseCount)
-      .map(([franchise, total]) => ({
-        franchise,
-        total,
-        owned: ownedByFranchise[franchise] ?? 0,
-      }))
-      .filter(f => f.total >= 3)
+    // También colección desde user_collection (nuevo sistema)
+    const { data: newCollection } = await supabase
+      .from('user_collection')
+      .select('catalog_item_id, catalog_items(franchise, funko_type)')
+      .eq('telegram_user_id', telegramUser!.id)
+      .eq('catalog_items.tcg', 'funko');
+
+    newCollection?.forEach((item: any) => {
+      const f = item.catalog_items?.franchise ?? 'Otros';
+      const t = item.catalog_items?.funko_type ?? 'pop';
+      const key = `${f}|||${t}`;
+      ownedByFranchise[key] = (ownedByFranchise[key] ?? 0) + 1;
+    });
+
+    const result = Object.entries(franchiseMap)
+      .map(([key, { total, funko_type }]) => {
+        const [franchise] = key.split('|||');
+        return {
+          franchise: franchise || 'Otros',
+          funko_type,
+          total,
+          owned: ownedByFranchise[key] ?? 0,
+        };
+      })
+      .filter(f => f.total >= 2)
       .sort((a, b) => b.owned - a.owned || b.total - a.total);
 
     setFranchises(result);
     setIsLoading(false);
   };
 
-  const loadSeries = async (franchise: string) => {
+  const loadSeries = async (franchise: string, funko_type: string) => {
     setIsLoadingSeries(true);
     setSelected(franchise);
+    setSelectedType(funko_type);
     setSeries([]);
 
-    const { data: items } = await supabase
-      .from('funko_items')
-      .select('id, name, image_url, number, is_chase')
+    // Cargar desde catalog_items
+    const { data: catalogItems } = await supabase
+      .from('catalog_items')
+      .select('id, name, image_url, number, is_chase, funko_type')
+      .eq('tcg', 'funko')
       .eq('franchise', franchise)
+      .eq('funko_type', funko_type)
       .order('number', { ascending: true });
 
+    // Cargar desde funko_items (legacy) si tipo es pop
+    let legacyItems: any[] = [];
+    if (funko_type === 'pop') {
+      const { data } = await supabase
+        .from('funko_items')
+        .select('id, name, image_url, number, is_chase')
+        .eq('franchise', franchise)
+        .order('number', { ascending: true });
+      legacyItems = data ?? [];
+    }
+
+    // Combinar y deduplicar por nombre
+    const allItems = [...(catalogItems ?? []), ...legacyItems];
+    const seen = new Set<string>();
+    const unique = allItems.filter(item => {
+      const key = item.name.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    // Colección del usuario
     const { data: collection } = await supabase
       .from('funko_collection')
       .select('funko_id')
       .eq('telegram_user_id', telegramUser!.id);
+    const { data: newCollection } = await supabase
+      .from('user_collection')
+      .select('catalog_item_id')
+      .eq('telegram_user_id', telegramUser!.id);
 
-    const ownedIds = new Set(collection?.map(c => c.funko_id) ?? []);
+    const ownedIds = new Set([
+      ...(collection?.map(c => c.funko_id) ?? []),
+      ...(newCollection?.map(c => c.catalog_item_id) ?? []),
+    ]);
 
-    setSeries((items ?? []).map(item => ({
-      ...item,
+    setSeries(unique.map(item => ({
+      id: item.id,
+      name: item.name,
+      image_url: item.image_url,
+      number: item.number ?? null,
+      is_chase: item.is_chase ?? false,
+      funko_type: item.funko_type ?? funko_type,
       owned: ownedIds.has(item.id),
     })));
     setIsLoadingSeries(false);
@@ -110,9 +203,14 @@ export function FunkoChecklistPage() {
     }, { onConflict: 'telegram_user_id,funko_id' });
   };
 
-  const filtered = franchises.filter(f =>
-    f.franchise.toLowerCase().includes(search.toLowerCase())
-  );
+  // Tipos únicos disponibles
+  const availableTypes = [...new Set(franchises.map(f => f.funko_type))].sort();
+
+  const filtered = franchises.filter(f => {
+    const matchSearch = f.franchise.toLowerCase().includes(search.toLowerCase());
+    const matchType = !typeFilter || f.funko_type === typeFilter;
+    return matchSearch && matchType;
+  });
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
@@ -123,13 +221,14 @@ export function FunkoChecklistPage() {
         </button>
         <div>
           <p className="text-[10px] text-purple-400 font-bold uppercase tracking-[0.2em]">FUNKO</p>
-          <h1 className="text-lg font-bold">{selected ?? 'Checklist'}</h1>
+          <h1 className="text-lg font-bold">
+            {selected ? `${selected} · ${LINE_LABELS[selectedType] ?? selectedType}` : 'Checklist'}
+          </h1>
         </div>
       </div>
 
       <div className="px-4 space-y-4">
 
-        {/* Lista de franquicias */}
         {!selected && (
           <>
             <div className="relative">
@@ -137,6 +236,24 @@ export function FunkoChecklistPage() {
               <input value={search} onChange={e => setSearch(e.target.value)}
                 placeholder="Buscar franquicia..."
                 className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-purple-500/50" />
+            </div>
+
+            {/* Filtro por tipo */}
+            <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4">
+              <button onClick={() => setTypeFilter('')}
+                className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+                  !typeFilter ? 'bg-purple-600 border-purple-600 text-white' : 'bg-white/5 border-white/10 text-gray-400'
+                }`}>
+                Todos
+              </button>
+              {availableTypes.map(type => (
+                <button key={type} onClick={() => setTypeFilter(type)}
+                  className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+                    typeFilter === type ? 'bg-purple-600 border-purple-600 text-white' : 'bg-white/5 border-white/10 text-gray-400'
+                  }`}>
+                  {LINE_LABELS[type] ?? type}
+                </button>
+              ))}
             </div>
 
             {isLoading ? (
@@ -147,10 +264,16 @@ export function FunkoChecklistPage() {
                 {filtered.map(f => {
                   const pct = Math.round((f.owned / f.total) * 100);
                   return (
-                    <button key={f.franchise} onClick={() => loadSeries(f.franchise)}
+                    <button key={`${f.franchise}-${f.funko_type}`}
+                      onClick={() => loadSeries(f.franchise, f.funko_type)}
                       className="w-full bg-[#111118] border border-white/8 rounded-2xl p-4 flex items-center gap-3 active:scale-[0.98] transition-transform">
                       <div className="flex-1 min-w-0 text-left">
-                        <p className="text-sm font-bold text-white truncate">{f.franchise}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-bold text-white truncate">{f.franchise}</p>
+                          <span className="text-[9px] text-gray-500 shrink-0">
+                            {LINE_LABELS[f.funko_type] ?? f.funko_type}
+                          </span>
+                        </div>
                         <div className="flex items-center gap-2 mt-1.5">
                           <div className="flex-1 bg-white/10 rounded-full h-1.5">
                             <div className="bg-purple-500 h-1.5 rounded-full transition-all"
@@ -173,14 +296,12 @@ export function FunkoChecklistPage() {
           </>
         )}
 
-        {/* Detalle de franquicia */}
         {selected && (
           <>
             {isLoadingSeries ? (
               <div className="text-center py-8 text-gray-500 text-sm">Cargando...</div>
             ) : (
               <>
-                {/* Resumen */}
                 {series.length > 0 && (
                   <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-2">
                     <div className="flex items-center justify-between">
@@ -209,7 +330,6 @@ export function FunkoChecklistPage() {
                   </div>
                 )}
 
-                {/* Lista */}
                 <div className="space-y-2">
                   {series.map(item => (
                     <div key={item.id}
@@ -231,6 +351,7 @@ export function FunkoChecklistPage() {
                         <div className="flex items-center gap-1.5 mt-0.5">
                           {item.number && <span className="text-[10px] text-gray-500">#{item.number}</span>}
                           {item.is_chase && <span className="text-[9px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded-full font-bold">CHASE</span>}
+                          <span className="text-[9px] text-gray-600">{LINE_LABELS[item.funko_type] ?? item.funko_type}</span>
                         </div>
                       </div>
                       {item.owned
