@@ -29,7 +29,7 @@ export interface LegoSetPart {
 
 export interface LegoSearchParams {
   q: string;
-  themeIds: number[];
+  themeId: number | null;
   yearFrom: number | null;
   yearTo: number | null;
   page: number;

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * LEGO catalog importer (Rebrickable CSV -> Supabase).
+ * LEGO catalog importer (Rebrickable CSV -> Turso / libSQL).
  *
  * Data source: https://rebrickable.com/downloads/ (attribute Rebrickable in the
  * UI; automated downloads at most once a day). Download the files yourself and
@@ -9,32 +9,38 @@
  *
  * Usage
  *   1) Estimate only (default, writes nothing, needs no credentials):
- *        node scripts/lego-import.mjs --dir ./lego-data --from-year 2015
- *   2) Import (after running the migration by hand):
- *        SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
- *        node scripts/lego-import.mjs --dir ./lego-data --from-year 2015 --apply
+ *        node scripts/lego-import.mjs --dir ./lego-data --from-year 1949
+ *   2) Import (creates the schema if missing, then upserts):
+ *        TURSO_DATABASE_URL=libsql://<db>-<org>.turso.io TURSO_AUTH_TOKEN=<write token> \
+ *        node scripts/lego-import.mjs --dir ./lego-data --from-year 1949 --apply
+ *      A local SQLite file also works for testing: TURSO_DATABASE_URL=file:./lego.db
  *
  * Options
- *   --from-year N   required. Only sets with year >= N.
- *   --to-year N     optional upper bound.
- *   --no-spares     do not import spare parts (smaller, spares are never used
- *                   for completeness anyway).
- *   --skip-elements do not import elements.csv (element_id lookup, only needed for
- *                   the phase 4 shop view; can be imported later).
- *   --budget-mb N   free space you want to compare the estimate with (default 370).
- *   --apply         actually write. Without it nothing is written. Refuses to run
- *                   when the estimate exceeds --budget-mb.
- *   --force         allow --apply above the budget. Do not use on the free plan:
- *                   at 500 MB Supabase makes the WHOLE project read-only.
+ *   --from-year N    required. Only sets with year >= N (1949 = every set).
+ *   --to-year N      optional upper bound.
+ *   --no-spares      do not import spare parts (smaller; spares are never used for
+ *                    completeness anyway).
+ *   --skip-elements  do not import elements.csv (element_id lookup, only needed for
+ *                    the phase 4 shop view; can be imported later).
+ *   --budget-mb N    storage budget to compare with (default 4000; Turso free = 5 GB).
+ *   --writes-budget N  row-writes budget (default 8000000; Turso free = 10M/month,
+ *                    and the database is BLOCKED for the rest of the month when it
+ *                    is exceeded). Row writes are counted conservatively as
+ *                    rows x (1 + secondary indexes).
+ *   --apply          actually write. Refuses to run when either estimate exceeds
+ *                    its budget.
+ *   --force          allow --apply above a budget. Do not use on the free plan.
  *
  * Rules
  *   - Credentials only from environment variables. Never commit them.
- *   - The service_role key bypasses RLS: run this on your machine only.
+ *   - The write token must never reach the browser: the app only gets a
+ *     read-only token (VITE_TURSO_READ_TOKEN).
  *   - One inventory per set: the highest `version` in inventories.csv.
  *   - Required CSV headers are validated first; on any mismatch the script
  *     aborts before writing anything.
- *   - Re-import is an upsert. Stale rows of a set whose inventory shrank are not
- *     removed; truncate the lego_* tables first if you want a clean re-import.
+ *   - Re-import is an upsert, but every re-run spends row writes again. Stale
+ *     rows of a set whose inventory shrank are not removed; drop the lego_*
+ *     tables first if you want a clean re-import.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -55,7 +61,8 @@ const noSpares = args.includes('--no-spares');
 const skipElements = args.includes('--skip-elements');
 const force = args.includes('--force');
 const apply = args.includes('--apply');
-const budgetMb = Number(opt('budget-mb', 370));
+const budgetMb = Number(opt('budget-mb', 4000));
+const writesBudget = Number(opt('writes-budget', 8_000_000));
 
 if (!Number.isInteger(fromYear)) fail('--from-year is required (e.g. --from-year 2015)');
 
@@ -258,92 +265,118 @@ const data = {
   lego_part_relationships: relUnique,
 };
 const PK = {
-  lego_themes: 'id', lego_colors: 'id', lego_parts: 'part_num',
-  lego_part_colors: 'part_num,color_id', lego_sets: 'set_num',
-  lego_set_parts: 'set_num,part_num,color_id,is_spare', lego_elements: 'element_id',
-  lego_part_relationships: 'rel_type,child_part_num,parent_part_num',
+  lego_themes: ['id'], lego_colors: ['id'], lego_parts: ['part_num'],
+  lego_part_colors: ['part_num', 'color_id'], lego_sets: ['set_num'],
+  lego_set_parts: ['set_num', 'part_num', 'color_id', 'is_spare'], lego_elements: ['element_id'],
+  lego_part_relationships: ['rel_type', 'child_part_num', 'parent_part_num'],
 };
-const INDEXES = { // btree indexes per table, PK included
-  lego_themes: 2, lego_colors: 1, lego_parts: 1, lego_part_colors: 1, lego_sets: 3,
-  lego_set_parts: 2, lego_elements: 2, lego_part_relationships: 3,
+const SECONDARY_INDEXES = { // see turso/lego-schema.sql
+  lego_themes: 1, lego_colors: 0, lego_parts: 0, lego_part_colors: 0, lego_sets: 2,
+  lego_set_parts: 1, lego_elements: 1, lego_part_relationships: 2,
 };
+const ORDER = [ // dependency order
+  'lego_themes', 'lego_colors', 'lego_parts', 'lego_part_colors', 'lego_sets',
+  'lego_set_parts', 'lego_elements', 'lego_part_relationships',
+];
 
 // ── size estimate (approximate, +/-30%) ─────────────────────────
 function valueBytes(v) {
-  if (v === null || v === undefined) return 0;
+  if (v === null || v === undefined) return 1;
   if (typeof v === 'boolean') return 1;
-  if (typeof v === 'number') return 4;
-  return Buffer.byteLength(String(v)) + 1;
+  if (typeof v === 'number') return 3;          // SQLite stores small ints in 1-4 bytes
+  return Buffer.byteLength(String(v));
 }
 function estimate(rows, nIdx) {
-  if (!rows.length) return { rows: 0, bytes: 0 };
-  const sample = rows.length > 5000 ? rows.filter((_, i) => i % Math.ceil(rows.length / 5000) === 0) : rows;
+  if (!rows.length) return { rows: 0, bytes: 0, writes: 0 };
+  const step = Math.ceil(rows.length / 5000);
+  const sample = rows.filter((_, i) => i % step === 0);
   const avg = sample.reduce((s, r) => s + Object.values(r).reduce((a, v) => a + valueBytes(v), 0), 0) / sample.length;
-  const heap = 28 + Math.ceil(avg * 1.1);      // tuple header + line pointer + alignment slack
-  const index = nIdx * (avg * 0.35 + 24);      // rough btree entry (keys are a fraction of the row)
-  return { rows: rows.length, bytes: Math.round(rows.length * (heap + index) * 1.1) };
+  const rowBytes = 6 + avg;                     // record header + payload
+  const idxBytes = nIdx * (0.45 * avg + 6);     // secondary index entries
+  return {
+    rows: rows.length,
+    bytes: Math.round(rows.length * (rowBytes + idxBytes) * 1.15), // b-tree page slack
+    writes: rows.length * (1 + nIdx),
+  };
 }
 const mb = (b) => (b / 1024 / 1024).toFixed(1).padStart(7);
 
 console.log('\nEstimated size per table (approximate, +/-30%)');
-console.log('table'.padEnd(26) + 'rows'.padStart(10) + '      MB');
+console.log('table'.padEnd(26) + 'rows'.padStart(10) + '      MB' + '   row writes');
 let total = 0;
-for (const [t, rows] of Object.entries(data)) {
-  const e = estimate(rows, INDEXES[t]);
+let totalWrites = 0;
+for (const t of ORDER) {
+  const e = estimate(data[t], SECONDARY_INDEXES[t]);
   total += e.bytes;
-  console.log(t.padEnd(26) + String(e.rows).padStart(10) + `  ${mb(e.bytes)}`);
+  totalWrites += e.writes;
+  console.log(t.padEnd(26) + String(e.rows).padStart(10) + `  ${mb(e.bytes)}` + String(e.writes).padStart(13));
 }
-console.log('-'.repeat(44));
-console.log('TOTAL'.padEnd(26) + ''.padStart(10) + `  ${mb(total)} MB  (budget ${budgetMb} MB)`);
+console.log('-'.repeat(57));
+console.log('TOTAL'.padEnd(26) + ''.padStart(10) + `  ${mb(total)}` + String(totalWrites).padStart(13));
+console.log(`Storage budget ${budgetMb} MB, writes budget ${writesBudget.toLocaleString()} (one full import; every re-run spends them again).`);
 console.log(`Sets: ${sets.size}. Sets without inventory: ${[...sets.keys()].filter((s) => !best.has(s)).length}.`);
-if (total / 1024 / 1024 > budgetMb) console.log('WARNING: estimate exceeds the budget. Raise --from-year or use --no-spares.');
+const overStorage = total / 1024 / 1024 > budgetMb;
+const overWrites = totalWrites > writesBudget;
+if (overStorage) console.log('WARNING: estimated storage exceeds the budget. Raise --from-year or use --no-spares / --skip-elements.');
+if (overWrites) console.log('WARNING: estimated row writes exceed the budget. Raise --from-year, use --no-spares / --skip-elements, or split the import across months.');
 
 if (!apply) {
   console.log('\nEstimate only: nothing was written. Re-run with --apply to import.');
   process.exit(0);
 }
-if (total / 1024 / 1024 > budgetMb && !force) {
-  fail(`Estimated ${(total / 1024 / 1024).toFixed(0)} MB exceeds the ${budgetMb} MB budget. Nothing was written.\n` +
-    '  Raise --from-year, use --no-spares / --skip-elements, or pass --force if you know you have the space.');
+if ((overStorage || overWrites) && !force) {
+  fail('The estimate exceeds a budget. Nothing was written.\n' +
+    '  Raise --from-year, use --no-spares / --skip-elements, or pass --force if you are sure.');
 }
 
 // ── apply ───────────────────────────────────────────────────────
-const url = process.env.SUPABASE_URL;
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-if (!url || !key) fail('Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in the environment to use --apply.');
+const dbUrl = process.env.TURSO_DATABASE_URL;
+const authToken = process.env.TURSO_AUTH_TOKEN;
+if (!dbUrl) fail('Set TURSO_DATABASE_URL (and TURSO_AUTH_TOKEN for a remote database) in the environment to use --apply.');
+if (!dbUrl.startsWith('file:') && !authToken) fail('TURSO_AUTH_TOKEN is required for a remote database.');
 
-async function upsert(table, rows) {
-  const BATCH = 1000;
+const { createClient } = await import('@libsql/client');
+const db = createClient({ url: dbUrl, authToken });
+
+const schemaPath = new URL('../turso/lego-schema.sql', import.meta.url);
+console.log('\nApplying schema (IF NOT EXISTS)...');
+await db.executeMultiple(fs.readFileSync(schemaPath, 'utf8'));
+
+function upsertSql(table, row) {
+  const cols = Object.keys(row);
+  const pk = PK[table];
+  const rest = cols.filter((c) => !pk.includes(c));
+  const conflict = rest.length
+    ? `DO UPDATE SET ${rest.map((c) => `${c}=excluded.${c}`).join(', ')}`
+    : 'DO NOTHING';
+  return `INSERT INTO ${table} (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')}) ` +
+    `ON CONFLICT(${pk.join(',')}) ${conflict}`;
+}
+const sqlValue = (v) => (typeof v === 'boolean' ? (v ? 1 : 0) : v);
+
+async function write(table, rows) {
+  const BATCH = 500;
   for (let i = 0; i < rows.length; i += BATCH) {
-    const body = JSON.stringify(rows.slice(i, i + BATCH));
+    const stmts = rows.slice(i, i + BATCH).map((r) => ({
+      sql: upsertSql(table, r),
+      args: Object.values(r).map(sqlValue),
+    }));
     let lastErr = null;
     for (let attempt = 0; attempt < 4; attempt++) {
-      try {
-        const res = await fetch(`${url}/rest/v1/${table}?on_conflict=${PK[table]}`, {
-          method: 'POST',
-          headers: {
-            apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json',
-            Prefer: 'resolution=merge-duplicates,return=minimal',
-          },
-          body,
-        });
-        if (res.ok) { lastErr = null; break; }
-        lastErr = `HTTP ${res.status}: ${await res.text()}`;
-        if (res.status < 500 && res.status !== 429) break; // not retryable
-      } catch (e) { lastErr = String(e); }
-      await new Promise((r) => setTimeout(r, 2000 * 2 ** attempt));
+      try { await db.batch(stmts, 'write'); lastErr = null; break; }
+      catch (e) {
+        lastErr = String(e?.message ?? e);
+        if (/SQLITE_CONSTRAINT|CHECK|NOT NULL|UNIQUE|FOREIGN/i.test(lastErr)) break; // not retryable
+        await new Promise((r) => setTimeout(r, 2000 * 2 ** attempt));
+      }
     }
-    if (lastErr) fail(`${table} batch at row ${i} failed: ${lastErr}\n  Stopped. Rows already written stay in place (upsert is safe to re-run).`);
+    if (lastErr) fail(`${table} batch at row ${i} failed: ${lastErr}\n  Stopped. Rows already written stay in place (upsert is safe to re-run, but spends row writes).`);
     process.stdout.write(`\r${table}: ${Math.min(i + BATCH, rows.length)}/${rows.length}   `);
   }
   process.stdout.write('\n');
 }
 
-console.log('\nImporting (FK order)...');
-for (const t of [
-  'lego_themes', 'lego_colors', 'lego_parts', 'lego_part_colors', 'lego_sets',
-  'lego_set_parts', 'lego_elements', 'lego_part_relationships',
-]) {
-  await upsert(t, data[t]);
-}
+console.log('Importing (dependency order)...');
+for (const t of ORDER) await write(t, data[t]);
+db.close();
 console.log('Done.');

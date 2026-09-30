@@ -69,6 +69,7 @@ export function LegoSetDetailPage() {
           <ArrowLeft className="w-4 h-4" />
         </button>
         <p className="text-sm text-white/60">{setQuery.isError ? t.lego.loadError : t.lego.setNotFound}</p>
+        {setQuery.isError && <p className="text-[11px] text-white/30 break-words">{(setQuery.error as Error)?.message}</p>}
       </div>
     );
   }

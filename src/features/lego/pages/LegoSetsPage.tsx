@@ -5,9 +5,7 @@ import { ArrowLeft, Search, X, Loader2 } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { RoutePaths } from '@/config';
 import { LegoImage } from '../components/LegoImage';
-import {
-  LEGO_PAGE_SIZE, fetchThemes, searchSets, themeWithDescendants,
-} from '../services/lego-catalog';
+import { LEGO_PAGE_SIZE, fetchThemes, searchSets } from '../services/lego-catalog';
 
 function useDebounced<T>(value: T, ms: number): T {
   const [v, setV] = useState(value);
@@ -41,10 +39,6 @@ export function LegoSetsPage() {
   const themes = themesQuery.data ?? [];
   const rootThemes = useMemo(() => themes.filter((x) => x.parent_id === null), [themes]);
   const themeNames = useMemo(() => new Map(themes.map((x) => [x.id, x.name])), [themes]);
-  const themeIds = useMemo(
-    () => (themeId === null ? [] : themeWithDescendants(themes, themeId)),
-    [themes, themeId]
-  );
 
   // any filter change goes back to the first page
   useEffect(() => { setPage(0); }, [dq, themeId, dFrom, dTo]);
@@ -52,8 +46,8 @@ export function LegoSetsPage() {
   const yf = toYear(dFrom);
   const yt = toYear(dTo);
   const setsQuery = useQuery({
-    queryKey: ['lego-sets', dq, themeIds, yf, yt, page],
-    queryFn: () => searchSets({ q: dq, themeIds, yearFrom: yf, yearTo: yt, page }),
+    queryKey: ['lego-sets', dq, themeId, yf, yt, page],
+    queryFn: () => searchSets({ q: dq, themeId, yearFrom: yf, yearTo: yt, page }),
     placeholderData: (prev) => prev,
   });
 
@@ -112,6 +106,7 @@ export function LegoSetsPage() {
         {setsQuery.isError && (
           <div className="text-center py-16 space-y-3">
             <p className="text-sm text-white/60">{t.lego.loadError}</p>
+            <p className="text-[11px] text-white/30 break-words">{(setsQuery.error as Error)?.message}</p>
             <button onClick={() => setsQuery.refetch()} className="px-4 py-2 rounded-xl bg-white/10 text-sm">{t.lego.retry}</button>
           </div>
         )}

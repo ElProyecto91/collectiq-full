@@ -24,6 +24,12 @@ export const AppConfig = {
     anonKey: stringEnv(env.VITE_SUPABASE_ANON_KEY),
   },
 
+  /** Turso (libSQL) LEGO catalog. The token must be READ-ONLY: it ships in the bundle. */
+  turso: {
+    url: stringEnv(env.VITE_TURSO_DATABASE_URL),
+    readToken: stringEnv(env.VITE_TURSO_READ_TOKEN),
+  },
+
   /** Telegram Mini App config. */
   telegram: {
     /** Whether the app expects to run inside the Telegram WebView. */
