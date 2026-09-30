@@ -19,8 +19,13 @@
  *   --to-year N     optional upper bound.
  *   --no-spares     do not import spare parts (smaller, spares are never used
  *                   for completeness anyway).
+ *   --skip-elements do not import elements.csv (element_id lookup, only needed for
+ *                   the phase 4 shop view; can be imported later).
  *   --budget-mb N   free space you want to compare the estimate with (default 370).
- *   --apply         actually write. Without it nothing is written.
+ *   --apply         actually write. Without it nothing is written. Refuses to run
+ *                   when the estimate exceeds --budget-mb.
+ *   --force         allow --apply above the budget. Do not use on the free plan:
+ *                   at 500 MB Supabase makes the WHOLE project read-only.
  *
  * Rules
  *   - Credentials only from environment variables. Never commit them.
@@ -47,6 +52,8 @@ const dir = opt('dir', './lego-data');
 const fromYear = Number(opt('from-year', NaN));
 const toYear = opt('to-year', null) === null ? null : Number(opt('to-year'));
 const noSpares = args.includes('--no-spares');
+const skipElements = args.includes('--skip-elements');
+const force = args.includes('--force');
 const apply = args.includes('--apply');
 const budgetMb = Number(opt('budget-mb', 370));
 
@@ -230,7 +237,7 @@ if (missingParts.length) {
 }
 
 const elements = new Map();
-for await (const r of readCsv('elements')) {
+for await (const r of skipElements ? [] : readCsv('elements')) {
   if (!partColors.has(`${r.part_num}|${int(r.color_id)}`) || elements.has(r.element_id)) continue;
   elements.set(r.element_id, { element_id: r.element_id, part_num: r.part_num, color_id: int(r.color_id), design_id: txt(r.design_id) });
 }
@@ -294,6 +301,10 @@ if (total / 1024 / 1024 > budgetMb) console.log('WARNING: estimate exceeds the b
 if (!apply) {
   console.log('\nEstimate only: nothing was written. Re-run with --apply to import.');
   process.exit(0);
+}
+if (total / 1024 / 1024 > budgetMb && !force) {
+  fail(`Estimated ${(total / 1024 / 1024).toFixed(0)} MB exceeds the ${budgetMb} MB budget. Nothing was written.\n` +
+    '  Raise --from-year, use --no-spares / --skip-elements, or pass --force if you know you have the space.');
 }
 
 // ── apply ───────────────────────────────────────────────────────
