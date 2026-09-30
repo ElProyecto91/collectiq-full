@@ -28,6 +28,13 @@ const OnePieceLogo = () => (
       fill="#D4AF37" stroke="#1a0a00" strokeWidth="2" paintOrder="stroke">CARD GAME</text>
   </svg>
 );
+const LegoLogo = () => (
+  <svg viewBox="0 0 160 50" xmlns="http://www.w3.org/2000/svg" className="w-20 h-8">
+    <rect x="1" y="1" width="158" height="48" rx="8" fill="#E3000B" stroke="#FFD500" strokeWidth="3" />
+    <text x="80" y="36" fontFamily="Arial Black, Impact, sans-serif" fontSize="30" fontWeight="900"
+      fill="white" textAnchor="middle">LEGO</text>
+  </svg>
+);
 const MagicLogo = () => (
   <svg viewBox="0 0 220 60" xmlns="http://www.w3.org/2000/svg" className="w-28 h-9">
     <text x="4" y="36" fontFamily="Arial Black, Impact, sans-serif" fontSize="28" fontWeight="900"
@@ -117,6 +124,7 @@ const COLLECTIONS = [
   { key: 'pokemon', label: 'Pokémon TCG', Logo: PokemonLogo, desc: 'Cartas, escáner IA, deck builder', route: RoutePaths.PokemonHome, bg: 'from-yellow-500/15 to-blue-600/15', border: 'border-yellow-500/20', color: '#FFCB05', active: true },
   { key: 'funko', label: 'Funko Pop', Logo: FunkoLogo, desc: 'Colección, precios eBay, wishlist', route: RoutePaths.FunkoHome, bg: 'from-red-600/15 to-pink-500/15', border: 'border-red-500/20', color: '#E31837', active: true },
   { key: 'onepiece', label: 'One Piece TCG', Logo: OnePieceLogo, desc: 'Explorador, escáner, deck builder', route: RoutePaths.OnePieceHome, bg: 'from-yellow-500/10 to-red-500/10', border: 'border-yellow-500/15', color: '#D4AF37', active: true },
+  { key: 'lego', label: 'LEGO', Logo: LegoLogo, desc: 'Catálogo de sets y piezas', route: RoutePaths.LegoHome, bg: 'from-red-600/15 to-yellow-400/10', border: 'border-red-500/20', color: '#E3000B', active: true },
   { key: 'magic', label: 'Magic: The Gathering', Logo: MagicLogo, desc: 'Próximamente', route: null, bg: 'from-amber-700/10 to-amber-500/10', border: 'border-amber-700/10', color: '#B5860D', active: false },
   { key: 'yugioh', label: 'Yu-Gi-Oh!', Logo: YugiohLogo, desc: 'Próximamente', route: null, bg: 'from-yellow-700/10 to-yellow-500/10', border: 'border-yellow-700/10', color: '#C8A951', active: false },
   { key: 'lorcana', label: 'Lorcana', Logo: LorcanaLogo, desc: 'Próximamente', route: null, bg: 'from-purple-500/10 to-blue-500/10', border: 'border-purple-500/10', color: '#7B68EE', active: false },

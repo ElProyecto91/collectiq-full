@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 const STORAGE_KEY = 'collectiq-active-tcg';
 
 export type ActiveTCG =
-  | 'all' | 'pokemon' | 'magic' | 'one-piece' | 'yugioh'
+  | 'all' | 'pokemon' | 'magic' | 'one-piece' | 'lego' | 'yugioh'
   | 'lorcana' | 'digimon' | 'dragonball' | 'gundam' | 'starwars'
   | 'riftbound' | 'weiss' | 'vanguard' | 'flesh-and-blood' | 'wow';
 
@@ -66,6 +66,18 @@ export const TCG_OPTIONS: TCGOption[] = [
       <path d="M7 14L12 21L17 14" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
       <path d="M4 6C4 6 2 8 2 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
       <path d="M20 6C20 6 22 8 22 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>`,
+  },
+  {
+    key: 'lego',
+    label: 'LEGO',
+    color: '#E3000B',
+    available: true,
+    route: '/lego',
+    icon: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="3" y="9" width="18" height="11" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+      <circle cx="8" cy="6" r="2" stroke="currentColor" stroke-width="1.5"/>
+      <circle cx="16" cy="6" r="2" stroke="currentColor" stroke-width="1.5"/>
     </svg>`,
   },
   {

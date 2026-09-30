@@ -25,6 +25,10 @@ export const RoutePaths = {
   // One Piece
   OnePieceHome: '/onepiece',
   OnePieceExplorer: '/onepiece/explorer',
+  // LEGO
+  LegoHome: '/lego',
+  LegoSets: '/lego/sets',
+  LegoSetDetail: '/lego/sets/:setNum',
   // Magic (backend listo, frontend pendiente)
   MagicHome: '/magic',
   MagicExplorer: '/magic/explorer',
