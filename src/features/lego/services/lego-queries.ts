@@ -1,4 +1,5 @@
 import type {
+  LegoColorOption, LegoPartDetail, LegoPartKey, LegoPartSummary,
   LegoSearchParams, LegoSet, LegoSetPart, LegoTheme,
 } from '../types';
 
@@ -73,6 +74,56 @@ export function setPartsStmt(setNum: string): Stmt {
   };
 }
 
+export function searchPartsStmt(q: string): Stmt {
+  const t = q.trim();
+  const like = escapeLike(t);
+  return {
+    // exact part number first, then prefix matches (shortest first), then the rest
+    sql:
+      `SELECT part_num, name FROM lego_parts ` +
+      `WHERE part_num LIKE ? ESCAPE '\\' OR name LIKE ? ESCAPE '\\' ` +
+      `ORDER BY (part_num = ?) DESC, (part_num LIKE ? ESCAPE '\\') DESC, length(part_num), part_num LIMIT 30`,
+    args: [`${like}%`, `%${like}%`, t, `${like}%`],
+  };
+}
+
+export function partColorsStmt(partNum: string): Stmt {
+  return {
+    sql:
+      'SELECT pc.color_id, c.name, c.rgb, c.is_trans, pc.img_url ' +
+      'FROM lego_part_colors pc JOIN lego_colors c ON c.id = pc.color_id ' +
+      'WHERE pc.part_num = ? ORDER BY c.name',
+    args: [partNum],
+  };
+}
+
+export function allColorsStmt(): Stmt {
+  return { sql: 'SELECT id AS color_id, name, rgb, is_trans, NULL AS img_url FROM lego_colors ORDER BY name', args: [] };
+}
+
+/** Resolves (part, color) pairs; keep chunks small (2 params per pair). */
+export function partDetailsStmt(keys: LegoPartKey[]): Stmt {
+  return {
+    sql:
+      `WITH k(part_num, color_id) AS (VALUES ${keys.map(() => '(?, ?)').join(', ')}) ` +
+      'SELECT k.part_num, k.color_id, p.name AS part_name, c.name AS color_name, ' +
+      'c.rgb AS color_rgb, c.is_trans AS color_is_trans, pc.img_url ' +
+      'FROM k LEFT JOIN lego_parts p ON p.part_num = k.part_num ' +
+      'LEFT JOIN lego_colors c ON c.id = k.color_id ' +
+      'LEFT JOIN lego_part_colors pc ON pc.part_num = k.part_num AND pc.color_id = k.color_id',
+    args: keys.flatMap((k) => [k.part_num, k.color_id]),
+  };
+}
+
+export function setsByNumsStmt(setNums: string[]): Stmt {
+  return {
+    sql:
+      'SELECT set_num, name, year, theme_id, num_parts, img_url FROM lego_sets ' +
+      `WHERE set_num IN (${setNums.map(() => '?').join(', ')})`,
+    args: setNums,
+  };
+}
+
 const num = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v));
 const str = (v: unknown): string | null => (v === null || v === undefined ? null : String(v));
 
@@ -89,6 +140,22 @@ export const toSetPart = (r: DbRow): LegoSetPart => ({
   set_num: String(r.set_num), part_num: String(r.part_num), color_id: Number(r.color_id),
   quantity: Number(r.quantity), is_spare: Number(r.is_spare) === 1,
   part_name: String(r.part_name), color_name: String(r.color_name),
+  color_rgb: str(r.color_rgb), color_is_trans: Number(r.color_is_trans) === 1,
+  img_url: str(r.img_url),
+});
+
+export const toPartSummary = (r: DbRow): LegoPartSummary => ({ part_num: String(r.part_num), name: String(r.name) });
+
+export const toColorOption = (r: DbRow): LegoColorOption => ({
+  color_id: Number(r.color_id), name: String(r.name), rgb: str(r.rgb),
+  is_trans: Number(r.is_trans) === 1, img_url: str(r.img_url),
+});
+
+/** Names fall back to the raw ids when the catalog does not know a part or color. */
+export const toPartDetail = (r: DbRow): LegoPartDetail => ({
+  part_num: String(r.part_num), color_id: Number(r.color_id),
+  part_name: r.part_name == null ? String(r.part_num) : String(r.part_name),
+  color_name: r.color_name == null ? `#${r.color_id}` : String(r.color_name),
   color_rgb: str(r.color_rgb), color_is_trans: Number(r.color_is_trans) === 1,
   img_url: str(r.img_url),
 });

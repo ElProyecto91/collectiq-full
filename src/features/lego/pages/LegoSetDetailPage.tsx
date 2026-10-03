@@ -5,6 +5,7 @@ import { ArrowLeft, Loader2 } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { RoutePaths } from '@/config';
 import { LegoImage } from '../components/LegoImage';
+import { LegoSetOwnership } from '../components/LegoSetOwnership';
 import { fetchSet, fetchSetParts, fetchThemes } from '../services/lego-catalog';
 import type { LegoSetPart } from '../types';
 
@@ -100,6 +101,8 @@ export function LegoSetDetailPage() {
             ))}
           </dl>
         </div>
+
+        <LegoSetOwnership set={set} parts={partsQuery.data} />
 
         <section>
           <div className="flex items-center justify-between mb-2">
