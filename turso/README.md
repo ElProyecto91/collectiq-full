@@ -35,4 +35,10 @@ download per day).
 3. Actions -> "LEGO catalog import" -> Run workflow. First run with `apply` OFF: it prints the
    size and row-write estimate (also in the run summary). If it fits the free plan, run again
    with `apply` ON.
-4. Afterwards revoke the write token in the Turso dashboard.
+4. If an import was interrupted, run it again with `apply` ON and `insert_only` ON: rows that
+   already exist are left alone, so only the missing ones spend row writes.
+5. Afterwards revoke the write token in the Turso dashboard.
+
+The importer sends multi-row statements (about 4,000 parameters each). The first version sent one
+statement per row, which was too slow for the full catalog and hit the 60-minute limit; the job
+limit is now 120 minutes as a safety net.
