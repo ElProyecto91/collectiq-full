@@ -23,3 +23,16 @@ Download the CSV files from https://rebrickable.com/downloads/ into `./lego-data
 
 Use `--no-spares` and `--skip-elements` to cut size and row writes. Every re-run spends
 row writes again.
+
+## Import from GitHub Actions (no tokens in Claude, works from a phone)
+The workflow `.github/workflows/lego-import.yml` downloads the CSV files on GitHub's
+runners and runs the importer. It is manual only (Rebrickable allows one automated
+download per day).
+
+1. Repo -> Settings -> Secrets and variables -> Actions -> add `TURSO_DATABASE_URL` and
+   `TURSO_AUTH_TOKEN` (the WRITE token). Never add the read-only token here.
+2. The workflow must exist on the default branch (`main`) to appear in the Actions tab.
+3. Actions -> "LEGO catalog import" -> Run workflow. First run with `apply` OFF: it prints the
+   size and row-write estimate (also in the run summary). If it fits the free plan, run again
+   with `apply` ON.
+4. Afterwards revoke the write token in the Turso dashboard.
