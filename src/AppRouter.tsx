@@ -34,6 +34,9 @@ import { OnePieceWishlistPage } from '@/features/onepiece/pages/OnePieceWishlist
 import { OnePieceStatsPage } from '@/features/onepiece/pages/OnePieceStatsPage';
 import { OnePieceDeckBuilderPage } from '@/features/onepiece/pages/OnePieceDeckBuilderPage';
 import { OnePieceScannerPage } from '@/features/onepiece/pages/OnePieceScannerPage';
+import { LegoHomePage } from '@/features/lego/pages/LegoHomePage';
+import { LegoSetsPage } from '@/features/lego/pages/LegoSetsPage';
+import { LegoSetDetailPage } from '@/features/lego/pages/LegoSetDetailPage';
 
 // Páginas pendientes de crear (backend ya listo)
 // import { MagicHomePage } from '@/features/magic/pages/MagicHomePage';
@@ -87,6 +90,11 @@ const router = createBrowserRouter([
       { path: '/onepiece/wishlist',        element: <OnePieceWishlistPage /> },
       { path: '/onepiece/stats',           element: <OnePieceStatsPage /> },
       { path: '/onepiece/deck-builder',    element: <OnePieceDeckBuilderPage /> },
+
+      // LEGO
+      { path: RoutePaths.LegoHome,      element: <LegoHomePage /> },
+      { path: RoutePaths.LegoSets,      element: <LegoSetsPage /> },
+      { path: RoutePaths.LegoSetDetail, element: <LegoSetDetailPage /> },
 
       // Magic, Yu-Gi-Oh, Lorcana — rutas preparadas, páginas pendientes
       // { path: RoutePaths.MagicHome,   element: <MagicHomePage /> },

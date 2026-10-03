@@ -1,0 +1,103 @@
+name: LEGO catalog import
+
+# Manual only. Downloads the Rebrickable CSV files and runs scripts/lego-import.mjs.
+# Rebrickable allows automated downloads at most once a day, so this is never scheduled.
+#
+# Secrets (repo -> Settings -> Secrets and variables -> Actions), only used by the
+# "Import" step:
+#   TURSO_DATABASE_URL   libsql://<db>-<org>.turso.io
+#   TURSO_AUTH_TOKEN     WRITE token (never the read-only one)
+#
+# First run with "apply" off: it only prints the size / row-write estimate (also in the
+# run summary). Run again with "apply" on if the estimate fits the free plan.
+on:
+  workflow_dispatch:
+    inputs:
+      from_year:
+        description: 'Only sets with year >= this (1949 = every set)'
+        required: true
+        default: '1949'
+      no_spares:
+        description: 'Skip spare parts (smaller, fewer row writes)'
+        type: boolean
+        default: false
+      skip_elements:
+        description: 'Skip elements.csv (only needed for the phase 4 shop view)'
+        type: boolean
+        default: false
+      apply:
+        description: 'Write to Turso (off = estimate only)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash   # GitHub then runs bash -eo pipefail, so `node ... | tee` cannot hide a failure
+
+concurrency:
+  group: lego-import
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      LEGO_BASE_URL: https://cdn.rebrickable.com/media/downloads
+      IN_FROM_YEAR: ${{ inputs.from_year }}
+      IN_NO_SPARES: ${{ inputs.no_spares }}
+      IN_SKIP_ELEMENTS: ${{ inputs.skip_elements }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Validate inputs
+        run: |
+          if ! [[ "$IN_FROM_YEAR" =~ ^[0-9]{4}$ ]]; then
+            echo "from_year must be a 4-digit year, got: $IN_FROM_YEAR" >&2
+            exit 1
+          fi
+
+      - name: Download Rebrickable CSV files
+        run: |
+          mkdir -p lego-data
+          files="themes colors parts part_relationships sets inventories inventory_parts"
+          if [ "$IN_SKIP_ELEMENTS" != "true" ]; then files="$files elements"; fi
+          for f in $files; do
+            echo "Downloading $f.csv.gz"
+            if ! curl --fail --silent --show-error --location --retry 3 --retry-delay 5 \
+                 -o "lego-data/$f.csv.gz" "$LEGO_BASE_URL/$f.csv.gz"; then
+              echo "::error::Could not download $LEGO_BASE_URL/$f.csv.gz. Nothing was imported. Check the file name on https://rebrickable.com/downloads/ and update LEGO_BASE_URL in this workflow." >&2
+              exit 1
+            fi
+          done
+          ls -l lego-data
+
+      - name: Estimate (writes nothing)
+        run: |
+          args=(--dir ./lego-data --from-year "$IN_FROM_YEAR")
+          [ "$IN_NO_SPARES" = "true" ] && args+=(--no-spares)
+          [ "$IN_SKIP_ELEMENTS" = "true" ] && args+=(--skip-elements)
+          node scripts/lego-import.mjs "${args[@]}" | tee estimate.txt
+          { echo '### LEGO import estimate'; echo '```'; cat estimate.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Import into Turso
+        if: ${{ inputs.apply }}
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        run: |
+          args=(--dir ./lego-data --from-year "$IN_FROM_YEAR" --apply)
+          [ "$IN_NO_SPARES" = "true" ] && args+=(--no-spares)
+          [ "$IN_SKIP_ELEMENTS" = "true" ] && args+=(--skip-elements)
+          node scripts/lego-import.mjs "${args[@]}"
