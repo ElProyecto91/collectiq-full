@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Search, Boxes, Layers, Heart, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Search, Boxes, Layers, Heart, Package, ChevronRight } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { RoutePaths } from '@/config';
 
@@ -7,9 +7,12 @@ export function LegoHomePage() {
   const navigate = useNavigate();
   const { t } = useI18n();
 
-  // Only the catalog exists in phase 1; the rest are placeholders for later phases.
+  // Phases 3 and 4 are not built yet: shown disabled instead of leading to empty screens.
+  const available = [
+    { icon: Boxes, label: t.lego.inventory, desc: t.lego.myPartsDesc, path: RoutePaths.LegoParts },
+    { icon: Package, label: t.lego.mySets, desc: t.lego.mySetsDesc, path: RoutePaths.LegoMySets },
+  ];
   const upcoming = [
-    { icon: Boxes, label: t.lego.inventory },
     { icon: Layers, label: t.lego.possibleSets },
     { icon: Heart, label: t.lego.wishlist },
   ];
@@ -39,6 +42,20 @@ export function LegoHomePage() {
           </div>
           <ChevronRight className="w-4 h-4 text-white/30" />
         </button>
+
+        {available.map(({ icon: Icon, label, desc, path }) => (
+          <button key={path} onClick={() => navigate(path)}
+            className="w-full flex items-center gap-3 bg-white/[0.05] border border-white/10 rounded-2xl p-4 text-left active:scale-[0.98] transition-transform">
+            <div className="w-11 h-11 rounded-xl bg-white/10 text-white/70 flex items-center justify-center shrink-0">
+              <Icon className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold">{label}</p>
+              <p className="text-xs text-white/50">{desc}</p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-white/30" />
+          </button>
+        ))}
 
         {upcoming.map(({ icon: Icon, label }) => (
           <div key={label} aria-disabled="true"

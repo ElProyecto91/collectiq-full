@@ -39,3 +39,65 @@ export interface LegoSearchResult {
   sets: LegoSet[];
   total: number;
 }
+
+export interface LegoPartSummary {
+  part_num: string;
+  name: string;
+}
+
+export interface LegoColorOption {
+  color_id: number;
+  name: string;
+  rgb: string | null;
+  is_trans: boolean;
+  /** Image of this part in this color, when the catalog has one. */
+  img_url: string | null;
+}
+
+/** A part + color resolved against the catalog (name, color, image). */
+export interface LegoPartDetail {
+  part_num: string;
+  color_id: number;
+  part_name: string;
+  color_name: string;
+  color_rgb: string | null;
+  color_is_trans: boolean;
+  img_url: string | null;
+}
+
+export interface LegoPartKey {
+  part_num: string;
+  color_id: number;
+}
+
+export interface LegoPartItem extends LegoPartKey {
+  quantity: number;
+}
+
+/** A row of user_lego_parts. */
+export interface UserLegoPart extends LegoPartItem {
+  updated_at: string;
+}
+
+export type LegoSetStatus = 'sealed' | 'open_complete' | 'incomplete';
+
+export const LEGO_SET_STATUSES: readonly LegoSetStatus[] = ['sealed', 'open_complete', 'incomplete'];
+
+/** A row of user_lego_sets: one owned copy of a set. */
+export interface UserLegoSet {
+  id: string;
+  set_num: string;
+  status: LegoSetStatus;
+  price_paid: number | null;
+  rrp: number | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface UserLegoSetInput {
+  set_num: string;
+  status: LegoSetStatus;
+  price_paid: number | null;
+  rrp: number | null;
+  notes: string | null;
+}

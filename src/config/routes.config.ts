@@ -29,6 +29,8 @@ export const RoutePaths = {
   LegoHome: '/lego',
   LegoSets: '/lego/sets',
   LegoSetDetail: '/lego/sets/:setNum',
+  LegoParts: '/lego/parts',
+  LegoMySets: '/lego/my-sets',
   // Magic (backend listo, frontend pendiente)
   MagicHome: '/magic',
   MagicExplorer: '/magic/explorer',
