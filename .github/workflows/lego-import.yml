@@ -29,6 +29,10 @@ on:
         description: 'Write to Turso (off = estimate only)'
         type: boolean
         default: false
+      insert_only:
+        description: 'Resume: leave rows that already exist untouched (fewer row writes). Only with apply on'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -44,12 +48,13 @@ concurrency:
 jobs:
   import:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     env:
       LEGO_BASE_URL: https://cdn.rebrickable.com/media/downloads
       IN_FROM_YEAR: ${{ inputs.from_year }}
       IN_NO_SPARES: ${{ inputs.no_spares }}
       IN_SKIP_ELEMENTS: ${{ inputs.skip_elements }}
+      IN_INSERT_ONLY: ${{ inputs.insert_only }}
     steps:
       - uses: actions/checkout@v4
 
@@ -100,4 +105,5 @@ jobs:
           args=(--dir ./lego-data --from-year "$IN_FROM_YEAR" --apply)
           [ "$IN_NO_SPARES" = "true" ] && args+=(--no-spares)
           [ "$IN_SKIP_ELEMENTS" = "true" ] && args+=(--skip-elements)
+          [ "$IN_INSERT_ONLY" = "true" ] && args+=(--insert-only)
           node scripts/lego-import.mjs "${args[@]}"

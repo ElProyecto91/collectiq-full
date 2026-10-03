@@ -30,6 +30,9 @@
  *   --apply          actually write. Refuses to run when either estimate exceeds
  *                    its budget.
  *   --force          allow --apply above a budget. Do not use on the free plan.
+ *   --insert-only    resume mode: rows that already exist are left alone (ON CONFLICT DO
+ *                    NOTHING) instead of being rewritten, so an interrupted import can be
+ *                    finished without spending row writes on what is already there.
  *
  * Rules
  *   - Credentials only from environment variables. Never commit them.
@@ -60,6 +63,7 @@ const toYear = opt('to-year', null) === null ? null : Number(opt('to-year'));
 const noSpares = args.includes('--no-spares');
 const skipElements = args.includes('--skip-elements');
 const force = args.includes('--force');
+const insertOnly = args.includes('--insert-only');
 const apply = args.includes('--apply');
 const budgetMb = Number(opt('budget-mb', 4000));
 const writesBudget = Number(opt('writes-budget', 8_000_000));
@@ -342,25 +346,39 @@ const schemaPath = new URL('../turso/lego-schema.sql', import.meta.url);
 console.log('\nApplying schema (IF NOT EXISTS)...');
 await db.executeMultiple(fs.readFileSync(schemaPath, 'utf8'));
 
-function upsertSql(table, row) {
-  const cols = Object.keys(row);
+// One statement per row (the first version) meant ~1.7M statements for a full import and
+// blew the 1 h CI limit. Rows now go in multi-row statements, several per transaction.
+const MAX_PARAMS = 4000;      // well under SQLite's variable limit
+const STMTS_PER_BATCH = 5;    // statements per transaction (~4,000 rows for a 5-column table)
+
+function multiRowSql(table, cols, nRows) {
   const pk = PK[table];
   const rest = cols.filter((c) => !pk.includes(c));
-  const conflict = rest.length
-    ? `DO UPDATE SET ${rest.map((c) => `${c}=excluded.${c}`).join(', ')}`
-    : 'DO NOTHING';
-  return `INSERT INTO ${table} (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')}) ` +
+  const conflict = insertOnly || !rest.length
+    ? 'DO NOTHING'
+    : `DO UPDATE SET ${rest.map((c) => `${c}=excluded.${c}`).join(', ')}`;
+  const one = `(${cols.map(() => '?').join(',')})`;
+  return `INSERT INTO ${table} (${cols.join(',')}) VALUES ${Array(nRows).fill(one).join(',')} ` +
     `ON CONFLICT(${pk.join(',')}) ${conflict}`;
 }
 const sqlValue = (v) => (typeof v === 'boolean' ? (v ? 1 : 0) : v);
 
 async function write(table, rows) {
-  const BATCH = 500;
-  for (let i = 0; i < rows.length; i += BATCH) {
-    const stmts = rows.slice(i, i + BATCH).map((r) => ({
-      sql: upsertSql(table, r),
-      args: Object.values(r).map(sqlValue),
-    }));
+  if (!rows.length) return;
+  const cols = Object.keys(rows[0]);
+  const perStmt = Math.max(1, Math.floor(MAX_PARAMS / cols.length));
+  const perBatch = perStmt * STMTS_PER_BATCH;
+  const started = Date.now();
+  let lastLog = 0;
+  for (let i = 0; i < rows.length; i += perBatch) {
+    const stmts = [];
+    for (let j = i; j < Math.min(i + perBatch, rows.length); j += perStmt) {
+      const chunk = rows.slice(j, Math.min(j + perStmt, i + perBatch, rows.length));
+      stmts.push({
+        sql: multiRowSql(table, cols, chunk.length),
+        args: chunk.flatMap((r) => cols.map((c) => sqlValue(r[c]))),
+      });
+    }
     let lastErr = null;
     for (let attempt = 0; attempt < 4; attempt++) {
       try { await db.batch(stmts, 'write'); lastErr = null; break; }
@@ -370,10 +388,15 @@ async function write(table, rows) {
         await new Promise((r) => setTimeout(r, 2000 * 2 ** attempt));
       }
     }
-    if (lastErr) fail(`${table} batch at row ${i} failed: ${lastErr}\n  Stopped. Rows already written stay in place (upsert is safe to re-run, but spends row writes).`);
-    process.stdout.write(`\r${table}: ${Math.min(i + BATCH, rows.length)}/${rows.length}   `);
+    if (lastErr) fail(`${table} batch at row ${i} failed: ${lastErr}\n  Stopped. Rows already written stay in place; re-run with --insert-only to finish without rewriting them.`);
+    const done = Math.min(i + perBatch, rows.length);
+    // plain lines (not \r) so CI logs stay readable; at most one line every 5 s
+    if (done === rows.length || Date.now() - lastLog > 5000) {
+      lastLog = Date.now();
+      const secs = ((Date.now() - started) / 1000).toFixed(0);
+      console.log(`${table}: ${done}/${rows.length} (${Math.round((100 * done) / rows.length)}%) ${secs}s`);
+    }
   }
-  process.stdout.write('\n');
 }
 
 console.log('Importing (dependency order)...');
