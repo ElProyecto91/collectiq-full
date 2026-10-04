@@ -413,6 +413,25 @@ export const es = {
     complete: 'Completa',
     possibleHome: 'Qué sets puedes montar con tus piezas, con % completado.',
 
+    // reservas de piezas por set
+    assignParts: 'Asignar mis piezas libres a este set',
+    assignPartsHelp: 'Reserva tus piezas sueltas para este set. No se restan del inventario: si lo quitas de tu colección, vuelven a estar libres.',
+    assignDone: '{count} piezas asignadas a este set.',
+    assignNone: 'No hay piezas libres que encajen en este set.',
+    assignReassign: 'Reasignar',
+    assignRelease: 'Liberar piezas',
+    assignedHere: 'Asignadas a este set: {count} piezas',
+    addAndAssign: 'Añadir a mi colección y asignar piezas',
+    assignCopy: 'Copia',
+    ownedFree: '{free} libres',
+    inSetShort: '{count} en {set}',
+    overAssigned: 'Tienes menos piezas que las asignadas: revisa tus sets.',
+    totalFree: '{free} libres de {count}',
+    onlyFree: 'Solo piezas libres',
+    allPieces: 'Todas mis piezas',
+    freeHelp: 'Las piezas asignadas a sets de tu colección no cuentan como disponibles.',
+    deleteCopyReleases: 'Al eliminar esta copia, sus piezas asignadas vuelven a estar libres.',
+
     // fase 5: escáner de piezas
     scanner: 'Escáner de piezas',
     scannerDesc: 'Haz una foto a una pieza, confirma cuál es y añádela con su color y cantidad.',

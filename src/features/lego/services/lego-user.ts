@@ -1,5 +1,5 @@
 import { getSupabase } from '@/lib/supabase';
-import type { LegoPartItem, UserLegoPart, UserLegoSet, UserLegoSetInput } from '../types';
+import type { LegoPartItem, UserLegoAllocation, UserLegoPart, UserLegoSet, UserLegoSetInput } from '../types';
 
 /**
  * LEGO data that belongs to the user (Supabase). Every query is scoped with
@@ -109,9 +109,12 @@ function toUserSet(r: Record<string, unknown>): UserLegoSet {
   };
 }
 
-export async function addUserSet(telegramId: number, input: UserLegoSetInput): Promise<void> {
-  const { error } = await getSupabase().from('user_lego_sets').insert({ telegram_user_id: telegramId, ...input });
+/** Adds an owned copy of a set and returns its id. */
+export async function addUserSet(telegramId: number, input: UserLegoSetInput): Promise<string> {
+  const { data, error } = await getSupabase().from('user_lego_sets')
+    .insert({ telegram_user_id: telegramId, ...input }).select('id').single();
   fail(error);
+  return String((data as { id: string }).id);
 }
 
 export async function updateUserSet(telegramId: number, id: string, patch: Partial<UserLegoSetInput>): Promise<void> {
@@ -139,3 +142,34 @@ export async function countScansToday(telegramId: number): Promise<number> {
   fail(error);
   return count ?? 0;
 }
+
+/** Every reservation of loose parts by owned set copies. Deleting a copy deletes its rows (cascade). */
+export async function listAllocations(telegramId: number): Promise<UserLegoAllocation[]> {
+  const all: UserLegoAllocation[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await getSupabase()
+      .from('user_lego_set_allocations')
+      .select('user_set_id,part_num,color_id,quantity')
+      .eq('telegram_user_id', telegramId)
+      .order('user_set_id').order('part_num').order('color_id')
+      .range(from, from + PAGE - 1);
+    fail(error);
+    const rows = (data ?? []) as UserLegoAllocation[];
+    all.push(...rows);
+    if (rows.length < PAGE) break;
+  }
+  return all;
+}
+
+/** Replaces the reservation of one set copy; the server clamps each quantity to what is free. */
+export async function assignSetParts(telegramId: number, userSetId: string, items: LegoPartItem[]): Promise<number> {
+  const { data, error } = await getSupabase().rpc('assign_lego_set_parts', {
+    p_telegram_user_id: telegramId,
+    p_user_set_id: userSetId,
+    p_items: mergeItems(items),
+  });
+  fail(error);
+  return Number(data ?? 0);
+}
+
+export const releaseSetParts = (telegramId: number, userSetId: string) => assignSetParts(telegramId, userSetId, []);

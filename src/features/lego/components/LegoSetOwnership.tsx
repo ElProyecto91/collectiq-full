@@ -72,7 +72,11 @@ export function LegoSetOwnership({ set, parts }: { set: LegoSet; parts: LegoSetP
   });
   const removeCopy = useMutation({
     mutationFn: (id: string) => deleteUserSet(tid!, id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['user-lego-sets', tid] }),
+    // the database drops the copy's reservations with it, so its pieces are free again
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['user-lego-sets', tid] });
+      qc.invalidateQueries({ queryKey: ['user-lego-allocs', tid] });
+    },
     onError: fail,
   });
 
@@ -127,6 +131,7 @@ export function LegoSetOwnership({ set, parts }: { set: LegoSet; parts: LegoSetP
             </li>))}
         </ul>
 
+        {copies.length > 0 && <p className="text-[11px] text-white/40">{t.lego.deleteCopyReleases}</p>}
         {!adding && (
           <button onClick={() => setAdding(true)} className="w-full rounded-xl bg-white/10 py-2 text-sm">{t.lego.addToCollection}</button>)}
         {adding && (
