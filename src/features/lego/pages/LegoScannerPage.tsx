@@ -6,6 +6,7 @@ import { useI18n } from '@/i18n';
 import { RoutePaths } from '@/config';
 import { useUserStore } from '@/store';
 import { LegoAddPart } from '../components/LegoAddPart';
+import { LegoCamera } from '../components/LegoCamera';
 import { LegoImage } from '../components/LegoImage';
 import { LegoPctBar } from '../components/LegoPctBar';
 import { compressImage } from '../image';
@@ -26,6 +27,9 @@ export function LegoScannerPage() {
   const galleryRef = useRef<HTMLInputElement>(null);
 
   const [preview, setPreview] = useState<string | null>(null);
+  const [photo, setPhoto] = useState<File | null>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraNote, setCameraNote] = useState<string | null>(null);
   const [chosen, setChosen] = useState<Chosen>(null);
   const [done, setDone] = useState(false);
   const [added, setAdded] = useState<string | null>(null);
@@ -58,9 +62,10 @@ export function LegoScannerPage() {
     if (!file) return;
     setChosen(null); setDone(false); setAdded(null);
     setPreview(URL.createObjectURL(file));
+    setPhoto(file);
     scan.mutate(file);
   };
-  const reset = () => { scan.reset(); setPreview(null); setChosen(null); setDone(false); setAdded(null); };
+  const reset = () => { scan.reset(); setPreview(null); setPhoto(null); setChosen(null); setDone(false); setAdded(null); };
   const errorText = (e: ScanError) => {
     const key = `scanErr_${e.code}` as keyof typeof t.lego;
     const text = (t.lego[key] as string | undefined) ?? t.lego.scanErr_unknown;
@@ -68,10 +73,22 @@ export function LegoScannerPage() {
     return text.replace('{limit}', String(lim));
   };
 
+  // live camera (with flash) when the browser allows it; otherwise the system camera through <input capture>
+  const openCamera = () => {
+    setCameraNote(null);
+    if (typeof navigator.mediaDevices?.getUserMedia === 'function') setCameraOpen(true);
+    else cameraRef.current?.click();
+  };
+
   const btn = 'flex-1 rounded-xl py-3 text-sm font-bold flex items-center justify-center gap-2';
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
+      {cameraOpen && (
+        <LegoCamera
+          onCapture={(file) => { setCameraOpen(false); start(file); }}
+          onClose={() => setCameraOpen(false)}
+          onUnavailable={() => { setCameraOpen(false); setCameraNote(t.lego.cameraFallback); cameraRef.current?.click(); }} />)}
       <div className="px-4 pt-5 pb-3 flex items-center gap-3">
         <button onClick={() => navigate(RoutePaths.LegoHome)} aria-label={t.lego.back}
           className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center"><ArrowLeft className="w-4 h-4" /></button>
@@ -92,10 +109,11 @@ export function LegoScannerPage() {
             <input ref={galleryRef} type="file" accept="image/*" className="hidden" data-testid="gallery-input"
               onChange={(e) => { start(e.target.files?.[0]); e.target.value = ''; }} />
             <div className="flex gap-2">
-              <button disabled={scan.isPending} onClick={() => cameraRef.current?.click()} className={`${btn} bg-red-600 disabled:opacity-40`}><Camera className="w-4 h-4" />{t.lego.takePhoto}</button>
+              <button disabled={scan.isPending} onClick={openCamera} className={`${btn} bg-red-600 disabled:opacity-40`}><Camera className="w-4 h-4" />{t.lego.takePhoto}</button>
               <button disabled={scan.isPending} onClick={() => galleryRef.current?.click()} className={`${btn} bg-white/10 disabled:opacity-40`}><ImageIcon className="w-4 h-4" />{t.lego.pickPhoto}</button>
             </div>
             <p className="text-[11px] text-white/40">{t.lego.scanHint}</p>
+            {cameraNote && <p className="text-[11px] text-yellow-300/80" role="status">{cameraNote}</p>}
           </section>)}
 
         {preview && !done && <img src={preview} alt="" className="w-full max-h-56 object-contain rounded-2xl bg-white/5" />}
@@ -131,7 +149,7 @@ export function LegoScannerPage() {
         {scan.isSuccess && !done && chosen !== null && tid != null && (
           <section className="bg-white/[0.04] border border-white/8 rounded-2xl p-4 space-y-3">
             <button onClick={() => setChosen(null)} className="text-xs text-red-300 underline">{t.lego.scanBackToResults}</button>
-            <LegoAddPart key={chosen === 'manual' ? 'manual' : chosen.candidate.id} tid={tid}
+            <LegoAddPart key={chosen === 'manual' ? 'manual' : chosen.candidate.id} tid={tid} photo={photo}
               initialPart={chosen === 'manual' ? null : chosen.part}
               initialQuery={chosen === 'manual' ? '' : (chosen.part ? '' : chosen.candidate.id)}
               onAdded={(info) => { setAdded(tr('lego.partAdded', { qty: info.qty, name: info.part.name, color: info.color.name })); setDone(true); }} />
