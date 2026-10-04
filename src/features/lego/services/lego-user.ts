@@ -126,3 +126,16 @@ export async function deleteUserSet(telegramId: number, id: string): Promise<voi
     .eq('id', id).eq('telegram_user_id', telegramId);
   fail(error);
 }
+
+/** Part scans made today (UTC), from the counter the Worker keeps in lego_scans. */
+export async function countScansToday(telegramId: number): Promise<number> {
+  const d = new Date();
+  const start = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())).toISOString();
+  const { count, error } = await getSupabase()
+    .from('lego_scans')
+    .select('id', { count: 'exact', head: true })
+    .eq('telegram_user_id', telegramId)
+    .gte('scanned_at', start);
+  fail(error);
+  return count ?? 0;
+}

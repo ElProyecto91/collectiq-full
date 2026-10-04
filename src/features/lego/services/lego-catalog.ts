@@ -1,12 +1,12 @@
 import { getLegoDb } from '@/lib/turso';
 import type {
   LegoColorOption, LegoPartDetail, LegoPartKey, LegoPartSummary,
-  LegoSearchParams, LegoSearchResult, LegoSet, LegoSetPart, LegoTheme,
+  LegoSearchParams, LegoSearchResult, LegoSet, LegoSetPart, LegoTheme, PossibleSet, PossibleSetsParams,
 } from '../types';
 import {
-  LEGO_PAGE_SIZE, allColorsStmt, partColorsStmt, partDetailsStmt, searchPartsStmt,
-  searchSetsStmt, setPartsStmt, setStmt, setsByNumsStmt, themesStmt,
-  toColorOption, toPartDetail, toPartSummary, toSet, toSetPart, toTheme, type DbRow,
+  LEGO_PAGE_SIZE, allColorsStmt, canonStmt, partColorsStmt, partsByNumsStmt, partDetailsStmt, possibleSetsStmt, searchPartsStmt,
+  searchSetsStmt, setPartsStmt, setStmt, setsByNumsStmt, themesStmt, weightsStmt,
+  toColorOption, toPartDetail, toPartSummary, toPossibleSet, toSet, toSetPart, toTheme, type DbRow,
 } from './lego-queries';
 
 export { LEGO_PAGE_SIZE };
@@ -79,4 +79,30 @@ export async function fetchPartDetailsCached(keys: LegoPartKey[]): Promise<Map<s
   // a fresh Map each time: React memoizes on identity, so returning the cache itself would
   // leave a list showing raw part numbers after new details arrive
   return new Map(detailCache);
+}
+
+export async function fetchPossibleSets(p: PossibleSetsParams): Promise<PossibleSet[]> {
+  if (p.inventory.length === 0) return [];
+  return (await run(possibleSetsStmt(p))).map(toPossibleSet);
+}
+
+/** part -> canonical mold group, for the given parts (parts that are their own canon are absent). */
+export async function fetchCanonMap(partNums: string[]): Promise<Map<string, string>> {
+  const unique = [...new Set(partNums)];
+  const rows = await inChunks(unique, async (chunk) => await run(canonStmt(chunk)));
+  return new Map(rows.map((r) => [String(r.part_num), String(r.canon_part_num)]));
+}
+
+/** "canon|color" -> rarity weight. Empty when the derived tables were not imported yet. */
+export async function fetchWeights(keys: LegoPartKey[]): Promise<Map<string, number>> {
+  const rows = await inChunks(keys, async (chunk) => await run(weightsStmt(chunk)));
+  return new Map(rows.map((r) => [`${r.part_num}|${r.color_id}`, Number(r.weight)]));
+}
+
+/** Which of these part numbers exist in the catalog (exact match). */
+export async function fetchPartsByNums(nums: string[]): Promise<Map<string, LegoPartSummary>> {
+  const unique = [...new Set(nums.filter(Boolean))];
+  if (!unique.length) return new Map();
+  const rows = await inChunks(unique, async (chunk) => (await run(partsByNumsStmt(chunk))).map(toPartSummary));
+  return new Map(rows.map((r) => [r.part_num, r]));
 }

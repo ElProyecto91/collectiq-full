@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { RoutePaths } from '@/config';
 import { LegoImage } from '../components/LegoImage';
 import { LegoSetOwnership } from '../components/LegoSetOwnership';
+import { LegoSetProgress } from '../components/LegoSetProgress';
 import { fetchSet, fetchSetParts, fetchThemes } from '../services/lego-catalog';
 import type { LegoSetPart } from '../types';
 
@@ -23,6 +24,9 @@ export function LegoSetDetailPage() {
   const { t, tr } = useI18n();
   const { setNum = '' } = useParams<{ setNum: string }>();
   const [showSpares, setShowSpares] = useState(false);
+  const [search, setSearch] = useSearchParams();
+  const view = search.get('tab') === 'progress' ? 'progress' : 'list';
+  const setView = (v: 'list' | 'progress') => setSearch(v === 'progress' ? { tab: 'progress' } : {}, { replace: true });
 
   const setQuery = useQuery({ queryKey: ['lego-set', setNum], queryFn: () => fetchSet(setNum), enabled: !!setNum });
   const partsQuery = useQuery({ queryKey: ['lego-set-parts', setNum], queryFn: () => fetchSetParts(setNum), enabled: !!setNum });
@@ -104,7 +108,15 @@ export function LegoSetDetailPage() {
 
         <LegoSetOwnership set={set} parts={partsQuery.data} />
 
-        <section>
+        <div className="flex gap-2" role="tablist">
+          {([['list', t.lego.listView], ['progress', t.lego.progressView]] as const).map(([v, label]) => (
+            <button key={v} role="tab" aria-selected={view === v} onClick={() => setView(v)}
+              className={`flex-1 rounded-xl py-2 text-sm font-semibold border ${view === v ? 'border-red-400 bg-red-500/20' : 'border-white/10 bg-white/5 text-white/60'}`}>{label}</button>))}
+        </div>
+
+        {view === 'progress' && partsQuery.data && <LegoSetProgress parts={partsQuery.data} />}
+
+        {view === 'list' && <section>
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-sm font-bold">{t.lego.partsList}</h2>
             {partsQuery.data && partsQuery.data.length > 0 && (
@@ -155,7 +167,7 @@ export function LegoSetDetailPage() {
               </div>
             ))}
           </div>
-        </section>
+        </section>}
 
         <p className="text-[11px] text-white/30 pt-4">
           <a href="https://rebrickable.com" target="_blank" rel="noopener noreferrer" className="underline">

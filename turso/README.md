@@ -42,3 +42,18 @@ download per day).
 The importer sends multi-row statements (about 4,000 parameters each). The first version sent one
 statement per row, which was too slow for the full catalog and hit the 60-minute limit; the job
 limit is now 120 minutes as a safety net.
+
+## Phase 3 derived tables (possible sets ranking)
+`lego_part_canon`, `lego_part_rarity` and `lego_set_stats` are computed by the importer from the data
+it imports. After deploying phase 3, run the workflow once with `apply` ON and `insert_only` ON: the
+existing rows are left alone and only the three new tables are written (about 0.2 M row writes).
+Until then "Possible sets" and "My progress" show a message asking for that import.
+
+Interchangeable molds are Rebrickable rel_type `M` only. `A` ("similar, not necessarily compatible")
+and `B` (meaning not confirmed) are NOT used.
+
+## Part scanner (phase 5)
+The Worker route `lego-scan` forwards the photo to Brickognize. It needs no secret of its own (it uses
+the app session token and the existing Supabase service key). Optional Cloudflare variable
+`LEGO_SCAN_DAILY_LIMIT` (default 300 scans per user per day, a safety cap, not a paywall).
+Brickognize's website terms allow personal, non-commercial use; its API terms were not verified.

@@ -92,3 +92,33 @@ CREATE INDEX IF NOT EXISTS lego_sets_theme_idx           ON lego_sets (theme_id)
 CREATE INDEX IF NOT EXISTS lego_themes_parent_idx        ON lego_themes (parent_id);
 CREATE INDEX IF NOT EXISTS lego_part_relationships_child_idx  ON lego_part_relationships (child_part_num);
 CREATE INDEX IF NOT EXISTS lego_part_relationships_parent_idx ON lego_part_relationships (parent_part_num);
+
+-- ── Phase 3: derived tables used by the "possible sets" ranking ────────────────
+-- Computed by scripts/lego-import.mjs from the data it imports (no extra download).
+--
+-- lego_part_canon: parts that are interchangeable molds (Rebrickable rel_type 'M', the
+-- "alternate mold, functional drop-in replacement") share one canonical part number
+-- (the smallest in the connected group). Parts that are their own canon are not stored.
+CREATE TABLE IF NOT EXISTS lego_part_canon (
+  part_num        TEXT PRIMARY KEY,
+  canon_part_num  TEXT NOT NULL
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS lego_part_canon_canon_idx ON lego_part_canon (canon_part_num);
+
+-- lego_part_rarity: how many imported sets contain this canonical part in this color, and
+-- the weight derived from it: ln(1 + total_sets / sets_count). Rare parts weigh more.
+CREATE TABLE IF NOT EXISTS lego_part_rarity (
+  part_num    TEXT NOT NULL,
+  color_id    INTEGER NOT NULL,
+  sets_count  INTEGER NOT NULL,
+  weight      REAL NOT NULL,
+  PRIMARY KEY (part_num, color_id)
+) WITHOUT ROWID;
+
+-- lego_set_stats: totals per set, spare parts excluded.
+CREATE TABLE IF NOT EXISTS lego_set_stats (
+  set_num        TEXT PRIMARY KEY,
+  total_qty      INTEGER NOT NULL,
+  distinct_parts INTEGER NOT NULL,
+  weight_total   REAL NOT NULL
+) WITHOUT ROWID;

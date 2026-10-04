@@ -1,6 +1,6 @@
 import type {
   LegoColorOption, LegoPartDetail, LegoPartKey, LegoPartSummary,
-  LegoSearchParams, LegoSet, LegoSetPart, LegoTheme,
+  LegoSearchParams, LegoSet, LegoSetPart, LegoTheme, PossibleSet, PossibleSetsParams,
 } from '../types';
 
 /**
@@ -115,12 +115,76 @@ export function partDetailsStmt(keys: LegoPartKey[]): Stmt {
   };
 }
 
+export function partsByNumsStmt(nums: string[]): Stmt {
+  return {
+    sql: `SELECT part_num, name FROM lego_parts WHERE part_num IN (${nums.map(() => '?').join(', ')})`,
+    args: nums,
+  };
+}
+
 export function setsByNumsStmt(setNums: string[]): Stmt {
   return {
     sql:
       'SELECT set_num, name, year, theme_id, num_parts, img_url FROM lego_sets ' +
       `WHERE set_num IN (${setNums.map(() => '?').join(', ')})`,
     args: setNums,
+  };
+}
+
+/**
+ * Ranks sets by how much of them the inventory already covers.
+ *
+ * - The inventory travels as ONE JSON parameter (json_each), however large it is.
+ * - Interchangeable molds (lego_part_canon) are merged on both sides, so owning a drop-in
+ *   mold counts, and nothing is counted twice.
+ * - Per group: covered = MIN(needed, owned). Spare parts are ignored.
+ * - simple % = covered / needed pieces. weighted % = the same with each piece weighted by the
+ *   rarity of its part (lego_part_rarity), capped at 1.
+ * - Only rows of the owned parts are read (index on part, color), not the whole catalog.
+ */
+export function possibleSetsStmt(p: PossibleSetsParams): Stmt {
+  const pctExpr = 'CAST(ps.cov AS REAL) / st.total_qty';
+  const wpctExpr = 'MIN(1.0, ps.wcov / st.weight_total)';
+  const metricExpr = p.metric === 'weighted' ? wpctExpr : pctExpr;
+  return {
+    sql:
+      'WITH inv_raw AS (' +
+      "SELECT json_extract(j.value, '$.p') AS part_num, json_extract(j.value, '$.c') AS color_id, " +
+      "json_extract(j.value, '$.q') AS qty FROM json_each(?) j), " +
+      'inv AS (SELECT COALESCE(c.canon_part_num, r.part_num) AS cpart, r.color_id, SUM(r.qty) AS qty ' +
+      'FROM inv_raw r LEFT JOIN lego_part_canon c ON c.part_num = r.part_num GROUP BY 1, 2), ' +
+      'members AS (SELECT cpart, color_id, qty, cpart AS part_num FROM inv ' +
+      'UNION ALL SELECT i.cpart, i.color_id, i.qty, c.part_num FROM inv i JOIN lego_part_canon c ON c.canon_part_num = i.cpart), ' +
+      'hit AS (SELECT m.cpart, m.color_id, m.qty, sp.set_num, SUM(sp.quantity) AS need ' +
+      'FROM members m JOIN lego_set_parts sp ON sp.part_num = m.part_num AND sp.color_id = m.color_id AND sp.is_spare = 0 ' +
+      'GROUP BY m.cpart, m.color_id, m.qty, sp.set_num), ' +
+      'per_set AS (SELECT h.set_num, SUM(MIN(h.need, h.qty)) AS cov, SUM(MIN(h.need, h.qty) * COALESCE(r.weight, 0)) AS wcov ' +
+      'FROM hit h LEFT JOIN lego_part_rarity r ON r.part_num = h.cpart AND r.color_id = h.color_id GROUP BY h.set_num) ' +
+      'SELECT s.set_num, s.name, s.year, s.theme_id, s.num_parts, s.img_url, ' +
+      `ps.cov AS covered, st.total_qty AS total, ${pctExpr} AS pct, ${wpctExpr} AS wpct ` +
+      'FROM per_set ps JOIN lego_set_stats st ON st.set_num = ps.set_num JOIN lego_sets s ON s.set_num = ps.set_num ' +
+      `WHERE ps.cov >= ? AND ${metricExpr} >= ? ` +
+      `ORDER BY ${metricExpr} DESC, ps.cov DESC, s.set_num LIMIT ?`,
+    args: [
+      JSON.stringify(p.inventory.map((i) => ({ p: i.part_num, c: i.color_id, q: i.quantity }))),
+      p.minCovered, p.minPct, p.limit,
+    ],
+  };
+}
+
+export function canonStmt(partNums: string[]): Stmt {
+  return {
+    sql: `SELECT part_num, canon_part_num FROM lego_part_canon WHERE part_num IN (${partNums.map(() => '?').join(', ')})`,
+    args: partNums,
+  };
+}
+
+export function weightsStmt(keys: LegoPartKey[]): Stmt {
+  return {
+    sql:
+      `WITH k(part_num, color_id) AS (VALUES ${keys.map(() => '(?, ?)').join(', ')}) ` +
+      'SELECT r.part_num, r.color_id, r.weight FROM k JOIN lego_part_rarity r ON r.part_num = k.part_num AND r.color_id = k.color_id',
+    args: keys.flatMap((k) => [k.part_num, k.color_id]),
   };
 }
 
@@ -158,4 +222,8 @@ export const toPartDetail = (r: DbRow): LegoPartDetail => ({
   color_name: r.color_name == null ? `#${r.color_id}` : String(r.color_name),
   color_rgb: str(r.color_rgb), color_is_trans: Number(r.color_is_trans) === 1,
   img_url: str(r.img_url),
+});
+
+export const toPossibleSet = (r: DbRow): PossibleSet => ({
+  ...toSet(r), covered: Number(r.covered), total: Number(r.total), pct: Number(r.pct), wpct: Number(r.wpct),
 });
