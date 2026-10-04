@@ -441,6 +441,19 @@ export const es = {
     pendingNothingAssigned: 'Aún no has asignado piezas a este set: pulsa "Asignar mis piezas libres" en su ficha.',
     pendingOpenSet: 'Abrir set y asignar piezas',
 
+    // portada
+    homeSummary: 'Resumen de tu colección',
+    homePieces: 'Piezas',
+    homeFree: 'Libres',
+    homeSets: 'Sets',
+    homeIncomplete: 'Incompletos',
+    homeInSets: 'Piezas asignadas a sets',
+    homeKinds: '{count} tipos',
+    homeScanShort: 'Foto, color y cantidad',
+    pendingHomeDesc: 'Lo que le falta a cada set incompleto.',
+    homeEmptyTitle: 'Empieza por tus piezas',
+    homeEmptyDesc: 'Escanea o añade tus piezas sueltas y la app te dirá qué sets puedes montar con ellas.',
+
     // fase 5: escáner de piezas
     scanner: 'Escáner de piezas',
     scannerDesc: 'Haz una foto a una pieza, confirma cuál es y añádela con su color y cantidad.',
