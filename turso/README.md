@@ -70,3 +70,18 @@ into an existing catalog run the import with `apply` ON and `insert_only` ON: on
 Images are links to Rebrickable's CDN, not copies. Rebrickable only publishes an image per part+color that
 appears in a set inventory, so a part+color that no set uses has no image to show, and a share of the published
 URLs return 404 (the app shows a grey placeholder).
+
+## Keeping the catalog up to date (new sets)
+
+`node scripts/lego-import.mjs --dir ./lego-data --from-year 1949 --new-only --apply` reads the keys Turso
+already has and writes only what is new: new sets with their parts and stats, plus any new theme, color,
+part, element, relationship or rarity row. It never rewrites existing rows, so a weekly run costs a few
+hundred row writes (the free plan allows 10M/month; a full import is ~3.3M). New sets are also recorded
+in `lego_import_log` (set number + date) so the app can show what is new.
+
+What it does not do: existing sets keep their old name / quantities / image URL, and the rarity weights of
+old parts are not recalculated. Run a full import (`lego-import` workflow, apply on) every few months to
+refresh those.
+
+Without `--apply` it only prints what it would add (it still needs `TURSO_DATABASE_URL` and a token to
+read the existing keys).

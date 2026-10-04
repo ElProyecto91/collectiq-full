@@ -1,0 +1,76 @@
+name: LEGO catalog update (new sets)
+
+# Adds the sets Rebrickable has published since the last run (and any new theme / color / part /
+# element they bring) to Turso. Runs on the 5th of every month, and by hand from the Actions tab.
+# Rebrickable allows automated downloads at most once a day; once a month is well inside that.
+#
+# It only INSERTS rows that are not in the database yet (scripts/lego-import.mjs --new-only), so a run
+# costs a few hundred row writes. Existing sets are never rewritten: refresh them with the manual
+# "LEGO catalog import" workflow every few months.
+#
+# Secrets (repo -> Settings -> Secrets and variables -> Actions):
+#   TURSO_DATABASE_URL   libsql://<db>-<org>.turso.io
+#   TURSO_AUTH_TOKEN     WRITE token (never the read-only one)
+on:
+  schedule:
+    - cron: '17 5 5 * *'
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: 'Write to Turso (off = only list what would be added)'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash   # bash -eo pipefail: `node ... | tee` cannot hide a failure
+
+# the full import and this update must never write at the same time
+concurrency:
+  group: lego-import
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      LEGO_BASE_URL: https://cdn.rebrickable.com/media/downloads
+      # scheduled runs always write; manual runs follow the input
+      APPLY: ${{ github.event_name == 'schedule' || inputs.apply }}
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Download Rebrickable CSV files
+        run: |
+          mkdir -p lego-data
+          for f in themes colors parts part_relationships sets inventories inventory_parts elements; do
+            echo "Downloading $f.csv.gz"
+            if ! curl --fail --silent --show-error --location --retry 3 --retry-delay 5 \
+                 -o "lego-data/$f.csv.gz" "$LEGO_BASE_URL/$f.csv.gz"; then
+              echo "::error::Could not download $LEGO_BASE_URL/$f.csv.gz. Nothing was written. Check the file name on https://rebrickable.com/downloads/." >&2
+              exit 1
+            fi
+          done
+
+      - name: Add new sets
+        run: |
+          # --writes-budget is a safety net: a normal run writes hundreds of rows, so a run that
+          # would write far more (wrong or empty database) is refused instead of spending the quota.
+          args=(--dir ./lego-data --from-year 1949 --new-only --check-images 0 --writes-budget 300000)
+          [ "$APPLY" = "true" ] && args+=(--apply)
+          node scripts/lego-import.mjs "${args[@]}" | tee update.txt
+          { echo '### LEGO catalog update'; echo '```'; cat update.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
