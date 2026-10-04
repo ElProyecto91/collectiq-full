@@ -9,7 +9,8 @@ import { LegoImage } from '../components/LegoImage';
 import { LegoPctBar } from '../components/LegoPctBar';
 import { inventorySig } from '../inventory-sig';
 import { fetchPossibleSets } from '../services/lego-catalog';
-import { listUserParts } from '../services/lego-user';
+import { freeInventory } from '../services/lego-allocation';
+import { listAllocations, listUserParts } from '../services/lego-user';
 import type { RankingMetric } from '../types';
 
 const LIMIT = 300;
@@ -26,13 +27,18 @@ export function LegoPossibleSetsPage() {
   const [limit, setLimit] = useState(SHOWN);
 
   const partsQuery = useQuery({ queryKey: ['user-lego-parts', tid], queryFn: () => listUserParts(tid!), enabled: tid != null });
-  const inventory = partsQuery.data ?? [];
+  const allocsQuery = useQuery({ queryKey: ['user-lego-allocs', tid], queryFn: () => listAllocations(tid!), enabled: tid != null });
+  const [onlyFree, setOnlyFree] = useState(true);
+  const rawInventory = partsQuery.data ?? [];
+  const allocs = allocsQuery.data ?? [];
+  // pieces reserved by sets already in the collection are not available for another set
+  const inventory = useMemo(() => (onlyFree ? freeInventory(rawInventory, allocs) : rawInventory), [onlyFree, rawInventory, allocs]);
   const sig = useMemo(() => inventorySig(inventory), [inventory]);
 
   const rankingQuery = useQuery({
     queryKey: ['lego-possible', sig, metric, minPct],
     queryFn: () => fetchPossibleSets({ inventory, metric, minPct, minCovered: MIN_COVERED, limit: LIMIT }),
-    enabled: inventory.length > 0,
+    enabled: inventory.length > 0 && allocsQuery.isSuccess,
     staleTime: 10 * 60_000, // each ranking reads a lot of catalog rows: recalculate on demand
     gcTime: 30 * 60_000,
   });
@@ -57,13 +63,13 @@ export function LegoPossibleSetsPage() {
         {partsQuery.isLoading && <div className="flex justify-center py-10"><Loader2 className="w-5 h-5 animate-spin text-white/40" /></div>}
         {partsQuery.isError && <p className="text-sm text-white/60">{t.lego.loadError} <span className="text-[11px] text-white/30 break-words">{(partsQuery.error as Error).message}</span></p>}
 
-        {partsQuery.isSuccess && inventory.length === 0 && (
+        {partsQuery.isSuccess && rawInventory.length === 0 && (
           <div className="space-y-3">
             <p className="text-sm text-white/60">{t.lego.needInventory}</p>
             <button onClick={() => navigate(RoutePaths.LegoParts)} className="rounded-xl bg-red-600 px-4 py-2 text-sm font-bold">{t.lego.goToParts}</button>
           </div>)}
 
-        {inventory.length > 0 && (
+        {rawInventory.length > 0 && (
           <>
             <div className="space-y-2">
               <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={t.lego.metricSimple}>
@@ -75,6 +81,12 @@ export function LegoPossibleSetsPage() {
                 {MIN_OPTIONS.map((m) => (
                   <button key={m} aria-pressed={minPct === m} className={chip(minPct === m)} onClick={() => { setMinPct(m); setLimit(SHOWN); }}>{Math.round(m * 100)}%</button>))}
               </div>
+              {allocs.length > 0 && (
+                <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={t.lego.onlyFree}>
+                  <button role="radio" aria-checked={onlyFree} className={chip(onlyFree)} onClick={() => { setOnlyFree(true); setLimit(SHOWN); }}>{t.lego.onlyFree}</button>
+                  <button role="radio" aria-checked={!onlyFree} className={chip(!onlyFree)} onClick={() => { setOnlyFree(false); setLimit(SHOWN); }}>{t.lego.allPieces}</button>
+                </div>)}
+              {allocs.length > 0 && onlyFree && <p className="text-[11px] text-white/35">{t.lego.freeHelp}</p>}
               <p className="text-[11px] text-white/35">{t.lego.metricHelp}</p>
             </div>
 
@@ -91,6 +103,7 @@ export function LegoPossibleSetsPage() {
                 <p className="text-sm text-white/60">{needsImport ? t.lego.rankingNeedsImport : t.lego.loadError}</p>
                 <p className="text-[11px] text-white/30 break-words">{errMsg}</p>
               </div>)}
+            {inventory.length === 0 && allocsQuery.isSuccess && <p className="text-sm text-white/50">{t.lego.rankingNone}</p>}
             {rankingQuery.isSuccess && sets.length === 0 && <p className="text-sm text-white/50">{t.lego.rankingNone}</p>}
 
             <ul className="grid grid-cols-2 gap-3">

@@ -114,7 +114,7 @@ export function LegoSetDetailPage() {
               className={`flex-1 rounded-xl py-2 text-sm font-semibold border ${view === v ? 'border-red-400 bg-red-500/20' : 'border-white/10 bg-white/5 text-white/60'}`}>{label}</button>))}
         </div>
 
-        {view === 'progress' && partsQuery.data && <LegoSetProgress parts={partsQuery.data} />}
+        {view === 'progress' && partsQuery.data && <LegoSetProgress setNum={set.set_num} parts={partsQuery.data} />}
 
         {view === 'list' && <section>
           <div className="flex items-center justify-between mb-2">

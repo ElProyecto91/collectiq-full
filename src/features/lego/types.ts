@@ -141,3 +141,17 @@ export interface SetProgress {
   /** null when the rarity weights are not available. */
   wpct: number | null;
 }
+
+/** A row of user_lego_set_allocations: part of the inventory reserved for one owned set copy. */
+export interface UserLegoAllocation extends LegoPartItem {
+  user_set_id: string;
+}
+
+/** Inventory split for one (part, color): total held, reserved by set copies, and what is left. */
+export interface PartAvailability {
+  owned: number;
+  allocated: number;
+  free: number;
+  /** user_lego_sets ids holding part of it, with how many pieces each. */
+  inSets: Array<{ user_set_id: string; quantity: number }>;
+}

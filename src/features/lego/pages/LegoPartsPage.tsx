@@ -8,7 +8,8 @@ import { useUserStore } from '@/store';
 import { LegoAddPart } from '../components/LegoAddPart';
 import { LegoImage } from '../components/LegoImage';
 import { fetchPartDetailsCached } from '../services/lego-catalog';
-import { listUserParts, setUserPartQuantity } from '../services/lego-user';
+import { availability } from '../services/lego-allocation';
+import { listAllocations, listUserParts, listUserSets, setUserPartQuantity } from '../services/lego-user';
 import type { UserLegoPart } from '../types';
 
 const SHOWN = 60;
@@ -29,6 +30,11 @@ export function LegoPartsPage() {
     queryKey: ['user-lego-parts', tid], queryFn: () => listUserParts(tid!), enabled: tid != null,
   });
   const parts = partsQuery.data ?? [];
+  // reservations by owned sets: the inventory is never reduced, pieces are only set aside
+  const allocsQuery = useQuery({ queryKey: ['user-lego-allocs', tid], queryFn: () => listAllocations(tid!), enabled: tid != null });
+  const setsQuery = useQuery({ queryKey: ['user-lego-sets', tid], queryFn: () => listUserSets(tid!), enabled: tid != null });
+  const av = useMemo(() => availability(parts, allocsQuery.data ?? []), [parts, allocsQuery.data]);
+  const setNumOf = useMemo(() => new Map((setsQuery.data ?? []).map((c) => [c.id, c.set_num])), [setsQuery.data]);
   const keysSig = parts.map((p) => `${p.part_num}|${p.color_id}`).join(',');
   const detailsQuery = useQuery({
     queryKey: ['lego-part-details', keysSig],
@@ -51,6 +57,7 @@ export function LegoPartsPage() {
   }, [parts, details, filter]);
 
   const totalPieces = parts.reduce((s, p) => s + p.quantity, 0);
+  const freePieces = [...av.values()].reduce((s, a) => s + a.free, 0);
 
   const [error, setError] = useState<string | null>(null);
   const fail = (e: unknown) => setError(e instanceof Error ? e.message : String(e));
@@ -88,7 +95,7 @@ export function LegoPartsPage() {
           className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center"><ArrowLeft className="w-4 h-4" /></button>
         <div>
           <h1 className="text-lg font-black">{t.lego.inventory}</h1>
-          {partsQuery.data && <p className="text-xs text-white/50">{tr('lego.partsSummary', { count: totalPieces, unique: parts.length })}</p>}
+          {partsQuery.data && <p className="text-xs text-white/50">{tr('lego.partsSummary', { count: totalPieces, unique: parts.length })}{allocsQuery.data && allocsQuery.data.length > 0 && ` · ${tr('lego.totalFree', { free: freePieces, count: totalPieces })}`}</p>}
         </div>
       </div>
 
@@ -125,6 +132,19 @@ export function LegoPartsPage() {
                   <p className="text-[11px] text-white/50 flex items-center gap-1 mt-0.5">
                     <Swatch rgb={d?.color_rgb ?? null} trans={d?.color_is_trans ?? false} />{d?.color_name ?? `#${p.color_id}`}
                   </p>
+                  {(() => {
+                    const a = av.get(`${p.part_num}|${p.color_id}`);
+                    if (!a || a.allocated === 0) return null;
+                    // one line per set so "5 in 75192-1" is readable even with several sets
+                    const bySet = new Map<string, number>();
+                    for (const x of a.inSets) bySet.set(setNumOf.get(x.user_set_id) ?? '?', (bySet.get(setNumOf.get(x.user_set_id) ?? '?') ?? 0) + x.quantity);
+                    return (
+                      <p className="text-[11px] mt-0.5">
+                        <span className="text-green-300 font-semibold">{tr('lego.ownedFree', { free: a.free })}</span>
+                        {[...bySet].map(([setNum, q]) => <span key={setNum} className="text-white/50"> · {tr('lego.inSetShort', { count: q, set: setNum })}</span>)}
+                        {a.owned < a.allocated && <span className="text-red-300 block">{t.lego.overAssigned}</span>}
+                      </p>);
+                  })()}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <button aria-label={t.lego.decrease} onClick={() => qtyMutation.mutate({ p, next: p.quantity - 1 })}
