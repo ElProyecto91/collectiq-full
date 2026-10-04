@@ -35,6 +35,14 @@
  *   --apply          actually write. Refuses to run when either estimate exceeds
  *                    its budget.
  *   --force          allow --apply above a budget. Do not use on the free plan.
+ *   --new-only       incremental mode for scheduled updates: reads which rows Turso already has and
+ *                    writes ONLY what is new (new sets with their parts and stats, plus any new
+ *                    theme / color / part / element / relationship / rarity row). Implies
+ *                    --insert-only. Needs TURSO_DATABASE_URL (+ token) even without --apply, to
+ *                    read the existing keys. Existing sets are never rewritten, except that a set
+ *                    whose inventory appeared after it was first imported gets its parts then.
+ *                    A full import every few months refreshes everything else (renames,
+ *                    corrected quantities, new image URLs).
  *   --insert-only    resume mode: rows that already exist are left alone (ON CONFLICT DO
  *                    NOTHING) instead of being rewritten, so an interrupted import can be
  *                    finished without spending row writes on what is already there.
@@ -75,10 +83,22 @@ const toYear = opt('to-year', null) === null ? null : Number(opt('to-year'));
 const noSpares = args.includes('--no-spares');
 const skipElements = args.includes('--skip-elements');
 const force = args.includes('--force');
-const insertOnly = args.includes('--insert-only');
+const newOnly = args.includes('--new-only');
+const insertOnly = args.includes('--insert-only') || newOnly;
 const usedPartsOnly = args.includes('--used-parts-only');
 const checkImages = Number(opt('check-images', 200)) || 0;
 const apply = args.includes('--apply');
+const dbUrl = process.env.TURSO_DATABASE_URL;
+const authToken = process.env.TURSO_AUTH_TOKEN;
+let dbClient = null;
+async function getDb() {
+  if (dbClient) return dbClient;
+  if (!dbUrl) fail('Set TURSO_DATABASE_URL (and TURSO_AUTH_TOKEN for a remote database) in the environment.');
+  if (!dbUrl.startsWith('file:') && !authToken) fail('TURSO_AUTH_TOKEN is required for a remote database.');
+  const { createClient } = await import('@libsql/client');
+  dbClient = createClient({ url: dbUrl, authToken });
+  return dbClient;
+}
 const budgetMb = Number(opt('budget-mb', 4000));
 const writesBudget = Number(opt('writes-budget', 8_000_000));
 
@@ -326,6 +346,7 @@ const data = {
   lego_part_canon: canonRows,
   lego_part_rarity: rarityRows,
   lego_set_stats: statsRows,
+  lego_import_log: [],
 };
 const PK = {
   lego_themes: ['id'], lego_colors: ['id'], lego_parts: ['part_num'],
@@ -333,17 +354,58 @@ const PK = {
   lego_set_parts: ['set_num', 'part_num', 'color_id', 'is_spare'], lego_elements: ['element_id'],
   lego_part_relationships: ['rel_type', 'child_part_num', 'parent_part_num'],
   lego_part_canon: ['part_num'], lego_part_rarity: ['part_num', 'color_id'], lego_set_stats: ['set_num'],
+  lego_import_log: ['set_num'],
 };
 const SECONDARY_INDEXES = { // see turso/lego-schema.sql
   lego_themes: 1, lego_colors: 0, lego_parts: 0, lego_part_colors: 0, lego_sets: 2,
   lego_set_parts: 1, lego_elements: 1, lego_part_relationships: 2,
-  lego_part_canon: 1, lego_part_rarity: 0, lego_set_stats: 0,
+  lego_part_canon: 1, lego_part_rarity: 0, lego_set_stats: 0, lego_import_log: 1,
 };
 const ORDER = [ // dependency order
   'lego_themes', 'lego_colors', 'lego_parts', 'lego_part_colors', 'lego_sets',
   'lego_set_parts', 'lego_elements', 'lego_part_relationships',
-  'lego_part_canon', 'lego_part_rarity', 'lego_set_stats',
+  'lego_part_canon', 'lego_part_rarity', 'lego_set_stats', 'lego_import_log',
 ];
+
+// ── incremental mode: keep only what Turso does not have yet ───────
+if (newOnly) {
+  const db0 = await getDb();
+  const keyOf = (table, r) => PK[table].map((c) => String(r[c])).join('|');
+  const existing = async (table) => {
+    try {
+      const res = await db0.execute(`SELECT ${PK[table].join(', ')} FROM ${table}`);
+      return new Set(res.rows.map((r) => keyOf(table, r)));
+    } catch (e) {
+      if (/no such table/i.test(String(e?.message ?? e))) return new Set(); // first run on an empty database
+      throw e;
+    }
+  };
+  const diffTables = ['lego_themes', 'lego_colors', 'lego_parts', 'lego_part_colors', 'lego_sets',
+    'lego_elements', 'lego_part_relationships', 'lego_part_canon', 'lego_part_rarity'];
+  const have = {};
+  for (const t of diffTables) have[t] = await existing(t);
+  const haveStats = await existing('lego_set_stats');
+
+  const fresh = {};
+  for (const t of diffTables) fresh[t] = data[t].filter((r) => !have[t].has(keyOf(t, r)));
+  const newSetNums = new Set(fresh.lego_sets.map((r) => r.set_num));
+  // a set already in the database whose inventory only appeared later
+  const lateSetNums = new Set(data.lego_set_stats
+    .filter((r) => !newSetNums.has(r.set_num) && have.lego_sets.has(r.set_num) && !haveStats.has(r.set_num))
+    .map((r) => r.set_num));
+  const target = new Set([...newSetNums, ...lateSetNums]);
+  fresh.lego_set_parts = data.lego_set_parts.filter((r) => target.has(r.set_num));
+  fresh.lego_set_stats = data.lego_set_stats.filter((r) => target.has(r.set_num));
+  const today = new Date().toISOString().slice(0, 10);
+  fresh.lego_import_log = fresh.lego_sets.map((r) => ({ set_num: r.set_num, imported_at: today }));
+
+  for (const t of ORDER) data[t] = fresh[t];
+  console.log(`\nIncremental mode: ${newSetNums.size} new set(s), ${lateSetNums.size} existing set(s) that got their inventory.`);
+  const show = fresh.lego_sets.slice().sort((a, b) => (b.year ?? 0) - (a.year ?? 0)).slice(0, 15);
+  for (const x of show) console.log(`  + ${x.set_num}  ${x.year ?? '----'}  ${x.name}`);
+  if (fresh.lego_sets.length > show.length) console.log(`  ... and ${fresh.lego_sets.length - show.length} more`);
+}
+
 
 // ── size estimate (approximate, +/-30%) ─────────────────────────
 function valueBytes(v) {
@@ -440,13 +502,7 @@ if ((overStorage || overWrites) && !force) {
 }
 
 // ── apply ───────────────────────────────────────────────────────
-const dbUrl = process.env.TURSO_DATABASE_URL;
-const authToken = process.env.TURSO_AUTH_TOKEN;
-if (!dbUrl) fail('Set TURSO_DATABASE_URL (and TURSO_AUTH_TOKEN for a remote database) in the environment to use --apply.');
-if (!dbUrl.startsWith('file:') && !authToken) fail('TURSO_AUTH_TOKEN is required for a remote database.');
-
-const { createClient } = await import('@libsql/client');
-const db = createClient({ url: dbUrl, authToken });
+const db = await getDb();
 
 const schemaPath = new URL('../turso/lego-schema.sql', import.meta.url);
 console.log('\nApplying schema (IF NOT EXISTS)...');

@@ -122,3 +122,11 @@ CREATE TABLE IF NOT EXISTS lego_set_stats (
   distinct_parts INTEGER NOT NULL,
   weight_total   REAL NOT NULL
 ) WITHOUT ROWID;
+
+-- Sets added by the scheduled incremental import (scripts/lego-import.mjs --new-only), so the
+-- app can show what is new. Sets from the first full import are not listed here.
+CREATE TABLE IF NOT EXISTS lego_import_log (
+  set_num      TEXT PRIMARY KEY,
+  imported_at  TEXT NOT NULL            -- YYYY-MM-DD (UTC)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS lego_import_log_date_idx ON lego_import_log (imported_at);
