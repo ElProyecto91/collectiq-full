@@ -482,6 +482,17 @@ export const es = {
     partSetsNone: 'ningún set la tiene en este color',
     partSetsQty: '×{count}',
 
+    // cámara y colores sugeridos
+    cameraFlashOn: 'Encender flash',
+    cameraFlashOff: 'Apagar flash',
+    cameraClose: 'Cerrar cámara',
+    cameraNoFlash: 'Este navegador o dispositivo no permite encender el flash desde la app.',
+    cameraFallback: 'No se pudo abrir la cámara dentro de la app; se usa la cámara del sistema (sin botón de flash).',
+    colorSuggested: 'Colores sugeridos según la foto',
+    colorSuggestedHelp: 'Borde discontinuo: ese color no aparece en el catálogo para esta pieza.',
+    showAllColorsList: 'Ver todos los colores',
+    hideAllColorsList: 'Ocultar la lista completa',
+
     // fase 5: escáner de piezas
     scanner: 'Escáner de piezas',
     scannerDesc: 'Haz una foto a una pieza, confirma cuál es y añádela con su color y cantidad.',

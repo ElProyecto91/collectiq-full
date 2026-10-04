@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, Search } from 'lucide-react';
 import { useI18n } from '@/i18n';
+import { decodeToPixels } from '../image';
+import { pieceColors, suggestColors, type Cluster } from '../color-suggest';
 import { fetchAllColors, fetchPartColors, searchParts } from '../services/lego-catalog';
 import { addUserParts } from '../services/lego-user';
 import type { LegoColorOption, LegoPartSummary } from '../types';
@@ -28,11 +30,13 @@ interface Props {
   initialPart?: LegoPartSummary | null;
   /** Start with this text in the search box. */
   initialQuery?: string;
+  /** Photo of the piece: its colors are used to suggest the color to pick. */
+  photo?: Blob | null;
   onAdded?: (info: { part: LegoPartSummary; color: LegoColorOption; qty: number }) => void;
 }
 
 /** Search a part, choose its color and quantity, and add it to the inventory (quantities add up). */
-export function LegoAddPart({ tid, initialPart = null, initialQuery = '', onAdded }: Props) {
+export function LegoAddPart({ tid, initialPart = null, initialQuery = '', photo = null, onAdded }: Props) {
   const { t, tr } = useI18n();
   const qc = useQueryClient();
 
@@ -42,9 +46,21 @@ export function LegoAddPart({ tid, initialPart = null, initialQuery = '', onAdde
   const [showAll, setShowAll] = useState(false);
   const [qty, setQty] = useState('1');
   const [showSets, setShowSets] = useState(false);
+  const [clusters, setClusters] = useState<Cluster[] | null>(null);
+  const [listOpen, setListOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const dq = useDebounced(q, 300);
+
+  // colors of the photographed piece (analysis runs on a 96 px copy, in the browser)
+  useEffect(() => {
+    let live = true;
+    setClusters(null);
+    if (photo) {
+      decodeToPixels(photo).then((px) => { if (live) setClusters(pieceColors(px.data, px.width, px.height)); }).catch(() => undefined);
+    }
+    return () => { live = false; };
+  }, [photo]);
 
   const searchQuery = useQuery({
     queryKey: ['lego-part-search', dq.trim()], queryFn: () => searchParts(dq), enabled: dq.trim().length > 0 && !picked,
@@ -55,10 +71,19 @@ export function LegoAddPart({ tid, initialPart = null, initialQuery = '', onAdde
   const knownColors = partColorsQuery.data ?? [];
   const useAll = showAll || (partColorsQuery.isSuccess && knownColors.length === 0);
   const allColorsQuery = useQuery({
-    queryKey: ['lego-all-colors'], queryFn: fetchAllColors, staleTime: Infinity, enabled: !!picked && useAll,
+    queryKey: ['lego-all-colors'], queryFn: fetchAllColors, staleTime: Infinity, enabled: !!picked && (useAll || !!clusters?.length),
   });
   const colors: LegoColorOption[] = useAll ? allColorsQuery.data ?? [] : knownColors;
-  const chosenColor = colors.find((c) => c.color_id === colorId) ?? null;
+  // at least 4 suggestions from the photo, colors this part exists in first
+  const suggestions = useMemo(() => {
+    if (!clusters?.length || !partColorsQuery.isSuccess || !allColorsQuery.data) return [];
+    const knownIds = new Set(knownColors.map((c) => c.color_id));
+    const byId = new Map(knownColors.map((c) => [c.color_id, c]));
+    return suggestColors(clusters, allColorsQuery.data.map((c) => ({ ...c, color_id: c.color_id })), knownIds, 5)
+      .map(({ color, known }) => ({ color: byId.get(color.color_id) ?? color, known }));
+  }, [clusters, knownColors, partColorsQuery.isSuccess, allColorsQuery.data]);
+  const hasSuggestions = suggestions.length > 0;
+  const chosenColor = [...suggestions.map((s) => s.color), ...colors].find((c) => c.color_id === colorId) ?? null;
   const quantity = Number.parseInt(qty, 10);
 
   const addMutation = useMutation({
@@ -67,7 +92,7 @@ export function LegoAddPart({ tid, initialPart = null, initialQuery = '', onAdde
       const info = { part: picked!, color: chosenColor!, qty: quantity };
       setError(null);
       setMessage(tr('lego.partAdded', { qty: quantity, name: picked!.name, color: chosenColor!.name }));
-      setPicked(null); setColorId(null); setQ(''); setQty('1'); setShowAll(false); setShowSets(false);
+      setPicked(null); setColorId(null); setQ(''); setQty('1'); setShowAll(false); setShowSets(false); setListOpen(false);
       qc.invalidateQueries({ queryKey: ['user-lego-parts', tid] });
       onAdded?.(info);
     },
@@ -103,16 +128,35 @@ export function LegoAddPart({ tid, initialPart = null, initialQuery = '', onAdde
 
       {picked && (
         <div className="space-y-3">
-          <p className="text-xs text-white/50">{useAll ? t.lego.allColors : t.lego.onlyKnownColors}</p>
-          {(partColorsQuery.isLoading || (useAll && allColorsQuery.isLoading)) && <Loader2 className="w-4 h-4 animate-spin text-white/40" />}
-          <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={t.lego.chooseColor}>
-            {colors.map((c) => (
-              <button key={c.color_id} role="radio" aria-checked={colorId === c.color_id} onClick={() => { setColorId(c.color_id); setShowSets(false); }}
-                className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs border ${colorId === c.color_id ? 'border-red-400 bg-red-500/20' : 'border-white/10 bg-white/5'}`}>
-                <Swatch rgb={c.rgb} trans={c.is_trans} />{c.name}
-              </button>))}
-          </div>
-          {!useAll && <button onClick={() => setShowAll(true)} className="text-xs text-red-300 underline">{t.lego.showAllColors}</button>}
+          {hasSuggestions && (
+            <div className="space-y-2">
+              <p className="text-xs text-white/70 font-semibold">{t.lego.colorSuggested}</p>
+              <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={t.lego.colorSuggested}>
+                {suggestions.map(({ color: c, known }) => (
+                  <button key={c.color_id} role="radio" aria-checked={colorId === c.color_id} onClick={() => { setColorId(c.color_id); setShowSets(false); }}
+                    title={known ? undefined : t.lego.colorSuggestedHelp}
+                    className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs border ${known ? '' : 'border-dashed'} ${colorId === c.color_id ? 'border-red-400 bg-red-500/20' : 'border-white/20 bg-white/5'}`}>
+                    <Swatch rgb={c.rgb} trans={c.is_trans} />{c.name}
+                  </button>))}
+              </div>
+              {suggestions.some((s) => !s.known) && <p className="text-[10px] text-white/35">{t.lego.colorSuggestedHelp}</p>}
+              <button onClick={() => setListOpen((v) => !v)} aria-expanded={listOpen} className="text-xs text-red-300 underline">
+                {listOpen ? t.lego.hideAllColorsList : t.lego.showAllColorsList}
+              </button>
+            </div>)}
+          {(!hasSuggestions || listOpen) && (
+            <div className="space-y-3">
+              <p className="text-xs text-white/50">{useAll ? t.lego.allColors : t.lego.onlyKnownColors}</p>
+              {(partColorsQuery.isLoading || (useAll && allColorsQuery.isLoading)) && <Loader2 className="w-4 h-4 animate-spin text-white/40" />}
+              <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={t.lego.chooseColor}>
+                {colors.map((c) => (
+                  <button key={c.color_id} role="radio" aria-checked={colorId === c.color_id} onClick={() => { setColorId(c.color_id); setShowSets(false); }}
+                    className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs border ${colorId === c.color_id ? 'border-red-400 bg-red-500/20' : 'border-white/10 bg-white/5'}`}>
+                    <Swatch rgb={c.rgb} trans={c.is_trans} />{c.name}
+                  </button>))}
+              </div>
+              {!useAll && <button onClick={() => setShowAll(true)} className="text-xs text-red-300 underline">{t.lego.showAllColors}</button>}
+            </div>)}
 
           {chosenColor && (
             <div className="flex items-center gap-3">
