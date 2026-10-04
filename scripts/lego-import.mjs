@@ -27,6 +27,11 @@
  *                    and the database is BLOCKED for the rest of the month when it
  *                    is exceeded). Row writes are counted conservatively as
  *                    rows x (1 + secondary indexes).
+ *   --used-parts-only  import only the parts that appear in the imported sets (plus their mold
+ *                    partners). Default: EVERY part in parts.csv, so any part can be searched and
+ *                    added to the inventory even if no set uses it.
+ *   --check-images N sample N image URLs of sets and N of parts (default 200 each, estimate mode
+ *                    only, 0 = off) and report how many answer. Light and polite: 8 at a time.
  *   --apply          actually write. Refuses to run when either estimate exceeds
  *                    its budget.
  *   --force          allow --apply above a budget. Do not use on the free plan.
@@ -71,6 +76,8 @@ const noSpares = args.includes('--no-spares');
 const skipElements = args.includes('--skip-elements');
 const force = args.includes('--force');
 const insertOnly = args.includes('--insert-only');
+const usedPartsOnly = args.includes('--used-parts-only');
+const checkImages = Number(opt('check-images', 200)) || 0;
 const apply = args.includes('--apply');
 const budgetMb = Number(opt('budget-mb', 4000));
 const writesBudget = Number(opt('writes-budget', 8_000_000));
@@ -230,7 +237,7 @@ for (const k of partColors.keys()) usedParts.add(k.split('|')[0]);
 const relRows = [];
 const keepParts = new Set(usedParts);
 for await (const r of readCsv('part_relationships')) {
-  if (usedParts.has(r.child_part_num) || usedParts.has(r.parent_part_num)) {
+  if (!usedPartsOnly || usedParts.has(r.child_part_num) || usedParts.has(r.parent_part_num)) {
     relRows.push({ rel_type: r.rel_type, child_part_num: r.child_part_num, parent_part_num: r.parent_part_num });
     keepParts.add(r.child_part_num);
     keepParts.add(r.parent_part_num);
@@ -239,8 +246,10 @@ for await (const r of readCsv('part_relationships')) {
 
 const parts = [];
 const seenParts = new Set();
+let partsInCsv = 0;
 for await (const r of readCsv('parts')) {
-  if (!keepParts.has(r.part_num) || seenParts.has(r.part_num)) continue;
+  if (!seenParts.has(r.part_num)) partsInCsv++;
+  if ((usedPartsOnly && !keepParts.has(r.part_num)) || seenParts.has(r.part_num)) continue;
   seenParts.add(r.part_num);
   parts.push({ part_num: r.part_num, name: r.name, part_cat_id: int(r.part_cat_id), part_material: txt(r.part_material) });
 }
@@ -358,6 +367,45 @@ function estimate(rows, nIdx) {
 }
 const mb = (b) => (b / 1024 / 1024).toFixed(1).padStart(7);
 
+// ── coverage report: what the catalog will contain, and what it cannot ──
+const pct = (a, b) => `${b ? ((100 * a) / b).toFixed(1) : '0.0'}%`;
+const setsNoImg = data.lego_sets.filter((x) => !x.img_url).length;
+const pairsNoImg = partColorRows.filter((r) => !r.img_url).length;
+const partsWithPair = new Set(partColorRows.map((r) => r.part_num));
+const partsWithImg = new Set(partColorRows.filter((r) => r.img_url).map((r) => r.part_num));
+console.log('\nCoverage');
+console.log(`  Sets in sets.csv (year filter applied): ${sets.size}`);
+console.log(`    with an inventory .............. ${best.size} (${pct(best.size, sets.size)})`);
+console.log(`    with at least one non-spare part ${statsRows.length} (${pct(statsRows.length, sets.size)})  <- only these can appear in "possible sets"`);
+console.log(`    with a set image URL ........... ${sets.size - setsNoImg} (${pct(sets.size - setsNoImg, sets.size)})`);
+console.log(`  Parts in parts.csv ............... ${partsInCsv}`);
+console.log(`    imported ....................... ${parts.length} (${pct(parts.length, partsInCsv)})${usedPartsOnly ? '  (--used-parts-only)' : ''}`);
+console.log(`    used by some imported set ...... ${partsWithPair.size} (${pct(partsWithPair.size, parts.length)} of imported)`);
+console.log(`    with at least one image URL .... ${partsWithImg.size} (${pct(partsWithImg.size, parts.length)} of imported)`);
+console.log(`  Part+color pairs with data ....... ${partColorRows.length}; without image URL: ${pairsNoImg} (${pct(pairsNoImg, partColorRows.length)})`);
+console.log('  Not covered: minifigures (minifigs.csv is not imported) and any part+color pair that no set uses');
+console.log('  has no image URL (Rebrickable gives images per part+color from set inventories only).');
+
+async function checkUrls(label, urls, n) {
+  if (!n || !urls.length) return;
+  const pool = [...urls].sort(() => Math.random() - 0.5).slice(0, n);
+  let good = 0, bad = 0, errored = 0, next = 0; const examples = [];
+  const worker = async () => {
+    while (next < pool.length) {
+      const u = pool[next++];
+      try {
+        const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 10000);
+        const res = await fetch(u, { headers: { Range: 'bytes=0-0', 'User-Agent': 'collectiq-lego-import (personal use)' }, signal: ctrl.signal });
+        clearTimeout(timer); await res.body?.cancel?.();
+        if (res.status === 200 || res.status === 206) good++; else { bad++; if (examples.length < 3) examples.push(`${res.status} ${u}`); }
+      } catch { errored++; if (examples.length < 3) examples.push(`no answer ${u}`); }
+    }
+  };
+  await Promise.all(Array.from({ length: 8 }, worker));
+  console.log(`  ${label}: ${good}/${pool.length} answered OK (${pct(good, pool.length)}), ${bad} not found / refused, ${errored} no answer`);
+  for (const e of examples) console.log(`     e.g. ${e}`);
+}
+
 console.log('\nEstimated size per table (approximate, +/-30%)');
 console.log('table'.padEnd(26) + 'rows'.padStart(10) + '      MB' + '   row writes');
 let total = 0;
@@ -378,6 +426,11 @@ if (overStorage) console.log('WARNING: estimated storage exceeds the budget. Rai
 if (overWrites) console.log('WARNING: estimated row writes exceed the budget. Raise --from-year, use --no-spares / --skip-elements, or split the import across months.');
 
 if (!apply) {
+  if (checkImages > 0) {
+    console.log(`\nImage URL sample (${checkImages} sets, ${checkImages} parts; a share of Rebrickable's image URLs is known to return 404)`);
+    await checkUrls('Set images ', data.lego_sets.map((x) => x.img_url).filter(Boolean), checkImages);
+    await checkUrls('Part images', partColorRows.map((r) => r.img_url).filter(Boolean), checkImages);
+  }
   console.log('\nEstimate only: nothing was written. Re-run with --apply to import.');
   process.exit(0);
 }
