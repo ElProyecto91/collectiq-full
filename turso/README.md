@@ -99,3 +99,8 @@ a part+color has no picture of its own (and keeps working if the table does not 
 
 About 65 requests for the whole catalog, one at a time with pauses; it waits on HTTP 429 and stops if the
 key is refused. It reports how many parts stay without a picture (the API does not have one for every part).
+
+The same script fills `lego_part_ext` (BrickLink number -> Rebrickable part). The scanner's recognizer answers
+with BrickLink numbers and many differ from Rebrickable's (BrickLink 98613 = Rebrickable 74261), so the
+scanner looks the number up there before falling back to a search by name. Until the script has run with
+`--apply`, such parts show "not in the catalog" and are searched by hand.

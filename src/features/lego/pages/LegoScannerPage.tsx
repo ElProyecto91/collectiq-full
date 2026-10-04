@@ -10,7 +10,7 @@ import { LegoCamera } from '../components/LegoCamera';
 import { LegoImage } from '../components/LegoImage';
 import { LegoPctBar } from '../components/LegoPctBar';
 import { compressImage } from '../image';
-import { fetchPartsByNums, searchParts } from '../services/lego-catalog';
+import { fetchPartsByBricklink, fetchPartsByNums, searchParts } from '../services/lego-catalog';
 import { matchByName } from '../scan-match';
 import { ScanError, getSessionToken, scanPart, type ScanCandidate, type ScanResponse } from '../services/lego-scan';
 import { countScansToday } from '../services/lego-user';
@@ -56,10 +56,15 @@ export function LegoScannerPage() {
   const matchQuery = useQuery({
     queryKey: ['lego-scan-match', nums.join(',')], queryFn: () => fetchPartsByNums(nums), enabled: nums.length > 0,
   });
-  // candidates whose number is not in the catalog are matched by name (BrickLink and Rebrickable numbers differ)
-  const unmatched = matchQuery.isSuccess
-    ? candidates.filter((c) => !((c.rb_part_num && matchQuery.data.get(c.rb_part_num)) || matchQuery.data.get(c.id)) && c.name)
-    : [];
+  // The recognizer answers with BrickLink numbers: Rebrickable's table of equivalences first, then the name
+  const byNumber = (c: ScanCandidate) => (c.rb_part_num && matchQuery.data?.get(c.rb_part_num)) || matchQuery.data?.get(c.id) || null;
+  const noNumber = matchQuery.isSuccess ? candidates.filter((c) => !byNumber(c)) : [];
+  const blQuery = useQuery({
+    queryKey: ['lego-scan-bricklink', noNumber.map((c) => c.id).join(',')],
+    queryFn: () => fetchPartsByBricklink(noNumber.map((c) => c.id)),
+    enabled: noNumber.length > 0,
+  });
+  const unmatched = blQuery.isSuccess ? noNumber.filter((c) => !blQuery.data.get(c.id) && c.name) : [];
   const nameQuery = useQuery({
     queryKey: ['lego-scan-name-match', unmatched.map((c) => `${c.id}:${c.name}`).join('|')],
     queryFn: async () => {
@@ -73,7 +78,7 @@ export function LegoScannerPage() {
     enabled: unmatched.length > 0,
   });
   const partFor = (c: ScanCandidate): LegoPartSummary | null =>
-    (c.rb_part_num && matchQuery.data?.get(c.rb_part_num)) || matchQuery.data?.get(c.id) || nameQuery.data?.get(c.id) || null;
+    byNumber(c) || blQuery.data?.get(c.id) || nameQuery.data?.get(c.id) || null;
 
   const start = (file: File | undefined) => {
     if (!file) return;

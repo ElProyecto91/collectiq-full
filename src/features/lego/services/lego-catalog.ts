@@ -4,7 +4,7 @@ import type {
   LegoSearchParams, LegoSearchResult, PartSetsResult, LegoSet, LegoSetPart, LegoTheme, PossibleSet, PossibleSetsParams,
 } from '../types';
 import {
-  LEGO_PAGE_SIZE, PART_SETS_PAGE, allColorsStmt, canonStmt, partImagesStmt, setsWithPartStmt, partColorsStmt, partsByNumsStmt, partDetailsStmt, possibleSetsStmt, searchPartsStmt,
+  LEGO_PAGE_SIZE, PART_SETS_PAGE, allColorsStmt, canonStmt, partImagesStmt, partsByBricklinkStmt, setsWithPartStmt, partColorsStmt, partsByNumsStmt, partDetailsStmt, possibleSetsStmt, searchPartsStmt,
   searchSetsStmt, setPartsStmt, setStmt, setsByNumsStmt, themesStmt, weightsStmt,
   toColorOption, toPartDetail, toPartSet, toPartSummary, toPossibleSet, toSet, toSetPart, toTheme, type DbRow,
 } from './lego-queries';
@@ -132,4 +132,19 @@ export async function fetchPartsByNums(nums: string[]): Promise<Map<string, Lego
 export async function fetchSetsWithPart(partNum: string, colorId: number, page: number): Promise<PartSetsResult> {
   const rows = await run(setsWithPartStmt(partNum, colorId, page));
   return { sets: rows.map(toPartSet), total: rows.length ? Number(rows[0].total) : 0 };
+}
+
+/**
+ * BrickLink number -> catalog part, for recognized parts whose number is not a Rebrickable number.
+ * Empty when the equivalence table has not been filled yet (the "LEGO part images" workflow fills it).
+ */
+export async function fetchPartsByBricklink(ids: string[]): Promise<Map<string, LegoPartSummary>> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (!unique.length) return new Map();
+  try {
+    const rows = await inChunks(unique, async (chunk) => await run(partsByBricklinkStmt(chunk)));
+    const out = new Map<string, LegoPartSummary>();
+    for (const r of rows) if (!out.has(String(r.ext_id))) out.set(String(r.ext_id), { part_num: String(r.part_num), name: String(r.name) });
+    return out;
+  } catch { return new Map(); }
 }
