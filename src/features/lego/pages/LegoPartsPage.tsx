@@ -8,6 +8,7 @@ import { useUserStore } from '@/store';
 import { LegoAddPart } from '../components/LegoAddPart';
 import { LegoImage } from '../components/LegoImage';
 import { fetchPartDetailsCached } from '../services/lego-catalog';
+import { copyLabels } from '../copy-label';
 import { availability } from '../services/lego-allocation';
 import { listAllocations, listUserParts, listUserSets, setUserPartQuantity } from '../services/lego-user';
 import type { UserLegoPart } from '../types';
@@ -34,7 +35,7 @@ export function LegoPartsPage() {
   const allocsQuery = useQuery({ queryKey: ['user-lego-allocs', tid], queryFn: () => listAllocations(tid!), enabled: tid != null });
   const setsQuery = useQuery({ queryKey: ['user-lego-sets', tid], queryFn: () => listUserSets(tid!), enabled: tid != null });
   const av = useMemo(() => availability(parts, allocsQuery.data ?? []), [parts, allocsQuery.data]);
-  const setNumOf = useMemo(() => new Map((setsQuery.data ?? []).map((c) => [c.id, c.set_num])), [setsQuery.data]);
+  const setNumOf = useMemo(() => copyLabels(setsQuery.data ?? []), [setsQuery.data]);
   const keysSig = parts.map((p) => `${p.part_num}|${p.color_id}`).join(',');
   const detailsQuery = useQuery({
     queryKey: ['lego-part-details', keysSig],

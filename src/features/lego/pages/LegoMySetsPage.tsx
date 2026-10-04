@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { useI18n } from '@/i18n';
@@ -7,6 +7,8 @@ import { RoutePaths } from '@/config';
 import { useCurrency } from '@/hooks/use-currency';
 import { useUserStore } from '@/store';
 import { LegoImage } from '../components/LegoImage';
+import { copyLabels } from '../copy-label';
+import { LegoPendingParts } from '../components/LegoPendingParts';
 import { fetchSetsByNums } from '../services/lego-catalog';
 import { listUserSets } from '../services/lego-user';
 import { statusLabel } from '../status';
@@ -18,9 +20,13 @@ export function LegoMySetsPage() {
   const { symbol } = useCurrency();
   const tid = useUserStore((s) => s.telegramUser?.id);
   const [filter, setFilter] = useState<LegoSetStatus | null>(null);
+  const [params, setParams] = useSearchParams();
+  const tab = params.get('tab') === 'pending' ? 'pending' : 'sets';
+  const setTab = (v: 'sets' | 'pending') => setParams(v === 'pending' ? { tab: 'pending' } : {}, { replace: true });
 
   const mineQuery = useQuery({ queryKey: ['user-lego-sets', tid], queryFn: () => listUserSets(tid!), enabled: tid != null });
   const mine = mineQuery.data ?? [];
+  const labels = useMemo(() => copyLabels(mine), [mine]);
   const nums = useMemo(() => [...new Set(mine.map((m) => m.set_num))].sort(), [mine]);
   const setsQuery = useQuery({
     queryKey: ['lego-sets-by-nums', nums.join(',')],
@@ -59,6 +65,14 @@ export function LegoMySetsPage() {
         {mineQuery.isSuccess && mine.length === 0 && <p className="text-sm text-white/50">{t.lego.emptyMySets}</p>}
 
         {mine.length > 0 && (
+          <div className="flex gap-2" role="tablist">
+            <button role="tab" aria-selected={tab === 'sets'} className={chip(tab === 'sets')} onClick={() => setTab('sets')}>{t.lego.myCollectionTab}</button>
+            <button role="tab" aria-selected={tab === 'pending'} className={chip(tab === 'pending')} onClick={() => setTab('pending')}>{t.lego.pendingTab}</button>
+          </div>)}
+
+        {tab === 'pending' && mine.length > 0 && <LegoPendingParts catalog={catalog} />}
+
+        {tab === 'sets' && mine.length > 0 && (
           <div className="flex flex-wrap gap-2">
             <button className={chip(filter === null)} onClick={() => setFilter(null)}>{t.lego.filterAll}</button>
             {LEGO_SET_STATUSES.map((s) => (
@@ -66,7 +80,7 @@ export function LegoMySetsPage() {
           </div>)}
 
         <ul className="grid grid-cols-2 gap-3">
-          {shown.map((m) => {
+          {tab === 'sets' && shown.map((m) => {
             const s = catalog.get(m.set_num);
             return (
               <li key={m.id}>
@@ -74,7 +88,7 @@ export function LegoMySetsPage() {
                   className="w-full text-left bg-white/[0.04] border border-white/8 rounded-2xl overflow-hidden active:scale-[0.98] transition-transform">
                   <LegoImage src={s?.img_url} alt={s?.name ?? m.set_num} className="w-full aspect-[4/3]" />
                   <div className="p-3 space-y-0.5">
-                    <p className="text-[11px] text-red-300 font-semibold">{m.set_num}</p>
+                    <p className="text-[11px] text-red-300 font-semibold">{labels.get(m.id) ?? m.set_num}</p>
                     <p className="text-sm font-bold leading-tight line-clamp-2">{s?.name ?? t.lego.setNotInCatalog}</p>
                     <p className="text-[11px] text-white/50">{statusLabel(t, m.status)}</p>
                     {m.price_paid !== null && <p className="text-[11px] text-white/40">{symbol}{m.price_paid.toFixed(2)}</p>}
