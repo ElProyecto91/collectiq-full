@@ -10,7 +10,8 @@ import { LegoCamera } from '../components/LegoCamera';
 import { LegoImage } from '../components/LegoImage';
 import { LegoPctBar } from '../components/LegoPctBar';
 import { compressImage } from '../image';
-import { fetchPartsByNums } from '../services/lego-catalog';
+import { fetchPartsByNums, searchParts } from '../services/lego-catalog';
+import { matchByName } from '../scan-match';
 import { ScanError, getSessionToken, scanPart, type ScanCandidate, type ScanResponse } from '../services/lego-scan';
 import { countScansToday } from '../services/lego-user';
 import type { LegoPartSummary } from '../types';
@@ -55,8 +56,24 @@ export function LegoScannerPage() {
   const matchQuery = useQuery({
     queryKey: ['lego-scan-match', nums.join(',')], queryFn: () => fetchPartsByNums(nums), enabled: nums.length > 0,
   });
+  // candidates whose number is not in the catalog are matched by name (BrickLink and Rebrickable numbers differ)
+  const unmatched = matchQuery.isSuccess
+    ? candidates.filter((c) => !((c.rb_part_num && matchQuery.data.get(c.rb_part_num)) || matchQuery.data.get(c.id)) && c.name)
+    : [];
+  const nameQuery = useQuery({
+    queryKey: ['lego-scan-name-match', unmatched.map((c) => `${c.id}:${c.name}`).join('|')],
+    queryFn: async () => {
+      const found = new Map<string, LegoPartSummary>();
+      for (const c of unmatched) {
+        const hit = matchByName(c.name, await searchParts(c.name));
+        if (hit) found.set(c.id, hit);
+      }
+      return found;
+    },
+    enabled: unmatched.length > 0,
+  });
   const partFor = (c: ScanCandidate): LegoPartSummary | null =>
-    (c.rb_part_num && matchQuery.data?.get(c.rb_part_num)) || matchQuery.data?.get(c.id) || null;
+    (c.rb_part_num && matchQuery.data?.get(c.rb_part_num)) || matchQuery.data?.get(c.id) || nameQuery.data?.get(c.id) || null;
 
   const start = (file: File | undefined) => {
     if (!file) return;
@@ -151,7 +168,7 @@ export function LegoScannerPage() {
             <button onClick={() => setChosen(null)} className="text-xs text-red-300 underline">{t.lego.scanBackToResults}</button>
             <LegoAddPart key={chosen === 'manual' ? 'manual' : chosen.candidate.id} tid={tid} photo={photo}
               initialPart={chosen === 'manual' ? null : chosen.part}
-              initialQuery={chosen === 'manual' ? '' : (chosen.part ? '' : chosen.candidate.id)}
+              initialQuery={chosen === 'manual' ? '' : (chosen.part ? '' : (chosen.candidate.name || chosen.candidate.id))}
               onAdded={(info) => { setAdded(tr('lego.partAdded', { qty: info.qty, name: info.part.name, color: info.color.name })); setDone(true); }} />
           </section>)}
 
