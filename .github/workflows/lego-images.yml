@@ -1,0 +1,59 @@
+name: LEGO part images
+
+# Manual only. Fills lego_part_images (one fallback picture per part) from the Rebrickable API, for the
+# parts that have no image in the CSV data (scripts/lego-part-images.mjs). Never scheduled.
+#
+# It is polite: one request at a time, about 65 requests for the whole catalog, pauses between them, waits on
+# HTTP 429 and stops if the key is refused. Only parts that have no picture yet are stored.
+#
+# Secrets (repo -> Settings -> Secrets and variables -> Actions):
+#   REBRICKABLE_API_KEY  free key from your Rebrickable account (Settings -> API)
+#   TURSO_DATABASE_URL   libsql://<db>-<org>.turso.io
+#   TURSO_AUTH_TOKEN     WRITE token (never the read-only one)
+#
+# First run with "apply" off: it only reports how many pictures it found. Run again with "apply" on to store them.
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: 'Write to Turso (off = only report how many pictures would be added)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash   # bash -eo pipefail: `node ... | tee` cannot hide a failure
+
+concurrency:
+  group: lego-import
+  cancel-in-progress: false
+
+jobs:
+  images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      APPLY: ${{ inputs.apply }}
+      REBRICKABLE_API_KEY: ${{ secrets.REBRICKABLE_API_KEY }}
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Fetch part pictures
+        run: |
+          args=(--writes-budget 100000)
+          [ "$APPLY" = "true" ] && args+=(--apply)
+          node scripts/lego-part-images.mjs "${args[@]}" | tee images.txt
+          { echo '### LEGO part images'; echo '```'; cat images.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
