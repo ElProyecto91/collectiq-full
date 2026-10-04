@@ -10,12 +10,12 @@ import { LegoPctBar } from '../components/LegoPctBar';
 import { inventorySig } from '../inventory-sig';
 import { fetchPossibleSets } from '../services/lego-catalog';
 import { freeInventory } from '../services/lego-allocation';
-import { listAllocations, listUserParts } from '../services/lego-user';
+import { listAllocations, listUserParts, listUserSets } from '../services/lego-user';
 import type { RankingMetric } from '../types';
 
 const LIMIT = 300;
 const MIN_COVERED = 10;
-const MIN_OPTIONS = [0.05, 0.1, 0.25, 0.5];
+const MIN_OPTIONS = [0.1, 0.25, 0.5, 0.75, 0.9];
 const SHOWN = 24;
 
 export function LegoPossibleSetsPage() {
@@ -29,6 +29,9 @@ export function LegoPossibleSetsPage() {
   const partsQuery = useQuery({ queryKey: ['user-lego-parts', tid], queryFn: () => listUserParts(tid!), enabled: tid != null });
   const allocsQuery = useQuery({ queryKey: ['user-lego-allocs', tid], queryFn: () => listAllocations(tid!), enabled: tid != null });
   const [onlyFree, setOnlyFree] = useState(true);
+  // sets already in the collection are not candidates: they would hide the new ones
+  const ownedQuery = useQuery({ queryKey: ['user-lego-sets', tid], queryFn: () => listUserSets(tid!), enabled: tid != null });
+  const owned = useMemo(() => new Set((ownedQuery.data ?? []).map((c) => c.set_num)), [ownedQuery.data]);
   const rawInventory = partsQuery.data ?? [];
   const allocs = allocsQuery.data ?? [];
   // pieces reserved by sets already in the collection are not available for another set
@@ -36,13 +39,14 @@ export function LegoPossibleSetsPage() {
   const sig = useMemo(() => inventorySig(inventory), [inventory]);
 
   const rankingQuery = useQuery({
-    queryKey: ['lego-possible', sig, metric, minPct],
-    queryFn: () => fetchPossibleSets({ inventory, metric, minPct, minCovered: MIN_COVERED, limit: LIMIT }),
-    enabled: inventory.length > 0 && allocsQuery.isSuccess,
+    queryKey: ['lego-possible', sig, metric, minPct, owned.size],
+    // owned sets are dropped after the query, so ask for that many extra to still fill the list
+    queryFn: () => fetchPossibleSets({ inventory, metric, minPct, minCovered: MIN_COVERED, limit: LIMIT + owned.size }),
+    enabled: inventory.length > 0 && allocsQuery.isSuccess && ownedQuery.isSuccess,
     staleTime: 10 * 60_000, // each ranking reads a lot of catalog rows: recalculate on demand
     gcTime: 30 * 60_000,
   });
-  const sets = rankingQuery.data ?? [];
+  const sets = useMemo(() => (rankingQuery.data ?? []).filter((x) => !owned.has(x.set_num)).slice(0, LIMIT), [rankingQuery.data, owned]);
   const errMsg = (rankingQuery.error as Error | null)?.message ?? '';
   const needsImport = /no such table|no such column/i.test(errMsg);
   const chip = (active: boolean) => `rounded-full px-3 py-1 text-xs border ${active ? 'border-red-400 bg-red-500/20' : 'border-white/10 bg-white/5'}`;

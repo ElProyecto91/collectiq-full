@@ -493,6 +493,13 @@ export const en = {
     listView: 'Full list',
     progressView: 'My progress',
     progressSummary: '{covered} of {total} pieces',
+    myCollectionTab: 'My sets',
+    pendingTab: 'Pending parts',
+    pendingNone: 'You have no incomplete sets. Sets with the "Incomplete" status appear here with the pieces they lack.',
+    pendingHelp: 'Pieces missing from each incomplete set in your collection, based on the pieces assigned to it.',
+    pendingSummary: '{assigned} of {total} pieces · {missing} missing ({kinds} kinds)',
+    pendingNothingAssigned: 'You have not assigned pieces to this set yet: press "Assign my free parts" on its page.',
+    pendingOpenSet: 'Open set and assign pieces',
     // set reservations
     assignParts: 'Assign my free parts to this set',
     assignPartsHelp: 'Reserves your loose parts for this set. They are not taken out of the inventory: if you remove the set from your collection they become free again.',

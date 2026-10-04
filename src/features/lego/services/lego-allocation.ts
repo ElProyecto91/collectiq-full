@@ -81,3 +81,52 @@ export function planAllocation(parts: LegoSetPart[], free: LegoPartItem[], canon
   }
   return out;
 }
+
+export interface PendingRow {
+  key: string;
+  /** A representative row of the slot (name, color, image). */
+  part: LegoSetPart;
+  need: number;
+  assigned: number;
+  missing: number;
+}
+
+export interface PendingParts {
+  rows: PendingRow[];
+  total: number;
+  assigned: number;
+  /** Assigned / needed pieces (0-1). */
+  pct: number;
+}
+
+/**
+ * What one set copy still lacks: every slot of the set (interchangeable molds merged, spares ignored)
+ * minus the pieces reserved for THAT copy. Only slots with something missing are returned.
+ */
+export function computePending(parts: LegoSetPart[], copyAllocations: LegoPartItem[], canon: Map<string, string>): PendingParts {
+  const canonOf = (p: string) => canon.get(p) ?? p;
+  const have = new Map<string, number>();
+  for (const a of copyAllocations) {
+    if (!(a.quantity > 0)) continue;
+    const k = key(canonOf(a.part_num), a.color_id);
+    have.set(k, (have.get(k) ?? 0) + a.quantity);
+  }
+  const slots = new Map<string, PendingRow>();
+  for (const p of parts) {
+    if (p.is_spare) continue;
+    const k = key(canonOf(p.part_num), p.color_id);
+    const s = slots.get(k);
+    if (s) s.need += p.quantity;
+    else slots.set(k, { key: k, part: p, need: p.quantity, assigned: 0, missing: 0 });
+  }
+  let total = 0, assigned = 0;
+  const rows: PendingRow[] = [];
+  for (const [k, s] of slots) {
+    s.assigned = Math.min(s.need, have.get(k) ?? 0);
+    s.missing = s.need - s.assigned;
+    total += s.need; assigned += s.assigned;
+    if (s.missing > 0) rows.push(s);
+  }
+  rows.sort((a, b) => b.missing - a.missing || a.part.color_name.localeCompare(b.part.color_name) || a.part.part_num.localeCompare(b.part.part_num));
+  return { rows, total, assigned, pct: total ? assigned / total : 0 };
+}

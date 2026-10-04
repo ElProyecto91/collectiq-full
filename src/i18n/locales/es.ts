@@ -432,6 +432,15 @@ export const es = {
     freeHelp: 'Las piezas asignadas a sets de tu colección no cuentan como disponibles.',
     deleteCopyReleases: 'Al eliminar esta copia, sus piezas asignadas vuelven a estar libres.',
 
+    // piezas pendientes por set
+    myCollectionTab: 'Mis sets',
+    pendingTab: 'Piezas pendientes',
+    pendingNone: 'No tienes sets incompletos. Los sets con estado "Incompleto" aparecen aquí con las piezas que les faltan.',
+    pendingHelp: 'Piezas que faltan en cada set incompleto de tu colección, según las que le tienes asignadas.',
+    pendingSummary: '{assigned} de {total} piezas · faltan {missing} ({kinds} tipos)',
+    pendingNothingAssigned: 'Aún no has asignado piezas a este set: pulsa "Asignar mis piezas libres" en su ficha.',
+    pendingOpenSet: 'Abrir set y asignar piezas',
+
     // fase 5: escáner de piezas
     scanner: 'Escáner de piezas',
     scannerDesc: 'Haz una foto a una pieza, confirma cuál es y añádela con su color y cantidad.',

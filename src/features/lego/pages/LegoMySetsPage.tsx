@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { useI18n } from '@/i18n';
@@ -7,6 +7,7 @@ import { RoutePaths } from '@/config';
 import { useCurrency } from '@/hooks/use-currency';
 import { useUserStore } from '@/store';
 import { LegoImage } from '../components/LegoImage';
+import { LegoPendingParts } from '../components/LegoPendingParts';
 import { fetchSetsByNums } from '../services/lego-catalog';
 import { listUserSets } from '../services/lego-user';
 import { statusLabel } from '../status';
@@ -18,6 +19,9 @@ export function LegoMySetsPage() {
   const { symbol } = useCurrency();
   const tid = useUserStore((s) => s.telegramUser?.id);
   const [filter, setFilter] = useState<LegoSetStatus | null>(null);
+  const [params, setParams] = useSearchParams();
+  const tab = params.get('tab') === 'pending' ? 'pending' : 'sets';
+  const setTab = (v: 'sets' | 'pending') => setParams(v === 'pending' ? { tab: 'pending' } : {}, { replace: true });
 
   const mineQuery = useQuery({ queryKey: ['user-lego-sets', tid], queryFn: () => listUserSets(tid!), enabled: tid != null });
   const mine = mineQuery.data ?? [];
@@ -59,6 +63,14 @@ export function LegoMySetsPage() {
         {mineQuery.isSuccess && mine.length === 0 && <p className="text-sm text-white/50">{t.lego.emptyMySets}</p>}
 
         {mine.length > 0 && (
+          <div className="flex gap-2" role="tablist">
+            <button role="tab" aria-selected={tab === 'sets'} className={chip(tab === 'sets')} onClick={() => setTab('sets')}>{t.lego.myCollectionTab}</button>
+            <button role="tab" aria-selected={tab === 'pending'} className={chip(tab === 'pending')} onClick={() => setTab('pending')}>{t.lego.pendingTab}</button>
+          </div>)}
+
+        {tab === 'pending' && mine.length > 0 && <LegoPendingParts catalog={catalog} />}
+
+        {tab === 'sets' && mine.length > 0 && (
           <div className="flex flex-wrap gap-2">
             <button className={chip(filter === null)} onClick={() => setFilter(null)}>{t.lego.filterAll}</button>
             {LEGO_SET_STATUSES.map((s) => (
@@ -66,7 +78,7 @@ export function LegoMySetsPage() {
           </div>)}
 
         <ul className="grid grid-cols-2 gap-3">
-          {shown.map((m) => {
+          {tab === 'sets' && shown.map((m) => {
             const s = catalog.get(m.set_num);
             return (
               <li key={m.id}>
