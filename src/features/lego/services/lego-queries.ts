@@ -1,5 +1,5 @@
 import type {
-  LegoColorOption, LegoPartDetail, LegoPartKey, LegoPartSummary,
+  PartSet, LegoColorOption, LegoPartDetail, LegoPartKey, LegoPartSummary,
   LegoSearchParams, LegoSet, LegoSetPart, LegoTheme, PossibleSet, PossibleSetsParams,
 } from '../types';
 
@@ -115,6 +115,34 @@ export function partDetailsStmt(keys: LegoPartKey[]): Stmt {
   };
 }
 
+export const PART_SETS_PAGE = 20;
+
+/**
+ * Sets that contain a part in a color, most pieces first. Interchangeable molds (lego_part_canon)
+ * count as the same part, like in the ranking. Uses the (part, color) index of lego_set_parts, so
+ * it reads only the rows of that part+color; COUNT(*) OVER () returns the total in the same scan.
+ */
+export function setsWithPartStmt(partNum: string, colorId: number, page: number): Stmt {
+  return {
+    sql:
+      'WITH c AS (SELECT COALESCE((SELECT canon_part_num FROM lego_part_canon WHERE part_num = ?), ?) AS canon), ' +
+      'm AS (SELECT canon AS part_num FROM c UNION SELECT part_num FROM lego_part_canon WHERE canon_part_num = (SELECT canon FROM c)) ' +
+      'SELECT s.set_num, s.name, s.year, s.theme_id, s.num_parts, s.img_url, SUM(sp.quantity) AS qty, COUNT(*) OVER () AS total ' +
+      'FROM lego_set_parts sp JOIN m ON m.part_num = sp.part_num JOIN lego_sets s ON s.set_num = sp.set_num ' +
+      'WHERE sp.color_id = ? AND sp.is_spare = 0 ' +
+      'GROUP BY s.set_num ORDER BY qty DESC, s.year DESC, s.set_num LIMIT ? OFFSET ?',
+    args: [partNum, partNum, colorId, PART_SETS_PAGE, page * PART_SETS_PAGE],
+  };
+}
+
+/** One image per part, for parts that no set inventory has an image of (lego_part_images). */
+export function partImagesStmt(nums: string[]): Stmt {
+  return {
+    sql: `SELECT part_num, img_url FROM lego_part_images WHERE part_num IN (${nums.map(() => '?').join(', ')})`,
+    args: nums,
+  };
+}
+
 export function partsByNumsStmt(nums: string[]): Stmt {
   return {
     sql: `SELECT part_num, name FROM lego_parts WHERE part_num IN (${nums.map(() => '?').join(', ')})`,
@@ -223,6 +251,8 @@ export const toPartDetail = (r: DbRow): LegoPartDetail => ({
   color_rgb: str(r.color_rgb), color_is_trans: Number(r.color_is_trans) === 1,
   img_url: str(r.img_url),
 });
+
+export const toPartSet = (r: DbRow): PartSet => ({ ...toSet(r), quantity: Number(r.qty) });
 
 export const toPossibleSet = (r: DbRow): PossibleSet => ({
   ...toSet(r), covered: Number(r.covered), total: Number(r.total), pct: Number(r.pct), wpct: Number(r.wpct),

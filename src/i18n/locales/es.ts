@@ -475,6 +475,13 @@ export const es = {
     noYear: 'Sin año',
     piecesShort: '{count} piezas',
 
+    // en qué sets aparece una pieza
+    partSetsToggle: '¿En qué sets aparece?',
+    partSetsHide: 'Ocultar sets',
+    partSetsTitle: 'aparece en {count} sets',
+    partSetsNone: 'ningún set la tiene en este color',
+    partSetsQty: '×{count}',
+
     // fase 5: escáner de piezas
     scanner: 'Escáner de piezas',
     scannerDesc: 'Haz una foto a una pieza, confirma cuál es y añádela con su color y cantidad.',
