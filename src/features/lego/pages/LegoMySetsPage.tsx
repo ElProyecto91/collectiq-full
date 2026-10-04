@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowDownAZ, ArrowLeft, ArrowUpAZ, Loader2 } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { RoutePaths } from '@/config';
 import { useCurrency } from '@/hooks/use-currency';
@@ -9,7 +9,8 @@ import { useUserStore } from '@/store';
 import { LegoImage } from '../components/LegoImage';
 import { copyLabels } from '../copy-label';
 import { LegoPendingParts } from '../components/LegoPendingParts';
-import { fetchSetsByNums } from '../services/lego-catalog';
+import { fetchSetsByNums, fetchThemes } from '../services/lego-catalog';
+import { buildView, type GroupKey, type SortDir, type SortKey } from '../my-sets-view';
 import { listUserSets } from '../services/lego-user';
 import { statusLabel } from '../status';
 import { LEGO_SET_STATUSES, type LegoSetStatus } from '../types';
@@ -36,7 +37,23 @@ export function LegoMySetsPage() {
   });
   const catalog = useMemo(() => new Map((setsQuery.data ?? []).map((s) => [s.set_num, s])), [setsQuery.data]);
 
-  const shown = filter ? mine.filter((m) => m.status === filter) : mine;
+  const themesQuery = useQuery({ queryKey: ['lego-themes'], queryFn: fetchThemes, staleTime: Infinity });
+  const themeMap = useMemo(() => new Map((themesQuery.data ?? []).map((th) => [th.id, th])), [themesQuery.data]);
+
+  // sort / group / search choices are a per-device convenience: remembered when storage allows it
+  const [view, setView] = useState<{ search: string; sort: SortKey; dir: SortDir; group: GroupKey }>(() => {
+    const base = { search: '', sort: 'number' as SortKey, dir: 'asc' as SortDir, group: 'none' as GroupKey };
+    try { return { ...base, ...JSON.parse(localStorage.getItem('lego-my-sets-view') ?? '{}'), search: '' }; } catch { return base; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('lego-my-sets-view', JSON.stringify({ sort: view.sort, dir: view.dir, group: view.group })); } catch { /* storage unavailable */ }
+  }, [view.sort, view.dir, view.group]);
+
+  const byStatus = useMemo(() => (filter ? mine.filter((m) => m.status === filter) : mine), [mine, filter]);
+  const groups = useMemo(() => buildView(byStatus, catalog, themeMap, labels, view), [byStatus, catalog, themeMap, labels, view]);
+  const shown = useMemo(() => groups.flatMap((g) => g.items), [groups]);
+  const groupLabel = (g: { key: string; label: string | null }) =>
+    g.label ?? (view.group === 'status' ? statusLabel(t, g.key as LegoSetStatus) : view.group === 'year' ? t.lego.noYear : t.lego.noTheme);
   const paid = shown.reduce((s, m) => s + (m.price_paid ?? 0), 0);
   const rrp = shown.reduce((s, m) => s + (m.rrp ?? 0), 0);
   const chip = (active: boolean) => `rounded-full px-3 py-1 text-xs border ${active ? 'border-red-400 bg-red-500/20' : 'border-white/10 bg-white/5'}`;
@@ -79,8 +96,41 @@ export function LegoMySetsPage() {
               <button key={s} className={chip(filter === s)} onClick={() => setFilter(s)}>{statusLabel(t, s)}</button>))}
           </div>)}
 
+        {tab === 'sets' && mine.length > 0 && (
+          <div className="space-y-2">
+            <input value={view.search} onChange={(e) => setView((v) => ({ ...v, search: e.target.value }))}
+              placeholder={t.lego.searchMySets} aria-label={t.lego.searchMySets}
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-red-400/50" />
+            <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-end">
+              <label className="block text-[10px] uppercase tracking-wide text-white/40 space-y-1">{t.lego.sortBy}
+                <select value={view.sort} onChange={(e) => setView((v) => ({ ...v, sort: e.target.value as SortKey }))}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-2 py-2 text-sm normal-case tracking-normal text-white">
+                  {(['number', 'year', 'theme', 'name', 'pieces', 'added', 'price'] as const).map((k) => <option key={k} value={k}>{t.lego[`sort_${k}`]}</option>)}
+                </select>
+              </label>
+              <button onClick={() => setView((v) => ({ ...v, dir: v.dir === 'asc' ? 'desc' : 'asc' }))}
+                aria-label={view.dir === 'asc' ? t.lego.sortAsc : t.lego.sortDesc} title={view.dir === 'asc' ? t.lego.sortAsc : t.lego.sortDesc}
+                className="w-10 h-10 rounded-xl bg-white/10 border border-white/10 flex items-center justify-center">
+                {view.dir === 'asc' ? <ArrowDownAZ className="w-4 h-4" /> : <ArrowUpAZ className="w-4 h-4" />}
+              </button>
+              <label className="block text-[10px] uppercase tracking-wide text-white/40 space-y-1">{t.lego.groupBy}
+                <select value={view.group} onChange={(e) => setView((v) => ({ ...v, group: e.target.value as GroupKey }))}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-2 py-2 text-sm normal-case tracking-normal text-white">
+                  {(['none', 'theme', 'year', 'status'] as const).map((k) => <option key={k} value={k}>{t.lego[`group_${k}`]}</option>)}
+                </select>
+              </label>
+            </div>
+          </div>)}
+        {tab === 'sets' && mine.length > 0 && shown.length === 0 && <p className="text-sm text-white/50">{t.lego.noResults}</p>}
+
+        {tab === 'sets' && groups.map((g) => (
+        <section key={g.key || 'none'} className="space-y-2">
+          {view.group !== 'none' && (
+            <h2 className="flex items-baseline justify-between text-xs font-bold uppercase tracking-wide text-white/60 pt-1">
+              <span>{groupLabel(g)}</span><span className="text-white/35 font-normal">{g.items.length}</span>
+            </h2>)}
         <ul className="grid grid-cols-2 gap-3">
-          {tab === 'sets' && shown.map((m) => {
+          {g.items.map((m) => {
             const s = catalog.get(m.set_num);
             return (
               <li key={m.id}>
@@ -91,12 +141,14 @@ export function LegoMySetsPage() {
                     <p className="text-[11px] text-red-300 font-semibold">{labels.get(m.id) ?? m.set_num}</p>
                     <p className="text-sm font-bold leading-tight line-clamp-2">{s?.name ?? t.lego.setNotInCatalog}</p>
                     <p className="text-[11px] text-white/50">{statusLabel(t, m.status)}</p>
+                    {s && <p className="text-[11px] text-white/40">{[s.year, s.num_parts != null ? tr('lego.piecesShort', { count: s.num_parts }) : null].filter(Boolean).join(' · ')}</p>}
                     {m.price_paid !== null && <p className="text-[11px] text-white/40">{symbol}{m.price_paid.toFixed(2)}</p>}
                   </div>
                 </button>
               </li>);
           })}
         </ul>
+        </section>))}
 
         <p className="text-[11px] text-white/30 pt-4">
           <a href="https://rebrickable.com" target="_blank" rel="noopener noreferrer" className="underline">{t.lego.attribution}</a>

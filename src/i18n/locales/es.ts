@@ -454,6 +454,27 @@ export const es = {
     homeEmptyTitle: 'Empieza por tus piezas',
     homeEmptyDesc: 'Escanea o añade tus piezas sueltas y la app te dirá qué sets puedes montar con ellas.',
 
+    // ordenar y agrupar Mis sets
+    searchMySets: 'Buscar por nombre, número o notas',
+    sortBy: 'Ordenar por',
+    groupBy: 'Agrupar por',
+    sort_number: 'Número de set',
+    sort_year: 'Año',
+    sort_theme: 'Categoría',
+    sort_name: 'Nombre',
+    sort_pieces: 'Piezas',
+    sort_added: 'Fecha añadido',
+    sort_price: 'Precio pagado',
+    group_none: 'Sin agrupar',
+    group_theme: 'Categoría',
+    group_year: 'Año',
+    group_status: 'Estado',
+    sortAsc: 'Ascendente',
+    sortDesc: 'Descendente',
+    noTheme: 'Sin categoría',
+    noYear: 'Sin año',
+    piecesShort: '{count} piezas',
+
     // fase 5: escáner de piezas
     scanner: 'Escáner de piezas',
     scannerDesc: 'Haz una foto a una pieza, confirma cuál es y añádela con su color y cantidad.',
