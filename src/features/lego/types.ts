@@ -101,3 +101,43 @@ export interface UserLegoSetInput {
   rrp: number | null;
   notes: string | null;
 }
+
+export type RankingMetric = 'simple' | 'weighted';
+
+export interface PossibleSetsParams {
+  inventory: LegoPartItem[];
+  metric: RankingMetric;
+  /** Minimum percentage (0-1) on the chosen metric. */
+  minPct: number;
+  /** Minimum number of pieces already covered, to keep tiny sets from topping the list. */
+  minCovered: number;
+  limit: number;
+}
+
+export interface PossibleSet extends LegoSet {
+  covered: number;
+  total: number;
+  /** Covered pieces / needed pieces (0-1). */
+  pct: number;
+  /** Same, weighting rarer parts more (0-1). */
+  wpct: number;
+}
+
+export interface ProgressRow {
+  key: string;
+  /** A representative row of the group (name, color and image). */
+  part: LegoSetPart;
+  need: number;
+  have: number;
+  covered: number;
+  missing: number;
+}
+
+export interface SetProgress {
+  rows: ProgressRow[];
+  total: number;
+  covered: number;
+  pct: number;
+  /** null when the rarity weights are not available. */
+  wpct: number | null;
+}

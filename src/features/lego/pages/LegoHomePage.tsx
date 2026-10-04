@@ -7,13 +7,13 @@ export function LegoHomePage() {
   const navigate = useNavigate();
   const { t } = useI18n();
 
-  // Phases 3 and 4 are not built yet: shown disabled instead of leading to empty screens.
+  // The wishlist (phase 4) is not built yet: shown disabled instead of leading to empty screens.
   const available = [
     { icon: Boxes, label: t.lego.inventory, desc: t.lego.myPartsDesc, path: RoutePaths.LegoParts },
     { icon: Package, label: t.lego.mySets, desc: t.lego.mySetsDesc, path: RoutePaths.LegoMySets },
+    { icon: Layers, label: t.lego.possibleSets, desc: t.lego.possibleHome, path: RoutePaths.LegoPossible },
   ];
   const upcoming = [
-    { icon: Layers, label: t.lego.possibleSets },
     { icon: Heart, label: t.lego.wishlist },
   ];
 

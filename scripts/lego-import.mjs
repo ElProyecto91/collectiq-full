@@ -34,6 +34,13 @@
  *                    NOTHING) instead of being rewritten, so an interrupted import can be
  *                    finished without spending row writes on what is already there.
  *
+ * Derived tables (phase 3)
+ *   lego_part_canon, lego_part_rarity and lego_set_stats are computed here from the data being
+ *   imported (spare parts excluded). Interchangeable molds are Rebrickable rel_type 'M' only:
+ *   'A' (alternate) is "similar, not necessarily compatible" and the meaning of 'B' could not
+ *   be confirmed, so neither is used. Weights use the imported sets, so a --from-year import
+ *   gives weights relative to that subset.
+ *
  * Rules
  *   - Credentials only from environment variables. Never commit them.
  *   - The write token must never reach the browser: the app only gets a
@@ -258,6 +265,46 @@ const partColorRows = [...partColors].map(([k, img]) => {
   return { part_num, color_id: Number(color), img_url: img };
 });
 
+// ── derived data for the "possible sets" ranking ────────────────
+const EQUIVALENT_REL_TYPES = new Set(['M']);
+const parent = new Map();
+const find = (x) => { let r = x; while (parent.has(r) && parent.get(r) !== r) r = parent.get(r); return r; };
+for (const r of relUnique) {
+  if (!EQUIVALENT_REL_TYPES.has(r.rel_type)) continue;
+  for (const x of [r.child_part_num, r.parent_part_num]) if (!parent.has(x)) parent.set(x, x);
+  const a = find(r.child_part_num), b = find(r.parent_part_num);
+  if (a !== b) { if (a < b) parent.set(b, a); else parent.set(a, b); } // keep the smallest as root
+}
+const canonOf = (part) => find(part);
+const canonRows = [];
+for (const part of parent.keys()) { const c = canonOf(part); if (c !== part) canonRows.push({ part_num: part, canon_part_num: c }); }
+
+const groupSets = new Map();   // "canon|color" -> Set of set_num
+for (const row of setParts.values()) {
+  if (row.is_spare) continue;
+  const k = `${canonOf(row.part_num)}|${row.color_id}`;
+  let st = groupSets.get(k); if (!st) groupSets.set(k, (st = new Set()));
+  st.add(row.set_num);
+}
+const totalSets = new Set([...setParts.values()].filter((r) => !r.is_spare).map((r) => r.set_num)).size;
+const weightOf = new Map();
+const rarityRows = [];
+for (const [k, st] of groupSets) {
+  const [part_num, color] = k.split('|');
+  const weight = Math.round(Math.log(1 + totalSets / st.size) * 1e6) / 1e6;
+  weightOf.set(k, weight);
+  rarityRows.push({ part_num, color_id: Number(color), sets_count: st.size, weight });
+}
+const statsBySet = new Map();
+for (const row of setParts.values()) {
+  if (row.is_spare) continue;
+  let st = statsBySet.get(row.set_num);
+  if (!st) statsBySet.set(row.set_num, (st = { set_num: row.set_num, total_qty: 0, distinct_parts: 0, weight_total: 0 }));
+  st.total_qty += row.quantity; st.distinct_parts += 1;
+  st.weight_total += row.quantity * weightOf.get(`${canonOf(row.part_num)}|${row.color_id}`);
+}
+const statsRows = [...statsBySet.values()].map((r) => ({ ...r, weight_total: Math.round(r.weight_total * 1e6) / 1e6 }));
+
 const data = {
   lego_themes: themes,
   lego_colors: colors,
@@ -267,20 +314,26 @@ const data = {
   lego_set_parts: [...setParts.values()],
   lego_elements: [...elements.values()],
   lego_part_relationships: relUnique,
+  lego_part_canon: canonRows,
+  lego_part_rarity: rarityRows,
+  lego_set_stats: statsRows,
 };
 const PK = {
   lego_themes: ['id'], lego_colors: ['id'], lego_parts: ['part_num'],
   lego_part_colors: ['part_num', 'color_id'], lego_sets: ['set_num'],
   lego_set_parts: ['set_num', 'part_num', 'color_id', 'is_spare'], lego_elements: ['element_id'],
   lego_part_relationships: ['rel_type', 'child_part_num', 'parent_part_num'],
+  lego_part_canon: ['part_num'], lego_part_rarity: ['part_num', 'color_id'], lego_set_stats: ['set_num'],
 };
 const SECONDARY_INDEXES = { // see turso/lego-schema.sql
   lego_themes: 1, lego_colors: 0, lego_parts: 0, lego_part_colors: 0, lego_sets: 2,
   lego_set_parts: 1, lego_elements: 1, lego_part_relationships: 2,
+  lego_part_canon: 1, lego_part_rarity: 0, lego_set_stats: 0,
 };
 const ORDER = [ // dependency order
   'lego_themes', 'lego_colors', 'lego_parts', 'lego_part_colors', 'lego_sets',
   'lego_set_parts', 'lego_elements', 'lego_part_relationships',
+  'lego_part_canon', 'lego_part_rarity', 'lego_set_stats',
 ];
 
 // ── size estimate (approximate, +/-30%) ─────────────────────────

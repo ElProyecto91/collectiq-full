@@ -39,6 +39,7 @@ import { LegoSetsPage } from '@/features/lego/pages/LegoSetsPage';
 import { LegoSetDetailPage } from '@/features/lego/pages/LegoSetDetailPage';
 import { LegoPartsPage } from '@/features/lego/pages/LegoPartsPage';
 import { LegoMySetsPage } from '@/features/lego/pages/LegoMySetsPage';
+import { LegoPossibleSetsPage } from '@/features/lego/pages/LegoPossibleSetsPage';
 
 // Páginas pendientes de crear (backend ya listo)
 // import { MagicHomePage } from '@/features/magic/pages/MagicHomePage';
@@ -99,6 +100,7 @@ const router = createBrowserRouter([
       { path: RoutePaths.LegoSetDetail, element: <LegoSetDetailPage /> },
       { path: RoutePaths.LegoParts,     element: <LegoPartsPage /> },
       { path: RoutePaths.LegoMySets,    element: <LegoMySetsPage /> },
+      { path: RoutePaths.LegoPossible,  element: <LegoPossibleSetsPage /> },
 
       // Magic, Yu-Gi-Oh, Lorcana — rutas preparadas, páginas pendientes
       // { path: RoutePaths.MagicHome,   element: <MagicHomePage /> },
