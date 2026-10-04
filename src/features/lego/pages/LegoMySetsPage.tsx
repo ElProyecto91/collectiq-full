@@ -7,6 +7,7 @@ import { RoutePaths } from '@/config';
 import { useCurrency } from '@/hooks/use-currency';
 import { useUserStore } from '@/store';
 import { LegoImage } from '../components/LegoImage';
+import { copyLabels } from '../copy-label';
 import { LegoPendingParts } from '../components/LegoPendingParts';
 import { fetchSetsByNums } from '../services/lego-catalog';
 import { listUserSets } from '../services/lego-user';
@@ -25,6 +26,7 @@ export function LegoMySetsPage() {
 
   const mineQuery = useQuery({ queryKey: ['user-lego-sets', tid], queryFn: () => listUserSets(tid!), enabled: tid != null });
   const mine = mineQuery.data ?? [];
+  const labels = useMemo(() => copyLabels(mine), [mine]);
   const nums = useMemo(() => [...new Set(mine.map((m) => m.set_num))].sort(), [mine]);
   const setsQuery = useQuery({
     queryKey: ['lego-sets-by-nums', nums.join(',')],
@@ -86,7 +88,7 @@ export function LegoMySetsPage() {
                   className="w-full text-left bg-white/[0.04] border border-white/8 rounded-2xl overflow-hidden active:scale-[0.98] transition-transform">
                   <LegoImage src={s?.img_url} alt={s?.name ?? m.set_num} className="w-full aspect-[4/3]" />
                   <div className="p-3 space-y-0.5">
-                    <p className="text-[11px] text-red-300 font-semibold">{m.set_num}</p>
+                    <p className="text-[11px] text-red-300 font-semibold">{labels.get(m.id) ?? m.set_num}</p>
                     <p className="text-sm font-bold leading-tight line-clamp-2">{s?.name ?? t.lego.setNotInCatalog}</p>
                     <p className="text-[11px] text-white/50">{statusLabel(t, m.status)}</p>
                     {m.price_paid !== null && <p className="text-[11px] text-white/40">{symbol}{m.price_paid.toFixed(2)}</p>}

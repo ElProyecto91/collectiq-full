@@ -4,6 +4,7 @@ import { useQueries, useQuery } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { useUserStore } from '@/store';
+import { copyLabels } from '../copy-label';
 import { fetchCanonMap, fetchSetParts } from '../services/lego-catalog';
 import { computePending } from '../services/lego-allocation';
 import { listAllocations, listUserSets } from '../services/lego-user';
@@ -24,6 +25,7 @@ export function LegoPendingParts({ catalog }: { catalog: Map<string, LegoSet> })
 
   const setsQuery = useQuery({ queryKey: ['user-lego-sets', tid], queryFn: () => listUserSets(tid!), enabled: tid != null });
   const allocsQuery = useQuery({ queryKey: ['user-lego-allocs', tid], queryFn: () => listAllocations(tid!), enabled: tid != null });
+  const labels = useMemo(() => copyLabels(setsQuery.data ?? []), [setsQuery.data]);
   const copies = useMemo(() => (setsQuery.data ?? []).filter((c) => c.status === 'incomplete'), [setsQuery.data]);
   const setNums = useMemo(() => [...new Set(copies.map((c) => c.set_num))].sort(), [copies]);
 
@@ -80,7 +82,7 @@ export function LegoPendingParts({ catalog }: { catalog: Map<string, LegoSet> })
                 className="w-full flex items-center gap-3 p-3 text-left">
                 <LegoImage src={s?.img_url} alt={s?.name ?? copy.set_num} className="w-16 h-16 rounded-lg shrink-0" />
                 <div className="flex-1 min-w-0 space-y-1">
-                  <p className="text-[11px] text-red-300 font-semibold">{copy.set_num}</p>
+                  <p className="text-[11px] text-red-300 font-semibold">{labels.get(copy.id) ?? copy.set_num}</p>
                   <p className="text-sm font-bold leading-tight line-clamp-1">{s?.name ?? t.lego.setNotInCatalog}</p>
                   <LegoPctBar value={pct} label={t.lego.metricSimple} />
                   <p className="text-[10px] text-white/40">

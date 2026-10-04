@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { useUserStore } from '@/store';
+import { copyLabels } from '../copy-label';
 import { inventorySig } from '../inventory-sig';
 import { fetchCanonMap, fetchWeights } from '../services/lego-catalog';
 import { freeInventory, planAllocation } from '../services/lego-allocation';
@@ -27,15 +28,15 @@ export function LegoSetProgress({ setNum, parts }: { setNum: string; parts: Lego
   const rawInventory = invQuery.data ?? [];
   const allocs = useMemo(() => allocsQuery.data ?? [], [allocsQuery.data]);
   const copies = useMemo(() => (setsQuery.data ?? []).filter((c) => c.set_num === setNum), [setsQuery.data, setNum]);
-  const copyIds = useMemo(() => new Set(copies.map((c) => c.id)), [copies]);
   const [copyId, setCopyId] = useState<string | null>(null);
   const activeCopy = copies.find((c) => c.id === copyId) ?? copies[0];
-  // pieces reserved for OTHER sets are not available here; this set's own reservation still counts
+  // pieces reserved for any OTHER copy (of this or another set) are not available to this copy;
+  // this copy's own reservation still counts, so two copies of one set keep separate progress
   const inventory = useMemo(
-    () => freeInventory(rawInventory, allocs.filter((a) => !copyIds.has(a.user_set_id))),
-    [rawInventory, allocs, copyIds]);
+    () => freeInventory(rawInventory, allocs.filter((a) => a.user_set_id !== activeCopy?.id)),
+    [rawInventory, allocs, activeCopy?.id]);
   const assignedHere = useMemo(
-    () => allocs.filter((a) => copyIds.has(a.user_set_id)).reduce((n, a) => n + a.quantity, 0), [allocs, copyIds]);
+    () => allocs.filter((a) => a.user_set_id === activeCopy?.id).reduce((n, a) => n + a.quantity, 0), [allocs, activeCopy?.id]);
   const sig = useMemo(() => inventorySig(inventory), [inventory]);
 
   const partNums = useMemo(() => [...new Set([...parts.map((p) => p.part_num), ...rawInventory.map((i) => i.part_num)])].sort(), [parts, rawInventory]);
@@ -65,6 +66,7 @@ export function LegoSetProgress({ setNum, parts }: { setNum: string; parts: Lego
   }, [progress, filter]);
   const [limit, setLimit] = useState(60);
 
+  const labels = useMemo(() => copyLabels(setsQuery.data ?? []), [setsQuery.data]);
   const [msg, setMsg] = useState<string | null>(null);
   const [err2, setErr2] = useState<string | null>(null);
   const refresh = () => { qc.invalidateQueries({ queryKey: ['user-lego-allocs', tid] }); qc.invalidateQueries({ queryKey: ['user-lego-sets', tid] }); };
@@ -107,7 +109,7 @@ export function LegoSetProgress({ setNum, parts }: { setNum: string; parts: Lego
           <label className="block text-xs text-white/60 space-y-1">{t.lego.assignCopy}
             <select value={activeCopy?.id ?? ''} onChange={(e) => setCopyId(e.target.value)}
               className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white">
-              {copies.map((c, i) => <option key={c.id} value={c.id}>{t.lego.assignCopy} {copies.length - i}</option>)}
+              {copies.map((c) => <option key={c.id} value={c.id}>{labels.get(c.id)}</option>)}
             </select>
           </label>)}
         <div className="flex gap-2">
