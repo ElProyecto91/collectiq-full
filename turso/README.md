@@ -57,3 +57,16 @@ The Worker route `lego-scan` forwards the photo to Brickognize. It needs no secr
 the app session token and the existing Supabase service key). Optional Cloudflare variable
 `LEGO_SCAN_DAILY_LIMIT` (default 300 scans per user per day, a safety cap, not a paywall).
 Brickognize's website terms allow personal, non-commercial use; its API terms were not verified.
+
+## Coverage and images
+The estimate (workflow run with `apply` OFF) now prints a "Coverage" block: sets with an inventory, with
+parts and with an image URL; parts imported vs in parts.csv; part+color pairs without an image URL. It also
+samples 200 set images and 200 part images (8 requests at a time) and reports how many answer.
+
+By default EVERY part in parts.csv is imported (before, only parts used by some set). To get the missing parts
+into an existing catalog run the import with `apply` ON and `insert_only` ON: only the new parts are written.
+`--used-parts-only` restores the old behavior (local runs only).
+
+Images are links to Rebrickable's CDN, not copies. Rebrickable only publishes an image per part+color that
+appears in a set inventory, so a part+color that no set uses has no image to show, and a share of the published
+URLs return 404 (the app shows a grey placeholder).
