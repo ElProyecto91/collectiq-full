@@ -115,6 +115,13 @@ export function partDetailsStmt(keys: LegoPartKey[]): Stmt {
   };
 }
 
+export function partsByNumsStmt(nums: string[]): Stmt {
+  return {
+    sql: `SELECT part_num, name FROM lego_parts WHERE part_num IN (${nums.map(() => '?').join(', ')})`,
+    args: nums,
+  };
+}
+
 export function setsByNumsStmt(setNums: string[]): Stmt {
   return {
     sql:
