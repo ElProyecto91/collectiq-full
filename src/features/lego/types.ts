@@ -155,3 +155,13 @@ export interface PartAvailability {
   /** user_lego_sets ids holding part of it, with how many pieces each. */
   inSets: Array<{ user_set_id: string; quantity: number }>;
 }
+
+/** A set that contains a given part in a given color, with how many of it the set holds. */
+export interface PartSet extends LegoSet {
+  quantity: number;
+}
+
+export interface PartSetsResult {
+  sets: PartSet[];
+  total: number;
+}

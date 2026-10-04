@@ -6,6 +6,7 @@ import { fetchAllColors, fetchPartColors, searchParts } from '../services/lego-c
 import { addUserParts } from '../services/lego-user';
 import type { LegoColorOption, LegoPartSummary } from '../types';
 import { LegoImage } from './LegoImage';
+import { ColorSquare, LegoPartSets } from './LegoPartSets';
 
 function useDebounced<T>(value: T, ms: number): T {
   const [v, setV] = useState(value);
@@ -40,6 +41,7 @@ export function LegoAddPart({ tid, initialPart = null, initialQuery = '', onAdde
   const [colorId, setColorId] = useState<number | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [qty, setQty] = useState('1');
+  const [showSets, setShowSets] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const dq = useDebounced(q, 300);
@@ -65,7 +67,7 @@ export function LegoAddPart({ tid, initialPart = null, initialQuery = '', onAdde
       const info = { part: picked!, color: chosenColor!, qty: quantity };
       setError(null);
       setMessage(tr('lego.partAdded', { qty: quantity, name: picked!.name, color: chosenColor!.name }));
-      setPicked(null); setColorId(null); setQ(''); setQty('1'); setShowAll(false);
+      setPicked(null); setColorId(null); setQ(''); setQty('1'); setShowAll(false); setShowSets(false);
       qc.invalidateQueries({ queryKey: ['user-lego-parts', tid] });
       onAdded?.(info);
     },
@@ -105,7 +107,7 @@ export function LegoAddPart({ tid, initialPart = null, initialQuery = '', onAdde
           {(partColorsQuery.isLoading || (useAll && allColorsQuery.isLoading)) && <Loader2 className="w-4 h-4 animate-spin text-white/40" />}
           <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={t.lego.chooseColor}>
             {colors.map((c) => (
-              <button key={c.color_id} role="radio" aria-checked={colorId === c.color_id} onClick={() => setColorId(c.color_id)}
+              <button key={c.color_id} role="radio" aria-checked={colorId === c.color_id} onClick={() => { setColorId(c.color_id); setShowSets(false); }}
                 className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs border ${colorId === c.color_id ? 'border-red-400 bg-red-500/20' : 'border-white/10 bg-white/5'}`}>
                 <Swatch rgb={c.rgb} trans={c.is_trans} />{c.name}
               </button>))}
@@ -114,12 +116,23 @@ export function LegoAddPart({ tid, initialPart = null, initialQuery = '', onAdde
 
           {chosenColor && (
             <div className="flex items-center gap-3">
-              <LegoImage src={chosenColor.img_url} alt={picked.name} className="w-16 h-16 rounded-xl shrink-0" />
+              <div className="flex flex-col items-center gap-1 shrink-0">
+                <LegoImage src={chosenColor.img_url} alt={picked.name} className="w-16 h-16 rounded-xl" />
+                <ColorSquare rgb={chosenColor.rgb} trans={chosenColor.is_trans} size="w-16 h-3" />
+              </div>
               <label className="flex-1 text-xs text-white/60 space-y-1">
                 {t.lego.quantity}
                 <input value={qty} onChange={(e) => setQty(e.target.value.replace(/\D/g, '').slice(0, 5))}
                   inputMode="numeric" className={`${field} w-full`} />
               </label>
+            </div>)}
+          {chosenColor && (
+            <div className="space-y-2">
+              <button onClick={() => setShowSets((v) => !v)} aria-expanded={showSets} className="text-xs text-red-300 underline">
+                {showSets ? t.lego.partSetsHide : t.lego.partSetsToggle}
+              </button>
+              {showSets && <LegoPartSets partNum={picked.part_num} colorId={chosenColor.color_id}
+                colorName={chosenColor.name} colorRgb={chosenColor.rgb} colorIsTrans={chosenColor.is_trans} />}
             </div>)}
           <button disabled={!chosenColor || !(quantity > 0) || addMutation.isPending} onClick={() => addMutation.mutate()}
             className="w-full rounded-xl bg-red-600 py-2.5 text-sm font-bold disabled:opacity-30 flex items-center justify-center gap-2">

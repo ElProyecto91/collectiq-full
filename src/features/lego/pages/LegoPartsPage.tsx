@@ -7,6 +7,7 @@ import { RoutePaths } from '@/config';
 import { useUserStore } from '@/store';
 import { LegoAddPart } from '../components/LegoAddPart';
 import { LegoImage } from '../components/LegoImage';
+import { LegoPartSets } from '../components/LegoPartSets';
 import { fetchPartDetailsCached } from '../services/lego-catalog';
 import { copyLabels } from '../copy-label';
 import { availability } from '../services/lego-allocation';
@@ -46,6 +47,7 @@ export function LegoPartsPage() {
   const details = detailsQuery.data;
 
   const [filter, setFilter] = useState('');
+  const [openSets, setOpenSets] = useState<string | null>(null);
   const [limit, setLimit] = useState(SHOWN);
   useEffect(() => { setLimit(SHOWN); }, [filter]);
 
@@ -125,7 +127,8 @@ export function LegoPartsPage() {
 
           <ul className="space-y-2">
             {rows.slice(0, limit).map(({ p, d }) => (
-              <li key={`${p.part_num}|${p.color_id}`} className="flex items-center gap-3 bg-white/[0.04] border border-white/8 rounded-xl p-2">
+              <li key={`${p.part_num}|${p.color_id}`} className="bg-white/[0.04] border border-white/8 rounded-xl p-2 space-y-2">
+                <div className="flex items-center gap-3">
                 <LegoImage src={d?.img_url} alt={d?.part_name ?? p.part_num} className="w-14 h-14 rounded-lg shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-[11px] text-red-300 font-semibold">{p.part_num}</p>
@@ -156,6 +159,14 @@ export function LegoPartsPage() {
                   <button aria-label={t.lego.delete} onClick={() => qtyMutation.mutate({ p, next: 0 })}
                     className="w-7 h-7 rounded-lg bg-red-500/15 text-red-300 flex items-center justify-center ml-1"><Trash2 className="w-3 h-3" /></button>
                 </div>
+                </div>
+                <button onClick={() => setOpenSets(openSets === `${p.part_num}|${p.color_id}` ? null : `${p.part_num}|${p.color_id}`)}
+                  aria-expanded={openSets === `${p.part_num}|${p.color_id}`} className="text-[11px] text-red-300 underline">
+                  {openSets === `${p.part_num}|${p.color_id}` ? t.lego.partSetsHide : t.lego.partSetsToggle}
+                </button>
+                {openSets === `${p.part_num}|${p.color_id}` && (
+                  <LegoPartSets partNum={p.part_num} colorId={p.color_id} colorName={d?.color_name ?? `#${p.color_id}`}
+                    colorRgb={d?.color_rgb ?? null} colorIsTrans={d?.color_is_trans ?? false} />)}
               </li>))}
           </ul>
           {rows.length > limit && (

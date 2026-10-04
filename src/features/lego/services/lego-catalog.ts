@@ -1,20 +1,40 @@
 import { getLegoDb } from '@/lib/turso';
 import type {
   LegoColorOption, LegoPartDetail, LegoPartKey, LegoPartSummary,
-  LegoSearchParams, LegoSearchResult, LegoSet, LegoSetPart, LegoTheme, PossibleSet, PossibleSetsParams,
+  LegoSearchParams, LegoSearchResult, PartSetsResult, LegoSet, LegoSetPart, LegoTheme, PossibleSet, PossibleSetsParams,
 } from '../types';
 import {
-  LEGO_PAGE_SIZE, allColorsStmt, canonStmt, partColorsStmt, partsByNumsStmt, partDetailsStmt, possibleSetsStmt, searchPartsStmt,
+  LEGO_PAGE_SIZE, PART_SETS_PAGE, allColorsStmt, canonStmt, partImagesStmt, setsWithPartStmt, partColorsStmt, partsByNumsStmt, partDetailsStmt, possibleSetsStmt, searchPartsStmt,
   searchSetsStmt, setPartsStmt, setStmt, setsByNumsStmt, themesStmt, weightsStmt,
-  toColorOption, toPartDetail, toPartSummary, toPossibleSet, toSet, toSetPart, toTheme, type DbRow,
+  toColorOption, toPartDetail, toPartSet, toPartSummary, toPossibleSet, toSet, toSetPart, toTheme, type DbRow,
 } from './lego-queries';
 
-export { LEGO_PAGE_SIZE };
+export { LEGO_PAGE_SIZE, PART_SETS_PAGE };
 
 // Row reads are metered on Turso's free plan, so the catalog is read only through
 // the small set of statements in lego-queries.ts.
 const run = async (stmt: { sql: string; args: (string | number)[] }): Promise<DbRow[]> =>
   (await getLegoDb().execute(stmt)).rows as unknown as DbRow[];
+
+// Fallback picture per part (table lego_part_images, filled by the "LEGO part images" workflow).
+// The table may not exist yet, so a failure is remembered and the app simply goes on without it.
+const partImageCache = new Map<string, string | null>();
+let partImagesUnavailable = false;
+
+async function fillPartImages<T extends { part_num: string; img_url: string | null }>(rows: T[]): Promise<T[]> {
+  if (partImagesUnavailable) return rows;
+  const need = [...new Set(rows.filter((r) => !r.img_url && !partImageCache.has(r.part_num)).map((r) => r.part_num))];
+  if (need.length) {
+    try {
+      for (let i = 0; i < need.length; i += 400) {
+        const chunk = need.slice(i, i + 400);
+        for (const r of await run(partImagesStmt(chunk))) partImageCache.set(String(r.part_num), r.img_url == null ? null : String(r.img_url));
+        for (const n of chunk) if (!partImageCache.has(n)) partImageCache.set(n, null);
+      }
+    } catch { partImagesUnavailable = true; return rows; }
+  }
+  return rows.map((r) => (r.img_url ? r : { ...r, img_url: partImageCache.get(r.part_num) ?? null }));
+}
 
 export async function fetchThemes(): Promise<LegoTheme[]> {
   return (await run(themesStmt())).map(toTheme);
@@ -31,7 +51,7 @@ export async function fetchSet(setNum: string): Promise<LegoSet | null> {
 }
 
 export async function fetchSetParts(setNum: string): Promise<LegoSetPart[]> {
-  return (await run(setPartsStmt(setNum))).map(toSetPart);
+  return fillPartImages((await run(setPartsStmt(setNum))).map(toSetPart));
 }
 
 const CHUNK = 400; // (part, color) pairs / set numbers per statement
@@ -49,7 +69,8 @@ export async function searchParts(q: string): Promise<LegoPartSummary[]> {
 
 /** Colors this part exists in, according to the catalog. */
 export async function fetchPartColors(partNum: string): Promise<LegoColorOption[]> {
-  return (await run(partColorsStmt(partNum))).map(toColorOption);
+  const colors = (await run(partColorsStmt(partNum))).map(toColorOption);
+  return (await fillPartImages(colors.map((c) => ({ ...c, part_num: partNum })))).map(({ part_num: _p, ...c }) => c);
 }
 
 /** Every color, for combinations the catalog has not seen. */
@@ -58,7 +79,7 @@ export async function fetchAllColors(): Promise<LegoColorOption[]> {
 }
 
 export async function fetchPartDetails(keys: LegoPartKey[]): Promise<LegoPartDetail[]> {
-  return inChunks(keys, async (chunk) => (await run(partDetailsStmt(chunk))).map(toPartDetail));
+  return fillPartImages(await inChunks(keys, async (chunk) => (await run(partDetailsStmt(chunk))).map(toPartDetail)));
 }
 
 export async function fetchSetsByNums(setNums: string[]): Promise<LegoSet[]> {
@@ -105,4 +126,10 @@ export async function fetchPartsByNums(nums: string[]): Promise<Map<string, Lego
   if (!unique.length) return new Map();
   const rows = await inChunks(unique, async (chunk) => (await run(partsByNumsStmt(chunk))).map(toPartSummary));
   return new Map(rows.map((r) => [r.part_num, r]));
+}
+
+/** Sets that contain this part in this color (most pieces first), one page at a time. */
+export async function fetchSetsWithPart(partNum: string, colorId: number, page: number): Promise<PartSetsResult> {
+  const rows = await run(setsWithPartStmt(partNum, colorId, page));
+  return { sets: rows.map(toPartSet), total: rows.length ? Number(rows[0].total) : 0 };
 }

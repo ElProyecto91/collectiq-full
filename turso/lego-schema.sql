@@ -130,3 +130,10 @@ CREATE TABLE IF NOT EXISTS lego_import_log (
   imported_at  TEXT NOT NULL            -- YYYY-MM-DD (UTC)
 ) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS lego_import_log_date_idx ON lego_import_log (imported_at);
+
+-- One fallback picture per part, from the Rebrickable API (scripts/lego-part-images.mjs). Only parts that
+-- have no image in lego_part_colors are stored; the app uses it when a part+color has no picture.
+CREATE TABLE IF NOT EXISTS lego_part_images (
+  part_num  TEXT PRIMARY KEY,
+  img_url   TEXT NOT NULL
+) WITHOUT ROWID;

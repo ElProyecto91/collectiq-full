@@ -85,3 +85,17 @@ refresh those.
 
 Without `--apply` it only prints what it would add (it still needs `TURSO_DATABASE_URL` and a token to
 read the existing keys).
+
+## Part pictures (Rebrickable API)
+
+The CSV files only have a picture for a part+color pair that appears in a set inventory, so ~44% of the
+parts have none. `scripts/lego-part-images.mjs` asks the Rebrickable API for one picture per part and
+stores it in `lego_part_images`, only for parts without any picture. The app uses it as a fallback when
+a part+color has no picture of its own (and keeps working if the table does not exist yet).
+
+    REBRICKABLE_API_KEY=<free key> TURSO_DATABASE_URL=... TURSO_AUTH_TOKEN=<write token> \
+    node scripts/lego-part-images.mjs            # report only
+    node scripts/lego-part-images.mjs --apply    # store the pictures
+
+About 65 requests for the whole catalog, one at a time with pauses; it waits on HTTP 429 and stops if the
+key is refused. It reports how many parts stay without a picture (the API does not have one for every part).
