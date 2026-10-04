@@ -135,6 +135,16 @@ export function setsWithPartStmt(partNum: string, colorId: number, page: number)
   };
 }
 
+/** Rebrickable parts for BrickLink numbers (lego_part_ext). */
+export function partsByBricklinkStmt(ids: string[]): Stmt {
+  return {
+    sql:
+      'SELECT e.ext_id, p.part_num, p.name FROM lego_part_ext e JOIN lego_parts p ON p.part_num = e.part_num ' +
+      `WHERE e.ext_system = 'BrickLink' AND e.ext_id IN (${ids.map(() => '?').join(', ')}) ORDER BY e.ext_id, p.part_num`,
+    args: ids,
+  };
+}
+
 /** One image per part, for parts that no set inventory has an image of (lego_part_images). */
 export function partImagesStmt(nums: string[]): Stmt {
   return {

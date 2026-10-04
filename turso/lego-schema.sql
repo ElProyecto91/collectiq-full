@@ -137,3 +137,13 @@ CREATE TABLE IF NOT EXISTS lego_part_images (
   part_num  TEXT PRIMARY KEY,
   img_url   TEXT NOT NULL
 ) WITHOUT ROWID;
+
+-- External numbering -> Rebrickable part. The part recognizer (Brickognize) answers with BrickLink numbers, and
+-- many differ from Rebrickable's (BrickLink 98613 = Rebrickable 74261). Filled from the Rebrickable API
+-- (scripts/lego-part-images.mjs).
+CREATE TABLE IF NOT EXISTS lego_part_ext (
+  ext_system  TEXT NOT NULL,            -- 'BrickLink'
+  ext_id      TEXT NOT NULL,
+  part_num    TEXT NOT NULL,
+  PRIMARY KEY (ext_system, ext_id, part_num)
+) WITHOUT ROWID;
