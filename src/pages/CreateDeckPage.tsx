@@ -4,6 +4,7 @@ import { ArrowLeft, Plus, Minus, Search, Loader2, LayoutGrid, List, BarChart2, Z
 import { supabase } from '@/lib/supabase';
 import { useUserStore } from '@/store';
 import { useCollectionList } from '@/hooks/use-collection';
+import { POKEMON_API_KEY } from '@/lib/pokemon-key';
 
 interface PokemonCard {
   id: string;
@@ -20,7 +21,6 @@ interface PokemonCard {
   tcgplayer?: { prices?: { normal?: { market?: number }; holofoil?: { market?: number } } };
 }
 
-const POKEMON_API_KEY = import.meta.env.VITE_POKEMONTCG_API_KEY ?? '';
 
 const TYPE_COLORS: Record<string, string> = {
   Fire: '#FF6B35', Water: '#3B9EE6', Grass: '#4CAF50', Lightning: '#FFD700',

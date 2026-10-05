@@ -10,25 +10,54 @@ import { useCreateCollectionItem } from '@/hooks/use-collection';
 import { useUserStore } from '@/store';
 import { supabase } from '@/lib/supabase';
 import { useMissions } from '@/hooks/use-missions';
+import { RarityBadge } from '@/components/RarityBadge';
+import { compressImage } from '@/lib/image';
+import { authHeaders, reportCardsAdded } from '@/lib/session-token';
+import { cardmarketEur, normalizeVariant, pricesForCollection } from '@/lib/card-pricing';
+import { buildQueries, confidence, esc, rankCards, type CardRead, type Confidence, type Ranked } from '@/lib/card-match';
+import { POKEMON_API_KEY } from '@/lib/pokemon-key';
 
 interface PokemonCard {
   id: string;
   name: string;
   number: string;
   rarity?: string;
+  hp?: string;
+  artist?: string;
+  regulationMark?: string;
+  types?: string[];
   images: { small: string; large: string };
-  set: { name: string; series: string; total?: number };
-  cardmarket?: { prices?: { averageSellPrice?: number } };
-  tcgplayer?: { prices?: { normal?: { market?: number }; holofoil?: { market?: number } } };
+  set: { id: string; name: string; series: string; total?: number; printedTotal?: number; ptcgoCode?: string; releaseDate?: string };
+  cardmarket?: { prices?: Record<string, number | undefined> };
+  tcgplayer?: { prices?: Record<string, { market?: number } | undefined> };
 }
 
 type ScanPhase = 'idle' | 'preview' | 'analyzing' | 'results' | 'no-results' | 'error';
 
-const POKEMON_API_KEY = import.meta.env.VITE_POKEMONTCG_API_KEY ?? '';
 const DAILY_SCAN_LIMIT = 5;
 const AD_BONUS_SCANS = 1;
 
-async function toBase64(file: File): Promise<string> {
+interface Quota { used: number; accumulated: number; limit: number; premium: boolean }
+interface VisionResponse { read: CardRead; quota: Quota }
+
+class ScanFailure extends Error {
+  constructor(public code: string, message: string) { super(message); }
+}
+
+/** Asks our backend to READ the card (printed text only). It needs the session and counts one scan. */
+async function readCard(photo: File): Promise<VisionResponse> {
+  // a phone photo is several MB; ~1600 px is plenty to read the small print and keeps the request small
+  const blob = await compressImage(photo, 1600, 0.88);
+  const base64 = await toBase64(blob);
+  const res = await fetch('/api/vision', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ image: base64 }) });
+  const data = await res.json().catch(() => ({}));
+  if (res.status === 401) throw new ScanFailure('unauthorized', 'Tu sesión ha caducado. Vuelve a entrar en la app.');
+  if (res.status === 429) throw new ScanFailure('daily_limit', 'Límite diario alcanzado. Ve un anuncio para conseguir más escaneos.');
+  if (!res.ok) throw new ScanFailure('vision', data?.error ?? `Vision error: ${res.status}`);
+  return data as VisionResponse;
+}
+
+async function toBase64(file: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve((reader.result as string).split(',')[1]);
@@ -37,72 +66,13 @@ async function toBase64(file: File): Promise<string> {
   });
 }
 
-interface VisionResult {
-  text: string;
-  number: string | null;
-  set_code: string | null;
-  validated_card_id: string | null;
-  validated_set_name: string | null;
-  language: string;
-  variant: string;
-  name_confidence: number;
-  variant_confidence: number;
-  was_validated: boolean;
-  error?: string;
-}
-
-async function analyzeWithVision(base64: string): Promise<VisionResult> {
-  const res = await fetch('/api/vision', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ image: base64 }),
-  });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error ?? `Vision error: ${res.status}`);
-  }
-  const data = await res.json();
-  if (!data.text) throw new Error('No se detectó texto en la imagen');
-  return data as VisionResult;
-}
-
-function getTCGPlayerPrice(card: PokemonCard): number | null {
-  const prices = card.tcgplayer?.prices;
-  if (!prices) return null;
-  return prices.holofoil?.market ?? prices.normal?.market ?? null;
-}
-
-async function fetchCardById(id: string): Promise<PokemonCard | null> {
-  try {
-    const res = await fetch(`https://api.pokemontcg.io/v2/cards/${id}`, {
-      headers: { 'X-Api-Key': POKEMON_API_KEY },
-    });
-    if (!res.ok) return null;
-    const json = await res.json();
-    return json.data ?? null;
-  } catch { return null; }
-}
-
-async function searchPokemonTCG(name: string, number?: string | null, retries = 3): Promise<PokemonCard[]> {
-  // Si tenemos número, búsqueda exacta primero
-  if (number) {
-    const cleanNumber = number.split('/')[0];
-    const exactUrl = `https://api.pokemontcg.io/v2/cards?q=name:"${encodeURIComponent(name)}" number:"${encodeURIComponent(cleanNumber)}"&pageSize=10&orderBy=-set.releaseDate`;
-    try {
-      const res = await fetch(exactUrl, { headers: { 'X-Api-Key': POKEMON_API_KEY } });
-      if (res.ok) {
-        const json = await res.json();
-        if ((json.data ?? []).length > 0) return json.data as PokemonCard[];
-      }
-    } catch { /* fallback a búsqueda por nombre */ }
-  }
-
-  // Fallback: búsqueda por nombre
-  const url = `https://api.pokemontcg.io/v2/cards?q=name:"${encodeURIComponent(name)}"&pageSize=20&orderBy=-set.releaseDate`;
+/** One catalog query, with a few retries on rate limits and server errors. */
+async function queryCatalog(q: string, pageSize: number, retries = 3): Promise<PokemonCard[]> {
+  const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=${pageSize}&orderBy=-set.releaseDate`;
   for (let i = 0; i < retries; i++) {
     try {
       const res = await fetch(url, { headers: { 'X-Api-Key': POKEMON_API_KEY } });
-      if (res.status === 429) { await new Promise(r => setTimeout(r, 1000 * (i + 1))); continue; }
+      if (res.status === 429 || res.status >= 500) { await new Promise(r => setTimeout(r, 1000 * (i + 1))); continue; }
       if (!res.ok) throw new Error(`PokéTCG error: ${res.status}`);
       const json = await res.json();
       return (json.data ?? []) as PokemonCard[];
@@ -111,16 +81,35 @@ async function searchPokemonTCG(name: string, number?: string | null, retries = 
       await new Promise(r => setTimeout(r, 800 * (i + 1)));
     }
   }
-  return [];
+  throw new Error('PokéTCG error: retries exhausted');
 }
 
-function getRarityColor(rarity?: string): string {
-  if (!rarity) return 'text-gray-400';
-  const r = rarity.toLowerCase();
-  if (r.includes('secret') || r.includes('hyper')) return 'text-yellow-300';
-  if (r.includes('ultra') || r.includes('rainbow')) return 'text-purple-400';
-  if (r.includes('rare')) return 'text-blue-400';
-  return 'text-gray-400';
+/**
+ * Candidates for a reading: the specific queries (printed number + set total, set code, name + number) run
+ * together, the broad name query only when they are not enough. Ranked by how many printed facts agree.
+ */
+async function findCandidates(read: CardRead): Promise<{ ranked: Ranked<PokemonCard>[]; conf: Confidence }> {
+  const queries = buildQueries(read);
+  const specific = queries.filter(q => q.label !== 'name');
+  const broad = queries.find(q => q.label === 'name');
+  let pool: PokemonCard[] = [];
+  let failures = 0;
+  const run = async (qs: typeof queries) => {
+    const settled = await Promise.allSettled(qs.map(q => queryCatalog(q.q, q.pageSize)));
+    for (const r of settled) { if (r.status === 'fulfilled') pool = pool.concat(r.value); else failures++; }
+  };
+  await run(specific);
+  let ranked = rankCards(read, pool);
+  if (broad && (ranked.length < 3 || confidence(ranked) !== 'high')) {
+    await run([broad]);
+    ranked = rankCards(read, pool);
+  }
+  if (ranked.length === 0 && failures > 0) throw new ScanFailure('catalog', 'pokétcg_error');
+  return { ranked: ranked.slice(0, 8), conf: confidence(ranked) };
+}
+
+async function searchPokemonTCG(name: string): Promise<PokemonCard[]> {
+  return queryCatalog(`name:"${esc(name)}"`, 20);
 }
 
 export default function ScannerPage() {
@@ -133,12 +122,13 @@ export default function ScannerPage() {
   const [currentFile, setCurrentFile] = useState<File | null>(null);
   const [detectedName, setDetectedName] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [results, setResults] = useState<PokemonCard[]>([]);
+  const [results, setResults] = useState<Ranked<PokemonCard>[]>([]);
+  const [read, setRead] = useState<CardRead | null>(null);
+  const [conf, setConf] = useState<Confidence>('low');
   const [errorMsg, setErrorMsg] = useState('');
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const [statusMsg, setStatusMsg] = useState('');
   const [progress, setProgress] = useState(0);
-  const [wasValidated, setWasValidated] = useState(false);
   const [detectedVariant, setDetectedVariant] = useState<string>('normal');
   const [detectedLanguage, setDetectedLanguage] = useState<string>('en');
 
@@ -153,6 +143,12 @@ export default function ScannerPage() {
   const sessionLoaded = useUserStore((s) => s.sessionLoaded);
   const { updateMission } = useMissions();
 
+  const applyQuota = useCallback((q: { used?: number; scansUsed?: number; accumulated?: number; scansAccumulated?: number; premium?: boolean }) => {
+    setScansUsed(q.used ?? q.scansUsed ?? 0);
+    setScansAccumulated(q.accumulated ?? q.scansAccumulated ?? 0);
+    if (q.premium !== undefined) setIsPremium(q.premium);
+  }, []);
+
   useEffect(() => {
     if (!sessionLoaded) return;
     if (!telegramUser?.id) {
@@ -160,35 +156,23 @@ export default function ScannerPage() {
       setScansLoaded(true);
       return;
     }
-    Promise.all([
-      supabase.from('user_premium').select('plan, expires_at')
-        .eq('telegram_user_id', telegramUser.id).maybeSingle(),
-      fetch(`/api/scans?userId=${telegramUser.id}`).then(r => r.json()),
-    ]).then(([premiumRes, scansRes]) => {
-      const data = premiumRes.data;
-      const isExpired = data?.expires_at ? new Date(data.expires_at) < new Date() : true;
-      setIsPremium(data?.plan === 'go' && !isExpired);
-      setScansUsed(scansRes.scansUsed ?? 0);
-      setScansAccumulated(scansRes.scansAccumulated ?? 0);
-      setScansLoaded(true);
-    });
-  }, [telegramUser?.id, sessionLoaded]);
+    fetch('/api/scans', { headers: authHeaders() })
+      .then(r => r.json())
+      .then((data) => { if (!data.error) applyQuota(data); else setIsPremium(false); })
+      .catch(() => setIsPremium(false))
+      .finally(() => setScansLoaded(true));
+  }, [telegramUser?.id, sessionLoaded, applyQuota]);
 
   const totalScansAvailable = DAILY_SCAN_LIMIT + scansAccumulated;
   const canScan = isPremium === true || (scansLoaded && scansUsed < totalScansAvailable);
   const remainingScans = Math.max(0, totalScansAvailable - scansUsed);
 
-  const updateScans = useCallback(async (action: string, amount?: number) => {
+  const updateScans = useCallback(async (action: 'add_accumulated' | 'refund', amount?: number) => {
     if (!telegramUser?.id) return;
-    const res = await fetch('/api/scans', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ telegramUserId: telegramUser.id, action, amount }),
-    });
-    const data = await res.json();
-    setScansUsed(data.scansUsed ?? 0);
-    setScansAccumulated(data.scansAccumulated ?? 0);
-  }, [telegramUser?.id]);
+    const res = await fetch('/api/scans', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ action, amount }) });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && !data.error) applyQuota(data);
+  }, [telegramUser?.id, applyQuota]);
 
   const watchAd = useCallback(() => {
     if (watchingAd) return;
@@ -218,7 +202,7 @@ export default function ScannerPage() {
     setSearchQuery('');
     setErrorMsg('');
     setStatusMsg('');
-    setWasValidated(false);
+    setRead(null);
     e.target.value = '';
   }, []);
 
@@ -234,72 +218,50 @@ export default function ScannerPage() {
   const analyzeCard = useCallback(async () => {
     if (!currentFile) return;
     setPhase('analyzing');
-    setProgress(20);
-    setStatusMsg('Enviando imagen a Gemini…');
+    setProgress(15);
+    setStatusMsg('Leyendo la carta…');
+    let counted = false;
 
     try {
-      const base64 = await toBase64(currentFile);
-      setProgress(40);
-      setStatusMsg('Identificando la carta…');
+      const vision = await readCard(currentFile);
+      counted = !vision.quota.premium;
+      applyQuota(vision.quota);
+      const card = vision.read;
+      setRead(card);
+      setProgress(55);
+      setDetectedVariant(normalizeVariant(card.variant));
+      setDetectedLanguage(card.language || 'en');
 
-      const vision = await analyzeWithVision(base64);
-      setProgress(60);
-
-      setDetectedVariant(vision.variant ?? 'normal');
-      setDetectedLanguage(vision.language ?? 'en');
-      setWasValidated(vision.was_validated);
-
-      if (!vision.text) {
-        setDetectedName('');
-        setSearchQuery('');
-        setResults([]);
+      if (!card.is_pokemon_card || (!card.name && !card.number)) {
+        setDetectedName(''); setSearchQuery(''); setResults([]);
         setPhase('no-results');
         return;
       }
 
-      // Si la API ya validó y devolvió un ID exacto, lo usamos directamente
-      if (vision.validated_card_id) {
-        setStatusMsg('Carta identificada. Obteniendo detalles…');
-        setProgress(80);
-        const exactCard = await fetchCardById(vision.validated_card_id);
-        if (exactCard) {
-          setProgress(100);
-          setDetectedName(exactCard.name);
-          setSearchQuery(exactCard.name);
-          setResults([exactCard]);
-          setPhase('results');
-          if (!isPremium) await updateScans('use');
-          return;
-        }
-      }
-
-      // Fallback: búsqueda por nombre + número
-      setStatusMsg(`Buscando "${vision.text}"…`);
-      let cards: PokemonCard[] = [];
-      try {
-        cards = await searchPokemonTCG(vision.text, vision.number);
-      } catch {
-        throw new Error('pokétcg_error');
-      }
-
-      if (!isPremium) await updateScans('use');
-
+      setStatusMsg('Comparando con el catálogo…');
+      const { ranked, conf: c } = await findCandidates(card);
       setProgress(100);
-      setDetectedName(vision.text);
-      setSearchQuery(vision.text);
-      setResults(cards);
-      setPhase(cards.length === 0 ? 'no-results' : 'results');
-
+      setStatusMsg('');
+      setDetectedName(card.name);
+      setSearchQuery(card.name);
+      setResults(ranked);
+      setConf(c);
+      setPhase(ranked.length === 0 ? 'no-results' : 'results');
     } catch (err: any) {
       const msg = err?.message ?? '';
-      if (msg === 'pokétcg_error' || msg.includes('500') || msg.includes('503') || msg.includes('PokéTCG')) {
+      if (err instanceof ScanFailure && err.code === 'catalog') {
+        // the catalog was down: the scan did not produce an answer, give it back
+        if (counted) await updateScans('refund');
+        setErrorMsg('La base de datos oficial de Pokémon está caída. No se ha descontado ningún escaneo.');
+      } else if (msg.includes('PokéTCG')) {
+        if (counted) await updateScans('refund');
         setErrorMsg('La base de datos oficial de Pokémon está caída. No se ha descontado ningún escaneo.');
       } else {
         setErrorMsg(msg || 'Error al analizar la carta. Inténtalo de nuevo.');
       }
       setPhase('error');
     }
-  }, [currentFile, isPremium, updateScans]);
+  }, [currentFile, applyQuota, updateScans]);
 
   const manualSearch = useCallback(async () => {
     if (!searchQuery.trim()) return;
@@ -309,7 +271,9 @@ export default function ScannerPage() {
     try {
       const cards = await searchPokemonTCG(searchQuery.trim());
       setProgress(100);
-      setResults(cards);
+      // typed by hand: no printed facts to compare, so the list is just the catalog's (newest first)
+      setResults(cards.map(card => ({ card, score: 0, reasons: [] })));
+      setConf('low');
       setPhase(cards.length === 0 ? 'no-results' : 'results');
     } catch {
       setErrorMsg('La base de datos oficial de Pokémon está caída. Inténtalo de nuevo.');
@@ -324,9 +288,9 @@ export default function ScannerPage() {
       cardName: card.name, setName: card.set.name, cardNumber: card.number,
       rarity: card.rarity ?? null, imageUrl: card.images.small, quantity: 1,
       favorite: false, setTotal: card.set.total ?? null,
-      marketPrice: card.cardmarket?.prices?.averageSellPrice ?? null,
-      tcgplayerPrice: getTCGPlayerPrice(card), currency: 'EUR',
-      // Pre-rellenar variante e idioma detectados por Gemini
+      // euros (Cardmarket) for the variant read from the photo; dollars apart
+      ...pricesForCollection(card, detectedVariant),
+      // variant and language read from the photo, as the app's own variant names
       variant: detectedVariant as any,
       cardLanguage: detectedLanguage as any,
     });
@@ -339,11 +303,7 @@ export default function ScannerPage() {
       .from('collection_items')
       .select('*', { count: 'exact', head: true })
       .eq('telegram_user_id', telegramUser.id);
-    fetch('/api/check-referral', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ telegramUserId: telegramUser.id, totalCards: (totalCards ?? 0) + 1 }),
-    });
+    reportCardsAdded((totalCards ?? 0) + 1);
   };
 
   const reset = () => {
@@ -356,7 +316,7 @@ export default function ScannerPage() {
     setErrorMsg('');
     setStatusMsg('');
     setProgress(0);
-    setWasValidated(false);
+    setRead(null);
   };
 
   return (
@@ -514,18 +474,32 @@ export default function ScannerPage() {
           </div>
         )}
 
-        {detectedName && phase === 'results' && (
-          <div className={cx(
-            'flex items-center gap-2 rounded-xl px-3 py-2',
-            wasValidated
-              ? 'bg-green-500/10 border border-green-500/20'
-              : 'bg-blue-500/10 border border-blue-500/20'
-          )}>
-            <Sparkles className={cx('w-3.5 h-3.5', wasValidated ? 'text-green-400' : 'text-blue-400')} />
-            <span className={cx('text-xs', wasValidated ? 'text-green-300' : 'text-blue-300')}>
-              {wasValidated ? '✓ Validado: ' : 'Detectado: '}
-              <strong className="text-white">{detectedName}</strong>
-            </span>
+        {phase === 'results' && read && (
+          <div className="space-y-2">
+            <div className={cx(
+              'rounded-xl px-3 py-2 border flex items-start gap-2',
+              conf === 'high' ? 'bg-green-500/10 border-green-500/20' : conf === 'medium' ? 'bg-blue-500/10 border-blue-500/20' : 'bg-yellow-500/10 border-yellow-500/20'
+            )} role="status">
+              <Sparkles className={cx('w-3.5 h-3.5 mt-0.5 shrink-0', conf === 'high' ? 'text-green-400' : conf === 'medium' ? 'text-blue-400' : 'text-yellow-400')} />
+              <p className={cx('text-xs', conf === 'high' ? 'text-green-300' : conf === 'medium' ? 'text-blue-300' : 'text-yellow-300')}>
+                {conf === 'high' && <>Coincidencia segura: <strong className="text-white">{results[0]?.card.name}</strong> · {results[0]?.card.set.name}</>}
+                {conf === 'medium' && <>Probable: <strong className="text-white">{results[0]?.card.name}</strong>. Comprueba que sea tu edición antes de añadirla.</>}
+                {conf === 'low' && <>No estoy seguro de la edición. Elige la que coincida con tu carta.</>}
+              </p>
+            </div>
+            <p className="text-[10px] text-gray-500">
+              Leído en la foto: {[read.name, read.number, read.set_code, read.hp ? `${read.hp} PS` : null, read.artist].filter(Boolean).join(' · ') || '—'}
+              {read.language && read.language !== 'en' ? ` · idioma: ${read.language}` : ''}
+            </p>
+            {read.language && read.language !== 'en' && (
+              <p className="text-[10px] text-yellow-400/80">Carta no inglesa: el número y el total del set no sirven para identificar la edición. Se compara por nombre y datos de la carta.</p>
+            )}
+          </div>
+        )}
+        {detectedName && phase === 'results' && !read && (
+          <div className="flex items-center gap-2 rounded-xl px-3 py-2 bg-blue-500/10 border border-blue-500/20">
+            <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+            <span className="text-xs text-blue-300">Búsqueda: <strong className="text-white">{detectedName}</strong></span>
           </div>
         )}
 
@@ -537,12 +511,16 @@ export default function ScannerPage() {
             </div>
           ) : (
             <>
-              <p className="text-xs text-gray-500">{results.length} resultado{results.length !== 1 ? 's' : ''}</p>
+              <p className="text-xs text-gray-500">{results.length} resultado{results.length !== 1 ? 's' : ''}{read ? ' · ordenados por coincidencia' : ''}</p>
               <div className="grid grid-cols-2 gap-3">
-                {results.map((card) => (
-                  <div key={card.id} className="bg-[#111118] border border-white/8 rounded-2xl overflow-hidden">
+                {results.map(({ card, score, reasons }, idx) => {
+                  const eur = cardmarketEur(card, detectedVariant);
+                  const best = read !== null && idx === 0 && conf !== 'low';
+                  return (
+                  <div key={card.id} className={cx('bg-[#111118] border rounded-2xl overflow-hidden', best ? 'border-green-500/40' : 'border-white/8')}>
                     <div className="relative">
                       <img src={card.images.small} alt={card.name} className="w-full aspect-[2/3] object-cover" />
+                      {best && <span className="absolute left-1.5 top-1.5 rounded-full bg-green-500/90 px-2 py-0.5 text-[10px] font-bold text-black">Mejor coincidencia</span>}
                       {addedIds.has(card.id) && (
                         <div className="absolute inset-0 bg-green-500/20 flex items-center justify-center">
                           <CheckCircle2 className="w-8 h-8 text-green-400" />
@@ -551,17 +529,11 @@ export default function ScannerPage() {
                     </div>
                     <div className="p-2.5 space-y-1.5">
                       <p className="text-xs font-bold truncate">{card.name}</p>
-                      <p className="text-[10px] text-gray-500 truncate">{card.set.name}</p>
-                      <p className="text-[10px] text-gray-600">#{card.number}</p>
-                      {card.rarity && (
-                        <p className={cx('text-[10px] truncate font-medium', getRarityColor(card.rarity))}>{card.rarity}</p>
-                      )}
-                      {card.cardmarket?.prices?.averageSellPrice && (
-                        <p className="text-[10px] text-green-400 font-medium">€{card.cardmarket.prices.averageSellPrice.toFixed(2)}</p>
-                      )}
-                      {!card.cardmarket?.prices?.averageSellPrice && getTCGPlayerPrice(card) && (
-                        <p className="text-[10px] text-green-400 font-medium">${getTCGPlayerPrice(card)?.toFixed(2)}</p>
-                      )}
+                      <p className="text-[10px] text-gray-500 truncate">{card.set.name}{card.set.releaseDate ? ` · ${card.set.releaseDate.slice(0, 4)}` : ''}</p>
+                      <p className="text-[10px] text-gray-600">#{card.number}{(card.set.printedTotal ?? card.set.total) ? `/${card.set.printedTotal ?? card.set.total}` : ''}</p>
+                      {card.rarity && <RarityBadge rarity={card.rarity} />}
+                      {eur !== null && <p className="text-[10px] text-green-400 font-medium">€{eur.toFixed(2)}</p>}
+                      {read && reasons.length > 0 && <p className="text-[9px] text-gray-500 leading-tight">{score}% · coincide: {reasons.join(', ')}</p>}
                       <button
                         onClick={() => addCard(card)}
                         disabled={addedIds.has(card.id)}
@@ -574,7 +546,8 @@ export default function ScannerPage() {
                       </button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </>
           )

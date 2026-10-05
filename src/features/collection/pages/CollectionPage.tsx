@@ -1,4 +1,7 @@
 import { Heart, Layers, Minus, Plus, Trash2, Star, LayoutGrid, Package, Sparkles, X, Download, Upload, BookOpen, ChevronLeft, ChevronRight, QrCode, MapPin, ShoppingBag } from 'lucide-react';
+import { RarityBadge } from '@/components/RarityBadge';
+import { RARITY_TIERS, RARITY_TIER_ORDER, compareRarityDesc, rarityTier } from '@/lib/rarity';
+import { valueEur } from '@/lib/card-value';
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
@@ -13,7 +16,7 @@ import { CARD_LANGUAGES, GRADING_COMPANIES, PURCHASE_SOURCES } from '@/types';
 import { ImportCSVModal } from '@/components/ImportCSVModal';
 import { RoutePaths } from '@/config';
 
-type SortOption = 'recent' | 'name' | 'value';
+type SortOption = 'recent' | 'name' | 'value' | 'rarity';
 type ViewMode = 'cards' | 'sets' | 'album';
 type AlbumLayout = 1 | 2 | 3 | 4;
 
@@ -88,7 +91,7 @@ function exportToCSV(cards: CollectionItem[], filename: string) {
     card.variant ?? 'normal',
     CARD_LANGUAGES.find(l => l.code === card.cardLanguage)?.label ?? card.cardLanguage ?? 'en',
     card.condition ?? '', card.quantity,
-    card.marketPrice ?? card.tcgplayerPrice ?? '',
+    valueEur(card) ?? '',
     card.purchasePrice ?? '', card.purchaseSource ?? '',
     card.acquiredAt ? card.acquiredAt.split('T')[0] : '',
     card.gradingCompany ?? '', card.gradingScore ?? '', card.gradingCertificate ?? '',
@@ -406,7 +409,7 @@ function EditCardModal({ card, onSave, onClose }: {
   const currentLanguage = CARD_LANGUAGES.find(l => l.code === language);
   const conditionColor = CONDITION_KEYS.find(c => c.key === condition)?.color;
   const currentSleeve = SLEEVE_TYPES.find(s => s.key === sleeveType);
-  const marketPrice = card.marketPrice ?? card.tcgplayerPrice ?? null;
+  const marketPrice = valueEur(card);
   const roi = purchasePrice && marketPrice ? ((marketPrice - parseFloat(purchasePrice)) / parseFloat(purchasePrice) * 100) : null;
 
   const handleSave = () => {
@@ -753,23 +756,24 @@ export function CollectionPage() {
       if (!acc[key]) acc[key] = { setName: key, owned: 0, total: 0, cards: [], totalValue: 0 };
       acc[key].owned += c.quantity;
       acc[key].cards.push(c);
-      acc[key].totalValue += (c.marketPrice ?? c.tcgplayerPrice ?? 0) * c.quantity;
+      acc[key].totalValue += (valueEur(c) ?? 0) * c.quantity;
       return acc;
     }, {} as Record<string, SetCompletion>)
   ).sort((a, b) => b.owned - a.owned);
 
   const wishlistCardIds = new Set(wishlistItems.map(w => w.cardId));
   const availableSets = [...new Set(cards.map(c => c.setName ?? '').filter(Boolean))].sort();
-  const availableRarities = [...new Set(cards.map(c => c.rarity).filter(Boolean))].sort() as string[];
+  const availableRarities = RARITY_TIER_ORDER.filter(tr => cards.some(c => rarityTier(c.rarity) === tr)) as string[];
 
   const filtered = [...cards]
     .filter(c => (c.cardName ?? '').toLowerCase().includes(search.toLowerCase()))
     .filter(c => filterSet ? c.setName === filterSet : true)
-    .filter(c => filterRarity ? (c.rarity ?? '') === filterRarity : true)
+    .filter(c => filterRarity ? rarityTier(c.rarity) === filterRarity : true)
     .sort((a, b) => {
       if (sort === 'recent') return new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime();
       if (sort === 'name') return (a.cardName ?? '').localeCompare(b.cardName ?? '');
-      if (sort === 'value') return (b.marketPrice ?? b.tcgplayerPrice ?? 0) - (a.marketPrice ?? a.tcgplayerPrice ?? 0);
+      if (sort === 'value') return (valueEur(b) ?? 0) - (valueEur(a) ?? 0);
+      if (sort === 'rarity') return compareRarityDesc(a.rarity, b.rarity) || (a.cardName ?? '').localeCompare(b.cardName ?? '');
       return 0;
     });
 
@@ -911,17 +915,17 @@ export function CollectionPage() {
                   {availableRarities.map(r => (
                     <button key={r} onClick={() => setFilterRarity(filterRarity === r ? '' : r)}
                       className={'shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-all truncate max-w-[120px] ' + (filterRarity === r ? 'bg-purple-600 text-white border-purple-600' : 'bg-white/5 border-white/10 text-gray-400')}>
-                      {r}
+                      {RARITY_TIERS[r as keyof typeof RARITY_TIERS].symbol} {RARITY_TIERS[r as keyof typeof RARITY_TIERS].labelEs}
                     </button>
                   ))}
                 </div>
               )}
               <div className="flex items-center gap-2 overflow-x-auto pb-1">
                 <span className="shrink-0 text-xs text-gray-500">{t.collection.sort}</span>
-                {(['recent', 'name', 'value'] as SortOption[]).map(opt => (
+                {(['recent', 'name', 'value', 'rarity'] as SortOption[]).map(opt => (
                   <button key={opt} onClick={() => setSort(opt)}
                     className={'shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ' + (sort === opt ? 'bg-blue-600 text-white' : 'bg-white/5 text-gray-400')}>
-                    {opt === 'recent' ? t.collection.sortRecent : opt === 'name' ? t.collection.sortName : t.collection.sortValue}
+                    {opt === 'recent' ? t.collection.sortRecent : opt === 'name' ? t.collection.sortName : opt === 'value' ? t.collection.sortValue : 'Rareza'}
                   </button>
                 ))}
               </div>
@@ -1041,7 +1045,7 @@ function CollectionCard({ card, onUpdate, onRemove, onEdit, onZoom, onQR, onMark
     if (!confirmDelete) { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); return; }
     onRemove(card.id);
   };
-  const price = card.marketPrice ?? card.tcgplayerPrice ?? null;
+  const price = valueEur(card);
   const variantEmoji = VARIANTS.find(v => v.key === card.variant)?.emoji ?? '🃏';
   const langFlag = CARD_LANGUAGES.find(l => l.code === card.cardLanguage)?.flag ?? '🇬🇧';
   const conditionColor = CONDITION_KEYS.find(c => c.key === card.condition)?.color;
@@ -1077,6 +1081,7 @@ function CollectionCard({ card, onUpdate, onRemove, onEdit, onZoom, onQR, onMark
       <div className="p-2.5 flex-1 space-y-1">
         <p className="text-xs font-bold truncate text-white">{card.cardName}</p>
         <p className="text-[10px] text-gray-500 truncate">{card.setName}</p>
+        {card.rarity && <RarityBadge rarity={card.rarity} />}
         {card.condition && <p className={'text-[10px] font-medium ' + conditionColor}>{getConditionLabel(card.condition as CardCondition, t)}</p>}
         {price && <p className="text-[10px] text-green-400 font-medium">{formatPrice(price)}</p>}
         {roi !== null && (

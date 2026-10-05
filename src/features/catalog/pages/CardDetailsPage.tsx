@@ -3,10 +3,14 @@ import { useEffect, useState } from 'react';
 import { ArrowLeft, Plus, CheckCircle2, ExternalLink, TrendingUp, TrendingDown } from 'lucide-react';
 import { cx } from '@/utils';
 import { useCreateCollectionItem, useCollectionItem } from '@/hooks/use-collection';
+import { RarityBadge } from '@/components/RarityBadge';
+import { cardmarketEur, pricesForCollection, tcgplayerUsd } from '@/lib/card-pricing';
+import { usdToEur } from '@/hooks/use-currency';
 import { useUserStore } from '@/store';
 import { useCurrency } from '@/hooks/use-currency';
 import { useI18n } from '@/i18n';
 import { supabase } from '@/lib/supabase';
+import { POKEMON_API_KEY } from '@/lib/pokemon-key';
 
 interface Attack { name: string; cost: string[]; damage: string; text: string; }
 interface Ability { name: string; text: string; type: string; }
@@ -16,9 +20,9 @@ interface PokemonCardDetail {
   weaknesses?: { type: string; value: string }[]; resistances?: { type: string; value: string }[];
   retreatCost?: string[]; number: string; rarity?: string; flavorText?: string; artist?: string;
   images: { small: string; large: string };
-  set: { id: string; name: string; series: string; total: number; releaseDate: string; images?: { symbol?: string; logo?: string } };
-  cardmarket?: { prices?: { averageSellPrice?: number; lowPrice?: number; trendPrice?: number } };
-  tcgplayer?: { prices?: { normal?: { market?: number }; holofoil?: { market?: number }; reverseHolofoil?: { market?: number } } };
+  set: { id: string; name: string; series: string; total: number; printedTotal?: number; releaseDate: string; images?: { symbol?: string; logo?: string } };
+  cardmarket?: { prices?: Record<string, number | undefined> };
+  tcgplayer?: { prices?: Record<string, { market?: number } | undefined> };
   legalities?: { standard?: string; expanded?: string; unlimited?: string };
   nationalPokedexNumbers?: number[];
 }
@@ -91,7 +95,6 @@ function MiniPriceChart({ history }: { history: PriceHistory[] }) {
   );
 }
 
-const POKEMON_API_KEY = import.meta.env.VITE_POKEMONTCG_API_KEY ?? '';
 
 export function CardDetailsPage() {
   const { cardId } = useParams<{ cardId: string }>();
@@ -112,9 +115,19 @@ export function CardDetailsPage() {
     if (!cardId) return;
     setIsLoading(true);
     fetch(`https://api.pokemontcg.io/v2/cards/${cardId}`, { headers: { 'X-Api-Key': POKEMON_API_KEY } })
-      .then(r => r.json())
-      .then(json => { setCard(json.data); setIsLoading(false); })
-      .catch(() => { setError('No se pudo cargar esta carta.'); setIsLoading(false); });
+      .then(r => {
+        if (!r.ok) throw new Error(r.status === 404 ? 'not_found' : 'http_' + r.status);
+        return r.json();
+      })
+      .then(json => {
+        if (!json?.data) throw new Error('empty');
+        setCard(json.data);
+        setIsLoading(false);
+      })
+      .catch((e: Error) => {
+        setError(e.message === 'not_found' ? 'Esta carta no existe en el catálogo.' : 'No se pudo cargar esta carta. La base de datos oficial puede estar caída; inténtalo de nuevo en unos minutos.');
+        setIsLoading(false);
+      });
 
     // Cargar historial de precio
     supabase.from('card_price_history')
@@ -128,7 +141,8 @@ export function CardDetailsPage() {
   useEffect(() => {
     // Guardar precio actual en historial si tenemos datos
     if (!card || !cardId) return;
-    const price = card.cardmarket?.prices?.averageSellPrice ?? card.tcgplayer?.prices?.holofoil?.market ?? card.tcgplayer?.prices?.normal?.market;
+    // the history is in euros (Cardmarket) only: dollars and euros in one series draw false jumps
+    const price = cardmarketEur(card, 'normal');
     if (!price) return;
     const today = new Date().toISOString().split('T')[0];
     supabase.from('card_price_history')
@@ -142,14 +156,12 @@ export function CardDetailsPage() {
 
   const handleAdd = () => {
     if (!card || !telegramUser?.id) return;
-    const price = card.tcgplayer?.prices?.holofoil?.market ?? card.tcgplayer?.prices?.normal?.market ?? null;
     createItem({
       cardId: card.id, tcg: 'pokemon', telegramUserId: telegramUser.id,
       cardName: card.name, setName: card.set.name, cardNumber: card.number,
       rarity: card.rarity ?? null, imageUrl: card.images.small, quantity: 1,
       favorite: false, setTotal: card.set.total ?? null,
-      marketPrice: card.cardmarket?.prices?.averageSellPrice ?? null,
-      tcgplayerPrice: price, currency: 'EUR',
+      ...pricesForCollection(card, 'normal'),
     });
     setAdded(true);
   };
@@ -168,8 +180,9 @@ export function CardDetailsPage() {
   );
 
   const isInCollection = existingItem || added;
-  const cardmarketPrice = card.cardmarket?.prices?.averageSellPrice;
-  const tcgPrice = card.tcgplayer?.prices?.holofoil?.market ?? card.tcgplayer?.prices?.normal?.market;
+  const cardmarketPrice = cardmarketEur(card, 'normal');
+  const tcgUsd = tcgplayerUsd(card, 'holofoil');
+  const tcgPrice = tcgUsd !== null ? usdToEur(tcgUsd) : null; // dollars shown through the same euro formatter
   const trendPrice = card.cardmarket?.prices?.trendPrice;
   const lowPrice = card.cardmarket?.prices?.lowPrice;
   const cardmarketUrl = `https://www.cardmarket.com/en/Pokemon/Products/Singles?searchString=${encodeURIComponent(card.name)}`;
@@ -323,8 +336,8 @@ export function CardDetailsPage() {
         <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-2">
           <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Información</p>
           <div className="grid grid-cols-2 gap-y-2 gap-x-4">
-            {card.rarity && <><p className="text-xs text-gray-500">Rareza</p><p className="text-xs text-white font-medium">{card.rarity}</p></>}
-            <p className="text-xs text-gray-500">Número</p><p className="text-xs text-white font-medium">{card.number}/{card.set.total}</p>
+            {card.rarity && <><p className="text-xs text-gray-500">Rareza</p><RarityBadge rarity={card.rarity} className="text-xs" /></>}
+            <p className="text-xs text-gray-500">Número</p><p className="text-xs text-white font-medium">{card.number}/{card.set.printedTotal ?? card.set.total}</p>
             <p className="text-xs text-gray-500">Set</p><p className="text-xs text-white font-medium">{card.set.name}</p>
             <p className="text-xs text-gray-500">Serie</p><p className="text-xs text-white font-medium">{card.set.series}</p>
             {card.artist && <><p className="text-xs text-gray-500">Ilustrador</p><p className="text-xs text-white font-medium">{card.artist}</p></>}

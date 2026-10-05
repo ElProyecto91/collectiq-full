@@ -6,6 +6,7 @@ import { useCollectionList } from '@/hooks/use-collection';
 import { useCurrency } from '@/hooks/use-currency';
 import { useMissions } from '@/hooks/use-missions';
 import { useNavigate } from 'react-router-dom';
+import { valueEur } from '@/lib/card-value';
 
 interface Snapshot {
   total_value: number;
@@ -83,14 +84,14 @@ export function StatsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isPremium, setIsPremium] = useState<boolean | null>(null);
 
-  const totalValue = cards.reduce((s, c) => s + ((c.marketPrice ?? c.tcgplayerPrice ?? 0) * c.quantity), 0);
+  const totalValue = cards.reduce((s, c) => s + (((valueEur(c) ?? 0)) * c.quantity), 0);
   const totalCards = cards.reduce((s, c) => s + c.quantity, 0);
   const uniqueCards = cards.length;
   const favorites = cards.filter(c => c.favorite).length;
 
   const topCards = [...cards]
-    .filter(c => (c.marketPrice ?? c.tcgplayerPrice ?? 0) > 0)
-    .sort((a, b) => (b.marketPrice ?? b.tcgplayerPrice ?? 0) - (a.marketPrice ?? a.tcgplayerPrice ?? 0))
+    .filter(c => ((valueEur(c) ?? 0)) > 0)
+    .sort((a, b) => ((valueEur(b) ?? 0)) - ((valueEur(a) ?? 0)))
     .slice(0, 5);
 
   const setGroups = Object.values(
@@ -98,7 +99,7 @@ export function StatsPage() {
       const key = card.setName ?? '';
       if (!acc[key]) acc[key] = { setName: key, count: 0, value: 0 };
       acc[key].count += card.quantity;
-      acc[key].value += (card.marketPrice ?? card.tcgplayerPrice ?? 0) * card.quantity;
+      acc[key].value += ((valueEur(card) ?? 0)) * card.quantity;
       return acc;
     }, {} as Record<string, { setName: string; count: number; value: number }>)
   ).sort((a, b) => b.value - a.value).slice(0, 5);
@@ -267,7 +268,7 @@ export function StatsPage() {
           </div>
           {isPremium === true ? (
             topCards.map((card, i) => {
-              const price = card.marketPrice ?? card.tcgplayerPrice ?? 0;
+              const price = (valueEur(card) ?? 0);
               return (
                 <div key={card.id} className="flex items-center gap-3">
                   <span className={'text-xs font-bold w-5 text-center ' + (i === 0 ? 'text-yellow-400' : i === 1 ? 'text-gray-300' : i === 2 ? 'text-amber-600' : 'text-gray-600')}>
@@ -356,7 +357,7 @@ export function StatsPage() {
           {isPremium === true ? (
             (() => {
               const totalPaid = cards.filter(c => c.purchasePrice).reduce((s, c) => s + ((c.purchasePrice ?? 0) * c.quantity), 0);
-              const totalMarket = cards.filter(c => c.purchasePrice).reduce((s, c) => s + ((c.marketPrice ?? c.tcgplayerPrice ?? 0) * c.quantity), 0);
+              const totalMarket = cards.filter(c => c.purchasePrice).reduce((s, c) => s + (((valueEur(c) ?? 0)) * c.quantity), 0);
               const roi = totalPaid > 0 ? ((totalMarket - totalPaid) / totalPaid * 100) : 0;
               const isPositive = roi >= 0;
               return (

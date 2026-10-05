@@ -1,14 +1,21 @@
 // ── POKEMON handlers ──────────────────────────────────────────
 import { jsonResponse, getEnv } from '../lib/cors.js';
 import { sbFetch } from '../lib/supabase.js';
+import { sessionUserId } from '../lib/session.js';
+import { cardmarketEur, tcgplayerUsd } from '../lib/pricing.js';
+
+// Pokémon TCG API q= text: quotes and backslashes in a name read from a photo would change the query.
+function esc(v) { return String(v == null ? '' : v).replace(/["\\]/g, '').trim(); }
 
 async function validatePokemonCard(name, number, setCode) {
   var headers = { 'Content-Type': 'application/json' };
   var apiKey = getEnv('VITE_POKEMONTCG_API_KEY');
   if (apiKey) headers['X-Api-Key'] = apiKey;
   var attempts = [];
-  if (number && setCode) attempts.push('number:"' + number.split('/')[0] + '" set.id:"' + setCode + '"');
-  if (number && name) attempts.push('name:"' + name + '" number:"' + number.split('/')[0] + '"');
+  name = esc(name); setCode = esc(setCode);
+  var num = number ? esc(String(number).split('/')[0]) : '';
+  if (num && setCode) attempts.push('number:"' + num + '" set.id:"' + setCode + '"');
+  if (num && name) attempts.push('name:"' + name + '" number:"' + num + '"');
   if (name) attempts.push('name:"' + name + '"');
   for (var i = 0; i < attempts.length; i++) {
     try {
@@ -21,6 +28,8 @@ async function validatePokemonCard(name, number, setCode) {
 
 export async function handleVision(request) {
   if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
+  // these calls spend the Gemini quota: only a logged-in user may make them
+  if (!(await sessionUserId(request))) return jsonResponse({ error: 'unauthorized' }, 401);
   try {
     var body = await request.json();
     if (!body.image) return jsonResponse({ error: 'Missing image' }, 400);
@@ -57,6 +66,7 @@ export async function handleVision(request) {
 
 export async function handleScanner(request) {
   if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
+  if (!(await sessionUserId(request))) return jsonResponse({ error: 'unauthorized' }, 401);
   try {
     var body = await request.json();
     if (!body.image_base64) return jsonResponse({ error: 'image_base64 requerido' }, 400);
@@ -72,45 +82,62 @@ export async function handleScanner(request) {
     var gd = await gr.json();
     var text = (((gd.candidates || [])[0] || {}).content || {});
     text = ((text.parts || [])[0] || {}).text || '';
-    var result = JSON.parse(text.replace(/```json|```/g, '').trim());
-    return jsonResponse({ result: result, validated: false, scans_remaining: 99 });
+    var result;
+    try { result = JSON.parse(text.replace(/```json|```/g, '').trim()); }
+    catch (e) { return jsonResponse({ error: 'unexpected_response' }, 502); }
+    return jsonResponse({ result: result, validated: false });
   } catch(e) { return jsonResponse({ error: e.message }, 500); }
 }
 
-export async function handleCronPrices() {
+// Daily price refresh. Each run takes the cards that were refreshed longest ago, so every card is
+// reached in turn even on Cloudflare's free plan (50 subrequests per run: 1 list + 1 prices call + 1 update each).
+// market_price = euros (Cardmarket) for the card's variant; tcgplayer_price = dollars (TCGplayer). They are never mixed.
+export async function handleCronPrices(limit) {
   var results = [];
+  var batch = parseInt(limit, 10) || parseInt(getEnv('PRICE_BATCH'), 10) || 20;
+  if (batch > 200) batch = 200;
   try {
-    var pokemonItems = await sbFetch('/collection_items?tcg=eq.pokemon&card_id=not.is.null&select=id,card_id&limit=100');
-    var pokemonBatch = pokemonItems.data || [];
-    var pokemonApiKey = getEnv('VITE_POKEMONTCG_API_KEY');
-    var updated = 0;
-    for (var i = 0; i < pokemonBatch.length; i++) {
-      try {
-        var item = pokemonBatch[i];
-        var headers = { 'Content-Type': 'application/json' };
-        if (pokemonApiKey) headers['X-Api-Key'] = pokemonApiKey;
-        var cardRes = await fetch('https://api.pokemontcg.io/v2/cards/' + item.card_id, { headers: headers });
-        if (cardRes.ok) {
-          var cardData = await cardRes.json();
-          var price = ((cardData.data || {}).tcgplayer || {}).prices;
-          var marketPrice = null;
-          if (price) {
-            var variants = ['holofoil', 'reverseHolofoil', 'normal', '1stEditionHolofoil'];
-            for (var v = 0; v < variants.length; v++) {
-              if (price[variants[v]] && price[variants[v]].market) { marketPrice = price[variants[v]].market; break; }
-            }
-          }
-          if (marketPrice) {
-            await sbFetch('/collection_items?id=eq.' + item.id, { method: 'PATCH', body: { market_price: marketPrice, updated_at: new Date().toISOString() }, prefer: 'return=minimal' });
-            updated++;
-          }
-        }
-      } catch(e) {}
+    var listed = await sbFetch('/collection_items?tcg=eq.pokemon&card_id=not.is.null&select=id,card_id,variant&order=updated_at.asc&limit=' + batch);
+    var items = Array.isArray(listed.data) ? listed.data : [];
+    var headers = { 'Content-Type': 'application/json' };
+    var apiKey = getEnv('VITE_POKEMONTCG_API_KEY');
+    if (apiKey) headers['X-Api-Key'] = apiKey;
+
+    // one request for all the cards of the batch
+    var ids = [];
+    for (var i = 0; i < items.length; i++) { var cid = esc(items[i].card_id); if (cid && ids.indexOf(cid) < 0) ids.push(cid); }
+    var byId = {};
+    var apiOk = false;
+    if (ids.length) {
+      var q = ids.map(function(x) { return 'id:"' + x + '"'; }).join(' OR ');
+      var r = await fetch('https://api.pokemontcg.io/v2/cards?q=' + encodeURIComponent(q) + '&pageSize=250&select=id,cardmarket,tcgplayer', { headers: headers });
+      if (r.ok) {
+        apiOk = true;
+        var d = await r.json();
+        var list = (d && d.data) || [];
+        for (var k = 0; k < list.length; k++) byId[list[k].id] = list[k];
+      }
     }
-    results.push({ tcg: 'pokemon', updated: updated });
+
+    var updated = 0, noPrice = 0, failed = 0;
+    for (var j = 0; j < items.length && apiOk; j++) {
+      var item = items[j];
+      var card = byId[item.card_id];
+      var patch = { updated_at: new Date().toISOString() }; // touched either way, so the next run reaches other cards
+      if (card) {
+        var eur = cardmarketEur(card, item.variant);
+        var usd = tcgplayerUsd(card, item.variant);
+        if (eur !== null) patch.market_price = eur;
+        if (usd !== null) patch.tcgplayer_price = usd;
+        patch.currency = 'EUR';
+        if (eur === null && usd === null) noPrice++; else updated++;
+      } else { noPrice++; }
+      var pr = await sbFetch('/collection_items?id=eq.' + item.id, { method: 'PATCH', body: patch, prefer: 'return=minimal' });
+      if (!pr.ok) failed++;
+    }
+    results.push({ tcg: 'pokemon', batch: items.length, updated: updated, no_price: noPrice, failed: failed, api_ok: apiOk });
     await sbFetch('/marketplace_listings?status=eq.active&expires_at=lt.' + new Date().toISOString(), { method: 'PATCH', body: { status: 'expired' }, prefer: 'return=minimal' });
     results.push({ task: 'marketplace_expire', ok: true });
-
   } catch(e) { results.push({ error: e.message }); }
   return results;
 }

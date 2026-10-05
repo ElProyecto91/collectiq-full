@@ -17,41 +17,35 @@ import { AchievementToast } from '@/components/AchievementToast';
 import type { CardVariant, CardLanguage } from '@/types';
 import { CARD_LANGUAGES } from '@/types';
 import { supabase } from '@/lib/supabase';
+import { RarityBadge } from '@/components/RarityBadge';
+import { reportCardsAdded } from '@/lib/session-token';
+import { API_RARITIES_BY_TIER, RARITY_TIERS, RARITY_TIER_ORDER, type RarityTier } from '@/lib/rarity';
+import { cardmarketEur, pricesForCollection, variantPriceEur } from '@/lib/card-pricing';
+import { POKEMON_API_KEY } from '@/lib/pokemon-key';
 
 interface PokemonCard {
   id: string; name: string; number: string; rarity?: string;
   images: { small: string; large: string };
   set: { id: string; name: string; series: string; releaseDate?: string; total?: number };
-  cardmarket?: { prices?: { averageSellPrice?: number } };
-  tcgplayer?: { prices?: { normal?: { market?: number }; holofoil?: { market?: number }; reverseHolofoil?: { market?: number } } };
+  cardmarket?: { prices?: Record<string, number | undefined> };
+  tcgplayer?: { prices?: Record<string, { market?: number } | undefined> };
   types?: string[]; supertype?: string;
 }
 
-function getRarityColor(rarity?: string): string {
-  if (!rarity) return 'text-gray-500';
-  const r = rarity.toLowerCase();
-  if (r.includes('secret') || r.includes('hyper')) return 'text-yellow-400';
-  if (r.includes('ultra') || r.includes('rainbow')) return 'text-purple-400';
-  if (r.includes('rare')) return 'text-blue-400';
-  return 'text-gray-500';
+
+/** The API's q= text: the name search, narrowed to a rarity tier (its known API names, OR-ed in a group). */
+export function buildExplorerQuery(query: string, tier: RarityTier | ''): string {
+  const text = query.trim().replace(/["\\]/g, ''); // quotes and backslashes would break the q= syntax
+  const rarities = tier && tier !== 'unknown'
+    ? '(' + API_RARITIES_BY_TIER[tier].map((n) => 'rarity:"' + n + '"').join(' OR ') + ')'
+    : '';
+  if (text) return ('name:"*' + text + '*"' + (rarities ? ' ' + rarities : ''));
+  // no text: a few popular names, or (with a rarity) the newest cards of that rarity
+  return rarities || 'name:Charizard OR name:Pikachu OR name:Mewtwo';
 }
 
-function getPriceForVariant(card: PokemonCard, variant: CardVariant): number | null {
-  const prices = card.tcgplayer?.prices;
-  if (prices) {
-    if (variant === 'holofoil' && prices.holofoil?.market) return prices.holofoil.market;
-    if (variant === 'reverseHolofoil' && prices.reverseHolofoil?.market) return prices.reverseHolofoil.market;
-    if (variant === 'normal' && prices.normal?.market) return prices.normal.market;
-  }
-  return card.cardmarket?.prices?.averageSellPrice ?? null;
-}
-
-const POKEMON_API_KEY = import.meta.env.VITE_POKEMONTCG_API_KEY ?? '';
-
-async function searchCards(query: string, page: number): Promise<{ cards: PokemonCard[]; total: number }> {
-  const q = query.trim()
-    ? 'name:"*' + query.trim() + '*"'
-    : 'name:Charizard OR name:Pikachu OR name:Mewtwo';
+async function searchCards(query: string, page: number, tier: RarityTier | '' = ''): Promise<{ cards: PokemonCard[]; total: number }> {
+  const q = buildExplorerQuery(query, tier);
   const url = 'https://api.pokemontcg.io/v2/cards?q=' + encodeURIComponent(q) + '&page=' + page + '&pageSize=20&orderBy=-set.releaseDate';
   for (let i = 0; i < 4; i++) {
     try {
@@ -103,9 +97,9 @@ function AddCardSelector({ card, onAdd, onClose }: {
   const [selectedVariant, setSelectedVariant] = useState<CardVariant>('normal');
 
   const variants: { key: CardVariant; label: string; desc: string; emoji: string; price: number | null }[] = [
-    { key: 'normal', label: t.variants.normal, desc: t.variants.normalDesc, emoji: '🃏', price: card.tcgplayer?.prices?.normal?.market ?? card.cardmarket?.prices?.averageSellPrice ?? null },
-    { key: 'holofoil', label: t.variants.holofoil, desc: t.variants.holofoilDesc, emoji: '✨', price: card.tcgplayer?.prices?.holofoil?.market ?? null },
-    { key: 'reverseHolofoil', label: t.variants.reverseHolofoil, desc: t.variants.reverseHolofoilDesc, emoji: '🌈', price: card.tcgplayer?.prices?.reverseHolofoil?.market ?? null },
+    { key: 'normal', label: t.variants.normal, desc: t.variants.normalDesc, emoji: '🃏', price: variantPriceEur(card, 'normal') },
+    { key: 'holofoil', label: t.variants.holofoil, desc: t.variants.holofoilDesc, emoji: '✨', price: variantPriceEur(card, 'holofoil') },
+    { key: 'reverseHolofoil', label: t.variants.reverseHolofoil, desc: t.variants.reverseHolofoilDesc, emoji: '🌈', price: variantPriceEur(card, 'reverseHolofoil') },
     { key: 'firstEdition', label: t.variants.firstEdition, desc: t.variants.firstEditionDesc, emoji: '⭐', price: null },
     { key: 'promo', label: t.variants.promo, desc: t.variants.promoDesc, emoji: '🎁', price: null },
   ];
@@ -178,6 +172,9 @@ export function ExplorerPage() {
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const cache = useRef<Map<string, { cards: PokemonCard[]; total: number }>>(new Map());
+  const [tier, setTier] = useState<RarityTier | ''>('');
+  const firstSearch = useRef(true);
+  const lastTier = useRef<RarityTier | ''>('');
 
   const { data: collectionCards = [] } = useCollectionList();
   const { data: wishlistItems = [] } = useWishlistList();
@@ -197,8 +194,8 @@ export function ExplorerPage() {
     setWishlistIds(new Set(wishlistItems.map(w => w.cardId ?? '').filter(Boolean)));
   }, [wishlistItems]);
 
-  const doSearch = useCallback(async (q: string, p: number, append: boolean) => {
-    const cacheKey = q + '-' + p;
+  const doSearch = useCallback(async (q: string, p: number, append: boolean, tierFilter: RarityTier | '' = '') => {
+    const cacheKey = q + '-' + p + '-' + tierFilter;
     if (append) setIsLoadingMore(true);
     else setIsLoading(true);
     setError('');
@@ -207,7 +204,7 @@ export function ExplorerPage() {
       if (cache.current.has(cacheKey)) {
         result = cache.current.get(cacheKey)!;
       } else {
-        result = await searchCards(q, p);
+        result = await searchCards(q, p, tierFilter);
         cache.current.set(cacheKey, result);
       }
       setTotal(result.total);
@@ -222,38 +219,38 @@ export function ExplorerPage() {
     }
   }, []);
 
-  useEffect(() => { doSearch('', 1, false); }, []);
 
+  // first load, typing (debounced) and changing the rarity filter all go through here
   useEffect(() => {
     clearTimeout(searchTimeout.current);
     searchTimeout.current = setTimeout(() => {
-      doSearch(query, 1, false);
+      doSearch(query, 1, false, tier);
       if (query.trim()) updateMission('explore');
-    }, 800);
+    }, firstSearch.current ? 0 : tier !== lastTier.current ? 0 : 800);
+    firstSearch.current = false;
+    lastTier.current = tier;
     return () => clearTimeout(searchTimeout.current);
-  }, [query]);
+  }, [query, tier]);
 
   useEffect(() => {
     if (!sentinelRef.current || !hasMore) return;
     const observer = new IntersectionObserver(
-      entries => { if (entries[0].isIntersecting && !isLoadingMore) doSearch(query, page + 1, true); },
+      entries => { if (entries[0].isIntersecting && !isLoadingMore) doSearch(query, page + 1, true, tier); },
       { threshold: 0.1 }
     );
     observer.observe(sentinelRef.current);
     return () => observer.disconnect();
-  }, [hasMore, isLoadingMore, page, query]);
+  }, [hasMore, isLoadingMore, page, query, tier]);
 
   const handleAdd = async (card: PokemonCard, variant: CardVariant, language: CardLanguage) => {
     if (!telegramUser?.id) return;
     setSelectorCard(null);
-    const price = getPriceForVariant(card, variant);
-    const marketPrice = card.cardmarket?.prices?.averageSellPrice ?? null;
     createItem({
       cardId: card.id, tcg: 'pokemon', telegramUserId: telegramUser.id,
       cardName: card.name, setName: card.set.name, cardNumber: card.number,
       rarity: card.rarity ?? null, imageUrl: card.images.small, quantity: 1,
       favorite: false, setTotal: card.set.total ?? null,
-      marketPrice: price ?? marketPrice, tcgplayerPrice: price, currency: 'EUR',
+      ...pricesForCollection(card, variant),
       variant, cardLanguage: language,
     });
 
@@ -273,11 +270,7 @@ export function ExplorerPage() {
     });
 
     // Verificar referido
-    fetch('/api/check-referral', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ telegramUserId: telegramUser.id, totalCards: newTotal }),
-    });
+    reportCardsAdded(newTotal);
   };
 
   const handleWishlist = async (card: PokemonCard) => {
@@ -309,13 +302,12 @@ export function ExplorerPage() {
       let added = 0;
       for (const card of setCards) {
         if (addedIds.has(card.id)) continue;
-        const price = card.cardmarket?.prices?.averageSellPrice ?? card.tcgplayer?.prices?.normal?.market ?? null;
         createItem({
           cardId: card.id, tcg: 'pokemon', telegramUserId: telegramUser.id,
           cardName: card.name, setName: card.set.name, cardNumber: card.number,
           rarity: card.rarity ?? null, imageUrl: card.images.small, quantity: 1,
           favorite: false, setTotal: card.set.total ?? null,
-          marketPrice: price, tcgplayerPrice: price, currency: 'EUR',
+          ...pricesForCollection(card, 'normal'),
           variant: 'normal', cardLanguage: 'en',
         });
         added++;
@@ -323,11 +315,7 @@ export function ExplorerPage() {
       if (added > 0) {
         await updateMission('add_card');
         const newTotal = collectionCards.reduce((s, c) => s + c.quantity, 0) + added;
-        fetch('/api/check-referral', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ telegramUserId: telegramUser.id, totalCards: newTotal }),
-        });
+        reportCardsAdded(newTotal);
       }
       setStatusMsg(`✅ ${added} cartas del set añadidas`);
       setTimeout(() => setStatusMsg(''), 3000);
@@ -389,6 +377,18 @@ export function ExplorerPage() {
                 className="w-full bg-white/5 border border-white/10 rounded-2xl pl-11 pr-4 py-3.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50" />
               {isLoading && <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-400 animate-spin" />}
             </div>
+            <div className="mt-3 flex gap-2 overflow-x-auto pb-1 -mx-4 px-4" role="group" aria-label="Rareza">
+              <button onClick={() => setTier('')} aria-pressed={tier === ''}
+                className={'shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ' + (tier === '' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white/5 border-white/10 text-gray-400')}>
+                Todas las rarezas
+              </button>
+              {RARITY_TIER_ORDER.map((tr) => (
+                <button key={tr} onClick={() => setTier(tier === tr ? '' : tr)} aria-pressed={tier === tr} title={RARITY_TIERS[tr].hintEs}
+                  className={'shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ' + (tier === tr ? 'bg-blue-600 text-white border-blue-600' : 'bg-white/5 border-white/10 text-gray-400')}>
+                  {RARITY_TIERS[tr].symbol} {RARITY_TIERS[tr].labelEs}
+                </button>
+              ))}
+            </div>
           </div>
 
           {statusMsg && (
@@ -402,10 +402,10 @@ export function ExplorerPage() {
               <div className="flex items-center gap-2">
                 <TrendingUp className="w-3.5 h-3.5 text-gray-500" />
                 <span className="text-xs text-gray-500">
-                  {query.trim() ? total.toLocaleString() + ' resultados para "' + query.trim() + '"' : t.explorer.latestCards}
+                  {query.trim() ? total.toLocaleString() + ' resultados para "' + query.trim() + '"' + (tier ? ' · ' + RARITY_TIERS[tier].labelEs : '') : tier ? total.toLocaleString() + ' · ' + RARITY_TIERS[tier].labelEs : t.explorer.latestCards}
                 </span>
               </div>
-              {!query.trim() && (
+              {!query.trim() && !tier && (
                 <button onClick={addFullSet} disabled={addingFullSet}
                   className="flex items-center gap-1.5 bg-purple-500/10 border border-purple-500/20 text-purple-400 rounded-xl px-3 py-1.5 text-xs font-medium active:scale-95 transition-transform disabled:opacity-50">
                   {addingFullSet ? <Loader2 size={12} className="animate-spin" /> : <PackagePlus size={12} />}
@@ -434,7 +434,7 @@ export function ExplorerPage() {
             {error && !isLoading && (
               <div className="text-center py-12">
                 <p className="text-red-400 text-sm">{error}</p>
-                <button onClick={() => doSearch(query, 1, false)} className="mt-3 text-xs text-blue-400 underline">
+                <button onClick={() => doSearch(query, 1, false, tier)} className="mt-3 text-xs text-blue-400 underline">
                   {t.common.tryAgain}
                 </button>
               </div>
@@ -456,7 +456,7 @@ export function ExplorerPage() {
               <>
                 <div className="grid grid-cols-2 gap-3">
                   {cards.map(card => {
-                    const price = card.cardmarket?.prices?.averageSellPrice ?? card.tcgplayer?.prices?.holofoil?.market ?? card.tcgplayer?.prices?.normal?.market ?? null;
+                    const price = cardmarketEur(card, 'normal');
                     const alreadyAdded = addedIds.has(card.id);
                     return (
                       <div key={card.id} className="bg-[#111118] border border-white/8 rounded-2xl overflow-hidden">
@@ -471,11 +471,7 @@ export function ExplorerPage() {
                         <div className="p-2.5 space-y-1.5">
                           <p className="text-xs font-bold truncate">{card.name}</p>
                           <p className="text-[10px] text-gray-500 truncate">{card.set.name}</p>
-                          {card.rarity && (
-                            <p className={cx('text-[10px] truncate font-medium', getRarityColor(card.rarity))}>
-                              {card.rarity.replace('Common', 'Comun').replace('Uncommon', 'Infrecuente').replace('Rare', 'Rara').replace('Ultra Rare', 'Ultra Rara').replace('Secret Rare', 'Secreta').replace('Hyper Rare', 'Hiper Rara').replace('Double Rare', 'Doble Rara').replace('Illustration Rare', 'Ilustracion Rara').replace('Special Illustration Rare', 'Ilustracion Especial')}
-                            </p>
-                          )}
+                          {card.rarity && <RarityBadge rarity={card.rarity} />}
                           {price && <p className="text-[10px] text-green-400 font-medium">{formatPrice(price)}</p>}
                           <button onClick={() => setSelectorCard(card)}
                             className="w-full mt-1 rounded-xl py-2 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all bg-blue-600 hover:bg-blue-500 text-white active:scale-95">

@@ -53,8 +53,10 @@ async function handleRequest(request) {
 
   if (route === 'cron-prices') {
     var cronSecret = url.searchParams.get('secret') || '';
-    if (cronSecret !== getEnv('CRON_SECRET')) return jsonResponse({ error: 'Unauthorized' }, 401);
-    var results = await handleCronPrices();
+    var expected = getEnv('CRON_SECRET');
+    // an unset CRON_SECRET must lock the route, not open it ('' === '')
+    if (!expected || cronSecret !== expected) return jsonResponse({ error: 'Unauthorized' }, 401);
+    var results = await handleCronPrices(url.searchParams.get('limit'));
     return jsonResponse({ ok: true, results: results, ran_at: new Date().toISOString() });
   }
 

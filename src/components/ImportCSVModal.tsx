@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { Upload, X, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useUserStore } from '@/store';
+import { POKEMON_API_KEY } from '@/lib/pokemon-key';
 
 interface ImportResult {
   total: number;
@@ -67,7 +68,6 @@ const CONDITION_MAP: Record<string, string> = {
   'danada': 'damaged',
 };
 
-const POKEMON_API_KEY = import.meta.env.VITE_POKEMONTCG_API_KEY ?? '';
 
 function parseCSV(text: string): string[][] {
   const rows: string[][] = [];
