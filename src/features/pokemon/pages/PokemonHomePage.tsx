@@ -8,6 +8,7 @@ import { useCollectionList } from '@/hooks/use-collection';
 import { useWishlistList } from '@/hooks/use-wishlist';
 import { useCurrency } from '@/hooks/use-currency';
 import { useUserStore } from '@/store';
+import { valueEur } from '@/lib/card-value';
 
 export function PokemonHomePage() {
   const navigate = useNavigate();
@@ -21,14 +22,14 @@ export function PokemonHomePage() {
 
   const totalCards = cards.reduce((s, c) => s + c.quantity, 0);
   const uniqueCards = cards.length;
-  const totalValue = cards.reduce((s, c) => s + (c.marketPrice ?? c.tcgplayerPrice ?? 0) * c.quantity, 0);
+  const totalValue = cards.reduce((s, c) => s + ((valueEur(c) ?? 0)) * c.quantity, 0);
   const totalPaid = cards.reduce((s, c) => s + (c.purchasePrice ?? 0) * c.quantity, 0);
   const roi = totalPaid > 0 ? ((totalValue - totalPaid) / totalPaid) * 100 : null;
 
   const sets = [...new Set(cards.map(c => c.setName ?? ''))].filter(Boolean).length;
   const favorites = cards.filter(c => c.favorite);
   const recentCards = [...cards].sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime()).slice(0, 6);
-  const topCards = [...cards].sort((a, b) => (b.marketPrice ?? b.tcgplayerPrice ?? 0) - (a.marketPrice ?? a.tcgplayerPrice ?? 0)).slice(0, 3);
+  const topCards = [...cards].sort((a, b) => ((valueEur(b) ?? 0)) - ((valueEur(a) ?? 0))).slice(0, 3);
   const pokemonWishlist = wishlistItems.filter(w => w.tcg === 'pokemon');
 
   const quickActions = [
@@ -120,7 +121,7 @@ export function PokemonHomePage() {
             </div>
             <div className="space-y-2">
               {topCards.map((card, i) => {
-                const price = card.marketPrice ?? card.tcgplayerPrice ?? 0;
+                const price = (valueEur(card) ?? 0);
                 const paid = card.purchasePrice;
                 const cardRoi = paid && price ? ((price - paid) / paid) * 100 : null;
                 return (
@@ -222,7 +223,7 @@ export function PokemonHomePage() {
               <div className="flex justify-between">
                 <span>Carta más cara</span>
                 <span className="text-white font-medium">
-                  {topCards[0] ? formatPrice(topCards[0].marketPrice ?? topCards[0].tcgplayerPrice ?? 0) : '—'}
+                  {topCards[0] ? formatPrice((valueEur(topCards[0]) ?? 0)) : '—'}
                 </span>
               </div>
               <div className="flex justify-between">

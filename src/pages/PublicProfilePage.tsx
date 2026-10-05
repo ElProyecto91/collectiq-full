@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { mapCollectionItem } from '@/utils/mappers';
 import type { CollectionItem } from '@/types';
 import { Heart, ShoppingBag, MessageCircle, Tag } from 'lucide-react';
+import { valueEur } from '@/lib/card-value';
 
 interface PublicUser {
   username: string | null;
@@ -122,7 +123,7 @@ export function PublicProfilePage() {
 
   const displayName = user?.username ? '@' + user.username : user?.first_name ?? 'Coleccionista';
   const totalCards = cards.reduce((s, c) => s + c.quantity, 0);
-  const totalValue = cards.reduce((s, c) => s + ((c.marketPrice ?? c.tcgplayerPrice ?? 0) * c.quantity), 0);
+  const totalValue = cards.reduce((s, c) => s + (((valueEur(c) ?? 0)) * c.quantity), 0);
 
   const tabs = [
     { key: 'collection', label: 'Colección', count: totalCards, show: user?.collection_public ?? true },

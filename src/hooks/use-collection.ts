@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { mapCollectionItem } from '@/utils/mappers';
 import { useUserStore } from '@/store';
 import type { CollectionItem, CollectionItemInput } from '@/types';
+import { valueEur } from '@/lib/card-value';
 
 export function useCollection(tcg?: string) {
   const [items, setItems] = useState<CollectionItem[]>([]);
@@ -53,11 +54,11 @@ export function useCollection(tcg?: string) {
   const stats = {
     total: items.length,
     totalQuantity: items.reduce((s, i) => s + i.quantity, 0),
-    totalValue: items.reduce((s, i) => s + (i.marketPrice ?? i.tcgplayerPrice ?? 0) * i.quantity, 0),
+    totalValue: items.reduce((s, i) => s + ((valueEur(i) ?? 0)) * i.quantity, 0),
     totalCost: items.reduce((s, i) => s + (i.purchasePrice ?? 0) * i.quantity, 0),
     roi: (() => {
       const cost = items.reduce((s, i) => s + (i.purchasePrice ?? 0) * i.quantity, 0);
-      const value = items.reduce((s, i) => s + (i.marketPrice ?? i.tcgplayerPrice ?? 0) * i.quantity, 0);
+      const value = items.reduce((s, i) => s + ((valueEur(i) ?? 0)) * i.quantity, 0);
       return cost > 0 ? ((value - cost) / cost) * 100 : 0;
     })(),
     favorites: items.filter(i => i.favorite).length,
