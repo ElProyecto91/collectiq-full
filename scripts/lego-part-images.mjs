@@ -23,6 +23,9 @@
  *   --max-pages N        stop after N pages (testing).
  *   --writes-budget N    refuse to write more rows than this, per table (default 100000).
  *   --check N            sample N of the found URLs and report how many answer (default 100, 0 = off).
+ *   --probe N            for parts that stay without any picture, test N of them against two other picture
+ *                        sources (BrickLink item images; Rebrickable's LDraw renders) and REPORT how many exist.
+ *                        Nothing from these is stored (default 60, 0 = off).
  * Test hook: REBRICKABLE_API_BASE overrides https://rebrickable.com/api/v3.
  */
 const args = process.argv.slice(2);
@@ -35,6 +38,7 @@ const delayMs = Number(opt('delay-ms', 1200));
 const maxPages = Number(opt('max-pages', Infinity));
 const writesBudget = Number(opt('writes-budget', 100_000));
 const checkN = Number(opt('check', 100)) || 0;
+const probeN = Number(opt('probe', 60));
 
 function fail(msg) {
   console.error(`\nERROR: ${msg}`);
@@ -76,6 +80,7 @@ const base = process.env.REBRICKABLE_API_BASE ?? 'https://rebrickable.com/api/v3
 let url = `${base}/lego/parts/?page_size=1000&ordering=part_num`;
 const found = new Map(); // part_num -> img_url
 const extRows = new Map(); // 'BrickLink|id|part' -> [system, id, part_num]
+const otherIds = new Map(); // target part_num -> { bl: [...], ldraw: [...] } (used by --probe)
 let pages = 0, apiParts = 0, apiNoImage = 0;
 
 async function getPage(u) {
@@ -107,6 +112,9 @@ while (url && pages < maxPages) {
     if (Array.isArray(bl) && allParts.has(String(p.part_num))) {
       for (const id of bl) extRows.set(`BrickLink|${id}|${p.part_num}`, ['BrickLink', String(id), String(p.part_num)]);
     }
+    if (target.has(String(p.part_num))) {
+      otherIds.set(String(p.part_num), { bl: (bl ?? []).map(String), ldraw: (p.external_ids?.LDraw ?? []).map(String) });
+    }
     if (!p.part_img_url) { apiNoImage++; continue; }
     if (target.has(String(p.part_num))) found.set(String(p.part_num), String(p.part_img_url));
   }
@@ -121,8 +129,8 @@ console.log(`Target parts: ${target.size}. Picture found for ${found.size}; stil
 console.log(`BrickLink numbers read: ${extRows.size} (already stored: ${haveExt}).`);
 if (pages >= maxPages && url) console.log('(stopped early by --max-pages: the numbers above are partial)');
 
-if (checkN > 0 && found.size) {
-  const urls = [...found.values()].sort(() => Math.random() - 0.5).slice(0, checkN);
+// Light and polite: 6 requests at a time, 1 byte each.
+async function probeUrls(urls) {
   let ok = 0, bad = 0, none = 0;
   const queue = [...urls];
   await Promise.all(Array.from({ length: 6 }, async () => {
@@ -133,7 +141,33 @@ if (checkN > 0 && found.size) {
       } catch { none++; }
     }
   }));
+  return { ok, bad, none };
+}
+
+if (checkN > 0 && found.size) {
+  const urls = [...found.values()].sort(() => Math.random() - 0.5).slice(0, checkN);
+  const { ok, bad, none } = await probeUrls(urls);
   console.log(`Picture URL sample (${urls.length}): ${ok} answer OK, ${bad} not found / refused, ${none} no answer.`);
+}
+
+// Other sources for the parts that stay without a picture. Report only: nothing here is stored.
+if (probeN > 0) {
+  const left = [...target].filter((pn) => !found.has(pn));
+  const blBase = process.env.BRICKLINK_IMG_BASE ?? 'https://img.bricklink.com/ItemImage/PN';
+  const ldBase = process.env.REBRICKABLE_LDRAW_BASE ?? 'https://cdn.rebrickable.com/media/parts/ldraw';
+  const sample = left.sort(() => Math.random() - 0.5).slice(0, probeN);
+  const withBl = sample.filter((pn) => otherIds.get(pn)?.bl.length);
+  const withLd = sample.filter((pn) => otherIds.get(pn)?.ldraw.length);
+  console.log(`\nOther picture sources, tested on ${sample.length} of the ${left.length} parts that stay without one:`);
+  console.log(`  parts with a BrickLink number: ${withBl.length}; with an LDraw number: ${withLd.length}`);
+  if (withBl.length) {
+    const r = await probeUrls(withBl.map((pn) => `${blBase}/0/${encodeURIComponent(otherIds.get(pn).bl[0])}.png`));
+    console.log(`  BrickLink item image (${blBase}/0/<number>.png): ${r.ok}/${withBl.length} answer OK, ${r.bad} not found / refused, ${r.none} no answer.`);
+  }
+  if (withLd.length) {
+    const r = await probeUrls(withLd.map((pn) => `${ldBase}/4/${encodeURIComponent(otherIds.get(pn).ldraw[0])}.png`));
+    console.log(`  Rebrickable LDraw render in red (${ldBase}/4/<number>.png): ${r.ok}/${withLd.length} answer OK, ${r.bad} not found / refused, ${r.none} no answer.`);
+  }
 }
 
 if (found.size > writesBudget || extRows.size > writesBudget) fail(`Would write ${found.size} pictures and ${extRows.size} numbers, over --writes-budget ${writesBudget} per table. Nothing was written.`);
