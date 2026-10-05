@@ -10,6 +10,7 @@ import { useUserStore } from '@/store';
 import { useCurrency } from '@/hooks/use-currency';
 import { useI18n } from '@/i18n';
 import { supabase } from '@/lib/supabase';
+import { POKEMON_API_KEY } from '@/lib/pokemon-key';
 
 interface Attack { name: string; cost: string[]; damage: string; text: string; }
 interface Ability { name: string; text: string; type: string; }
@@ -94,7 +95,6 @@ function MiniPriceChart({ history }: { history: PriceHistory[] }) {
   );
 }
 
-const POKEMON_API_KEY = import.meta.env.VITE_POKEMONTCG_API_KEY ?? '';
 
 export function CardDetailsPage() {
   const { cardId } = useParams<{ cardId: string }>();

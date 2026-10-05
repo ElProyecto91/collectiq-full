@@ -21,6 +21,7 @@ import { RarityBadge } from '@/components/RarityBadge';
 import { reportCardsAdded } from '@/lib/session-token';
 import { API_RARITIES_BY_TIER, RARITY_TIERS, RARITY_TIER_ORDER, type RarityTier } from '@/lib/rarity';
 import { cardmarketEur, pricesForCollection, variantPriceEur } from '@/lib/card-pricing';
+import { POKEMON_API_KEY } from '@/lib/pokemon-key';
 
 interface PokemonCard {
   id: string; name: string; number: string; rarity?: string;
@@ -31,7 +32,6 @@ interface PokemonCard {
   types?: string[]; supertype?: string;
 }
 
-const POKEMON_API_KEY = import.meta.env.VITE_POKEMONTCG_API_KEY ?? '';
 
 /** The API's q= text: the name search, narrowed to a rarity tier (its known API names, OR-ed in a group). */
 export function buildExplorerQuery(query: string, tier: RarityTier | ''): string {

@@ -15,17 +15,23 @@ const GEMINI_PROMPT = `Analiza esta imagen de un coleccionable y devuelve SOLO u
 }
 Sin texto adicional, solo el JSON.`;
 
+const q = (v: unknown) => String(v ?? '').replace(/["\\]/g, '').trim(); // keep text read from a photo inside its quotes
+
 async function validatePokemon(name: string, number: string, setName: string): Promise<any> {
+  const n = q(String(number ?? '').split('/')[0]);
   const attempts = [
-    `number:${number} set.name:"${setName}"`,
-    `number:${number} name:"${name}"`,
-    `name:"${name}"`
-  ];
-  for (const q of attempts) {
+    n && setName ? `number:"${n}" set.name:"${q(setName)}"` : '',
+    n && name ? `number:"${n}" name:"${q(name)}"` : '',
+    name ? `name:"${q(name)}"` : '',
+  ].filter(Boolean);
+  const headers: Record<string, string> = {};
+  const key = process.env.VITE_POKEMONTCG_API_KEY;
+  if (key) headers['X-Api-Key'] = key; // an undefined header value would be sent as the text "undefined"
+  for (const query of attempts) {
     try {
       const r = await fetch(
-        `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=1`,
-        { headers: { 'X-Api-Key': process.env.VITE_POKEMONTCG_API_KEY! } }
+        `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(query)}&pageSize=1`,
+        { headers }
       );
       const d = await r.json();
       if (d?.data?.[0]) return d.data[0];
