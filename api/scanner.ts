@@ -1,10 +1,5 @@
 // api/scanner.ts
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.VITE_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { bumpScans, scanState, sessionUserId, supabase } from './_lib/auth';
 
 const GEMINI_PROMPT = `Analiza esta imagen de un coleccionable y devuelve SOLO un objeto JSON con estos campos:
 {
@@ -57,44 +52,13 @@ export default async function handler(req: any, res: any) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const authHeader = req.headers.authorization;
-  if (!authHeader) return res.status(401).json({ error: 'No authorization header' });
+  // the user comes from the verified session token (the old code decoded the token without checking it)
+  const telegram_user_id = await sessionUserId(req);
+  if (!telegram_user_id) return res.status(401).json({ error: 'unauthorized' });
 
-  let telegram_user_id: number;
-  try {
-    const token = authHeader.replace('Bearer ', '');
-    const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
-    telegram_user_id = payload.telegram_user_id;
-    if (!telegram_user_id) throw new Error();
-  } catch {
-    return res.status(401).json({ error: 'Invalid token' });
-  }
-
-  // Verificar límite de escaneos (reutiliza tabla user_scans existente)
-  const today = new Date().toISOString().split('T')[0];
-  const { data: scanData } = await supabase
-    .from('user_scans')
-    .select('scans_today, last_scan_date, bonus_scans')
-    .eq('telegram_user_id', telegram_user_id)
-    .maybeSingle();
-
-  const { data: userGo } = await supabase
-    .from('users')
-    .select('is_premium, premium_until')
-    .eq('telegram_user_id', telegram_user_id)
-    .maybeSingle();
-
-  const isPremium = userGo?.is_premium &&
-    userGo?.premium_until &&
-    new Date(userGo.premium_until) > new Date();
-
-  if (!isPremium) {
-    const scansToday = scanData?.last_scan_date === today ? (scanData?.scans_today ?? 0) : 0;
-    const bonusScans = scanData?.bonus_scans ?? 0;
-    const limit = 5 + bonusScans;
-    if (scansToday >= limit) {
-      return res.status(429).json({ error: 'Límite de escaneos alcanzado', limit, scans_today: scansToday });
-    }
+  const quota = await scanState(telegram_user_id);
+  if (!quota.premium && quota.used >= quota.limit) {
+    return res.status(429).json({ error: 'Límite de escaneos alcanzado', limit: quota.limit, scans_today: quota.used });
   }
 
   const { image_base64, tcg_hint } = req.body;
@@ -178,18 +142,12 @@ export default async function handler(req: any, res: any) {
     confidence: (geminiResult.confidence ?? 0.5) * 0.7 // penalizar si no validó
   };
 
-  // Actualizar contador de escaneos
-  const newScansToday = scanData?.last_scan_date === today ? (scanData?.scans_today ?? 0) + 1 : 1;
-  await supabase.from('user_scans').upsert({
-    telegram_user_id,
-    scans_today: newScansToday,
-    last_scan_date: today,
-    updated_at: new Date().toISOString()
-  }, { onConflict: 'telegram_user_id' });
+  // Actualizar contador de escaneos (premium no cuenta)
+  const after = quota.premium ? quota : await bumpScans(telegram_user_id, 1);
 
   return res.status(200).json({
     result,
     validated: !!validated,
-    scans_remaining: isPremium ? 999 : Math.max(0, 5 + (scanData?.bonus_scans ?? 0) - newScansToday)
+    scans_remaining: after.premium ? 999 : Math.max(0, after.limit - after.used)
   });
 }

@@ -63,12 +63,13 @@ export function ProfilePage() {
       }
 
       // Escaneos hoy
-      const { data: scans } = await getSupabase().from('user_scans')
-        .select('scans_today, last_scan_date')
-        .eq('telegram_user_id', telegramUser!.id)
-        .maybeSingle();
       const today = new Date().toISOString().split('T')[0];
-      if (scans?.last_scan_date === today) setScansUsed(scans.scans_today || 0);
+      const { data: scans } = await getSupabase().from('user_scans')
+        .select('scans_used')
+        .eq('telegram_user_id', telegramUser!.id)
+        .eq('scan_date', today)
+        .maybeSingle();
+      setScansUsed(scans?.scans_used || 0);
 
       // Stats por TCG
       const stats: TCGStats[] = [];

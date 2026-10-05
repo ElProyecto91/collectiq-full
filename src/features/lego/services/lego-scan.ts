@@ -1,4 +1,5 @@
 import { API_BASE } from '@/config/api';
+import { getSessionToken } from '@/lib/session-token';
 
 export interface ScanCandidate {
   /** Brickognize's part id (usually a BrickLink number). */
@@ -23,14 +24,7 @@ export class ScanError extends Error {
   }
 }
 
-/** The app's session token (the same one the rest of the app uses to identify the user). */
-export function getSessionToken(): string | null {
-  try {
-    return localStorage.getItem('auth_token') || localStorage.getItem('collectiq-session-token');
-  } catch {
-    return null;
-  }
-}
+export { getSessionToken };
 
 export async function scanPart(image: Blob, token: string): Promise<ScanResponse> {
   const form = new FormData();

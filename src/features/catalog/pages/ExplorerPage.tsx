@@ -18,6 +18,7 @@ import type { CardVariant, CardLanguage } from '@/types';
 import { CARD_LANGUAGES } from '@/types';
 import { supabase } from '@/lib/supabase';
 import { RarityBadge } from '@/components/RarityBadge';
+import { reportCardsAdded } from '@/lib/session-token';
 import { API_RARITIES_BY_TIER, RARITY_TIERS, RARITY_TIER_ORDER, type RarityTier } from '@/lib/rarity';
 import { cardmarketEur, pricesForCollection, variantPriceEur } from '@/lib/card-pricing';
 
@@ -269,11 +270,7 @@ export function ExplorerPage() {
     });
 
     // Verificar referido
-    fetch('/api/check-referral', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ telegramUserId: telegramUser.id, totalCards: newTotal }),
-    });
+    reportCardsAdded(newTotal);
   };
 
   const handleWishlist = async (card: PokemonCard) => {
@@ -318,11 +315,7 @@ export function ExplorerPage() {
       if (added > 0) {
         await updateMission('add_card');
         const newTotal = collectionCards.reduce((s, c) => s + c.quantity, 0) + added;
-        fetch('/api/check-referral', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ telegramUserId: telegramUser.id, totalCards: newTotal }),
-        });
+        reportCardsAdded(newTotal);
       }
       setStatusMsg(`✅ ${added} cartas del set añadidas`);
       setTimeout(() => setStatusMsg(''), 3000);
