@@ -15,7 +15,7 @@ export const CURRENCY_SYMBOLS: Record<Currency, string> = {
   PLN: 'zł',
 };
 
-const EXCHANGE_RATES: Record<Currency, number> = {
+export const EXCHANGE_RATES: Record<Currency, number> = {
   EUR: 1,
   USD: 1.08,
   GBP: 0.85,
@@ -55,4 +55,8 @@ export function useCurrency() {
   };
 
   return { currency, symbol, formatPrice, setCurrency };
+}
+/** Dollars (TCGplayer) to euros, with the app's own rate, so every price on screen goes through formatPrice(EUR). */
+export function usdToEur(usd: number): number {
+  return usd / EXCHANGE_RATES.USD;
 }
