@@ -17,8 +17,8 @@ NOT EXECUTED. Review and run by hand in the Supabase SQL Editor, SECTION BY SECT
    owner's household (by the JWT). Cards/wishlist of someone who made their profile public stay readable.
 3. The rest: the anonymous visitor loses access; a logged-in user (has the JWT) keeps what they had.
    This does NOT make social tables "own rows only": any logged-in user can still edit another user's xp,
-   decks, etc. (as before). user_premium is still writable by any logged-in user because the purchase flow
-   writes it from the browser (use-premium.ts) - fix that flow (let the Worker write it) before locking it.
+   decks, etc. (as before). user_premium is READ-ONLY for the browser: GO is only written by the Worker
+   (Telegram payment and the admin panel, routes admin-give-go / bot-webhook) with the service role.
 4. Public catalogs: read-only for everyone.
 
 Tables that do not exist yet are skipped.
@@ -78,7 +78,7 @@ BEGIN
     'deck_cards', 'deck_comments', 'deck_copies', 'deck_votes', 'decks', 'feature_votes',
     'marketplace_listings', 'marketplace_offers', 'price_alerts', 'public_profiles',
     'user_achievements', 'user_badges', 'user_follows', 'user_notifications', 'user_reputation',
-    'user_streaks', 'user_xp', 'user_premium', 'funko_price_history'] LOOP
+    'user_streaks', 'user_xp', 'funko_price_history'] LOOP
     IF pg_temp.ciq_reset(t) THEN
       EXECUTE format('REVOKE ALL ON public.%I FROM anon', t);
       EXECUTE format('CREATE POLICY ciq_authenticated_all ON public.%I FOR ALL TO authenticated USING (true) WITH CHECK (true)', t);
@@ -86,6 +86,11 @@ BEGIN
   END LOOP;
 
   -- read-only for logged-in users (writes come from the Worker / Vercel functions with the service role)
+  IF pg_temp.ciq_reset('user_premium') THEN
+    REVOKE ALL ON public.user_premium FROM anon;
+    REVOKE INSERT, UPDATE, DELETE ON public.user_premium FROM authenticated;
+    CREATE POLICY ciq_authenticated_read ON public.user_premium FOR SELECT TO authenticated USING (true);
+  END IF;
   IF pg_temp.ciq_reset('analytics_events') THEN
     REVOKE ALL ON public.analytics_events FROM anon;
     CREATE POLICY ciq_authenticated_read ON public.analytics_events FOR SELECT TO authenticated USING (true);

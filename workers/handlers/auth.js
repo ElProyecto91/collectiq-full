@@ -2,6 +2,7 @@
 import { jsonResponse, corsHeaders, getEnv } from '../lib/cors.js';
 import { sbGet, sbPost, sbPatch, sbFetch } from '../lib/supabase.js';
 import { sendTgMessage, generateToken, APP_URL, ADMIN_ID } from '../lib/telegram.js';
+import { sessionUserId } from '../lib/session.js';
 
 async function verifyTelegramData(initData, botToken) {
   var params = new URLSearchParams(initData);
@@ -97,7 +98,7 @@ export async function handleBotWebhook(request) {
       var telegramUserId = userId;
       try { var payload = JSON.parse(payment.invoice_payload); telegramUserId = payload.telegramUserId || userId; } catch(e) {}
       var expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-      await sbPost('user_premium', { telegram_user_id: telegramUserId, plan: 'go', expires_at: expiresAt, stars_paid: payment.total_amount, updated_at: new Date().toISOString() }, 'resolution=merge-duplicates');
+      await sbPost('user_premium', { telegram_user_id: telegramUserId, plan: 'go', expires_at: expiresAt, is_active: true, stars_paid: payment.total_amount, updated_at: new Date().toISOString() }, 'resolution=merge-duplicates');
       await sendTgMessage(userId, '*¡Bienvenido a CollectIQ GO!*\n\nTu plan está activo 🎉\n\n[Abrir app](' + APP_URL + ')');
       return new Response('OK', { status: 200 });
     }
@@ -143,33 +144,65 @@ export async function handleTelegramCallback(request) {
   return new Response(null, { status: 302, headers: h });
 }
 
+// The admin is whoever holds the session token of ADMIN_ID. The id is NEVER taken from the request body
+// (ADMIN_ID is public in the app bundle, so a body field proves nothing).
+async function requireAdmin(request) {
+  var uid = await sessionUserId(request);
+  return uid && Number(uid) === Number(ADMIN_ID) ? Number(uid) : null;
+}
+
+function premiumActive(row) {
+  if (!row || row.plan !== 'go' || row.is_active === false) return false;
+  return !row.expires_at || new Date(row.expires_at) > new Date();
+}
+
+// POST {} -> { ok: isAdmin }.  POST { checkPremium: true } -> also { isPremium } for the caller (from the session).
 export async function handleAdminVerify(request) {
   if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
   try {
-    var body = await request.json();
-    if (!body.telegramUserId) return jsonResponse({ ok: false }, 400);
-    var sessions = await sbGet('user_sessions', 'telegram_user_id=eq.' + body.telegramUserId + '&select=telegram_user_id&limit=1');
-    return jsonResponse({ ok: body.telegramUserId === ADMIN_ID && sessions && sessions.length > 0 });
+    var uid = await sessionUserId(request);
+    if (!uid) return jsonResponse({ ok: false }, 401);
+    var out = { ok: Number(uid) === Number(ADMIN_ID) };
+    var body = {};
+    try { body = await request.json(); } catch (e) { /* no body */ }
+    if (body && body.checkPremium) {
+      var rows = await sbGet('user_premium', 'telegram_user_id=eq.' + Number(uid) + '&select=plan,expires_at,is_active&limit=1');
+      out.isPremium = premiumActive(Array.isArray(rows) ? rows[0] : null);
+    }
+    return jsonResponse(out);
   } catch(e) { return jsonResponse({ ok: false }, 500); }
 }
 
+// Admin only. Body: { targetUserId, months?, days?, revoke? }. Extends an active GO instead of resetting it.
 export async function handleAdminGiveGo(request) {
   if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
   try {
+    if (!(await requireAdmin(request))) return jsonResponse({ error: 'Unauthorized' }, 401);
     var body = await request.json();
-    var telegramUserId = Number(body.telegramUserId);
-    var adminId = Number(body.adminId);
-    if (adminId !== ADMIN_ID) return jsonResponse({ error: 'Unauthorized' }, 401);
-    if (!telegramUserId) return jsonResponse({ error: 'Missing telegramUserId' }, 400);
-    var days = body.days || 30;
-    var expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+    var target = Number(body.targetUserId);
+    if (!Number.isInteger(target) || target <= 0) return jsonResponse({ error: 'Missing targetUserId' }, 400);
+    var url = '/user_premium?on_conflict=telegram_user_id';
+
     if (body.revoke) {
-      await sbFetch('/user_premium?telegram_user_id=eq.' + telegramUserId, { method: 'PATCH', body: { is_active: false }, prefer: 'return=minimal' });
+      var rev = await sbFetch(url, { method: 'POST', prefer: 'resolution=merge-duplicates,return=minimal',
+        body: { telegram_user_id: target, plan: 'free', expires_at: null, is_active: false, updated_at: new Date().toISOString() } });
+      if (!rev.ok) return jsonResponse({ error: 'db_error' }, 502);
       return jsonResponse({ ok: true, revoked: true });
     }
-    await sbPost('user_premium', { telegram_user_id: telegramUserId, plan: 'go', expires_at: expiresAt, is_active: true, stars_paid: 0, updated_at: new Date().toISOString() }, 'resolution=merge-duplicates');
-    return jsonResponse({ ok: true, expires_at: expiresAt, days: days });
-  } catch(e) { return jsonResponse({ error: e.message }, 500); }
+
+    var months = Math.max(0, Math.min(120, Number(body.months) || 0));
+    var days = Math.max(0, Math.min(3650, Number(body.days) || 0));
+    var ms = (months * 30 + days) * 24 * 60 * 60 * 1000;
+    if (!ms) ms = 30 * 24 * 60 * 60 * 1000;
+    var cur = await sbGet('user_premium', 'telegram_user_id=eq.' + target + '&select=plan,expires_at,is_active&limit=1');
+    var curRow = Array.isArray(cur) ? cur[0] : null;
+    var from = premiumActive(curRow) && curRow.expires_at ? new Date(curRow.expires_at).getTime() : Date.now();
+    var expiresAt = new Date(Math.max(from, Date.now()) + ms).toISOString();
+    var res = await sbFetch(url, { method: 'POST', prefer: 'resolution=merge-duplicates,return=minimal',
+      body: { telegram_user_id: target, plan: 'go', expires_at: expiresAt, is_active: true, updated_at: new Date().toISOString() } });
+    if (!res.ok) return jsonResponse({ error: 'db_error' }, 502);
+    return jsonResponse({ ok: true, expiresAt: expiresAt });
+  } catch(e) { return jsonResponse({ error: 'Server error' }, 500); }
 }
 
 export async function handleCreateInvoice(request) {
