@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUserStore } from '@/store';
 import { supabase } from '@/lib/supabase';
+import { userDirectoryTable } from '@/lib/user-directory';
 import {
   Users, Zap, BarChart2, Gift, Search, ArrowLeft,
   TrendingUp, ShoppingBag, AlertTriangle, Package,
@@ -190,7 +191,7 @@ export function AdminPage() {
     setIsLoading(true);
     try {
       const { data: rawSessions } = await supabase
-        .from('user_sessions')
+        .from(await userDirectoryTable())
         .select('telegram_user_id, user_data, created_at')
         .order('created_at', { ascending: false })
         .limit(500);

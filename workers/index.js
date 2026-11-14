@@ -11,6 +11,8 @@ import { handleFunkoImages } from './handlers/funko-images.js';
 import { handleOnePieceCards, handleOnePieceSets, handleOnePiecePrice, handleOnePieceScanner, handleOnePieceCronPrices } from './handlers/onepiece.js';
 import { handleMagicCards, handleMagicSets, handleYugiohCards, handleYugiohSets, handleLorcanaCards, handleLorcanaSets } from './handlers/tcg.js';
 import { handleLegoScan, handleLegoInstructions } from './handlers/lego.js';
+import { handleHousehold } from './handlers/household.js';
+import { handleAuthToken } from './handlers/db-token.js';
 import { handleMarketplaceList, handleMarketplaceCreate, handleMarketplaceUpdate, handleMarketplaceDelete, handleMarketplaceOffer, handleMarketplaceStats } from './handlers/marketplace.js';
 
 async function handleRequest(request) {
@@ -45,6 +47,8 @@ async function handleRequest(request) {
   if (route === 'lorcana-sets')       return handleLorcanaSets(request);
   if (route === 'lego-scan')          return handleLegoScan(request);
   if (route === 'lego-instructions')  return handleLegoInstructions(request);
+  if (route === 'household')          return handleHousehold(request);
+  if (route === 'auth-token')         return handleAuthToken(request);
   if (route === 'marketplace-list')   return handleMarketplaceList(request);
   if (route === 'marketplace-create') return handleMarketplaceCreate(request);
   if (route === 'marketplace-update') return handleMarketplaceUpdate(request);
@@ -71,7 +75,7 @@ async function handleRequest(request) {
       'onepiece-cards','onepiece-sets','onepiece-price','onepiece-scanner',
       'magic-cards','magic-sets','yugioh-cards','yugioh-sets',
       'lorcana-cards','lorcana-sets',
-      'lego-scan','lego-instructions',
+      'lego-scan','lego-instructions','household','auth-token',
       'marketplace-list','marketplace-create','marketplace-update',
       'marketplace-delete','marketplace-offer','marketplace-stats',
       'cron-prices',
