@@ -6,11 +6,49 @@ import { useI18n } from '@/i18n';
 import { RoutePaths } from '@/config';
 import { LegoImage } from '../components/LegoImage';
 import { LegoInstructions } from '../components/LegoInstructions';
-import { buildPartLines } from '../part-lines';
+import { LegoPartSort } from '../components/LegoPartSort';
+import { buildPartLines, type PartLine } from '../part-lines';
+import { sortParts, type PartSortKey } from '../part-sort';
+import { usePartSort } from '../use-part-sort';
 import { LegoSetOwnership } from '../components/LegoSetOwnership';
 import { LegoSetProgress } from '../components/LegoSetProgress';
 import { fetchSet, fetchSetParts, fetchThemes } from '../services/lego-catalog';
 import type { LegoSetPart } from '../types';
+
+// A set's own part list has no "added" date and nothing is "missing": those keys are for the collection / progress.
+const SORT_KEYS: readonly PartSortKey[] = ['color', 'number', 'quantity', 'name'];
+
+const Swatch = ({ rgb, trans }: { rgb: string | null; trans: boolean }) => (
+  <span className="w-4 h-4 rounded-full border border-white/20 shrink-0 inline-block"
+    style={{ background: rgb ? `#${rgb}` : 'transparent', opacity: trans ? 0.6 : 1 }} />
+);
+
+function PartTile({ line, showColor = false }: { line: PartLine; showColor?: boolean }) {
+  const { t, tr } = useI18n();
+  const { row: p, real, spare } = line;
+  return (
+    <li className="bg-white/[0.04] border border-white/8 rounded-xl overflow-hidden">
+      <LegoImage src={p.img_url} alt={p.part_name} className="w-full aspect-square" />
+      <div className="p-2">
+        <p className="text-[10px] text-red-300 font-semibold flex items-center justify-between">
+          <span className="truncate">{p.part_num}</span>
+          <span className="text-white text-xs font-bold shrink-0">×{real + spare}</span>
+        </p>
+        <p className="text-[10px] text-white/50 leading-tight line-clamp-2">{p.part_name}</p>
+        {showColor && (
+          <p className="text-[10px] text-white/60 flex items-center gap-1 mt-0.5">
+            <Swatch rgb={p.color_rgb} trans={p.color_is_trans} /><span className="truncate">{p.color_name ?? t.lego.unknownColor}</span>
+          </p>
+        )}
+        {spare > 0 && (
+          <p className="text-[9px] uppercase text-yellow-400/80 mt-0.5">
+            {real > 0 ? tr('lego.partSplit', { real, spare }) : tr('lego.partSpareOnly', { spare })}
+          </p>
+        )}
+      </div>
+    </li>
+  );
+}
 
 export function LegoSetDetailPage() {
   const navigate = useNavigate();
@@ -30,6 +68,15 @@ export function LegoSetDetailPage() {
   // Every part shows what is in the box: the set's own quantity plus its spares, both visible. The set's
   // completeness (progress, ownership) still ignores spares; only this list counts them.
   const { groups, realTotal, realUnique, spareTotal } = useMemo(() => buildPartLines(partsQuery.data ?? []), [partsQuery.data]);
+  const [sort, setSort] = usePartSort('lego-sort-set-parts', SORT_KEYS, 'color');
+  const partKey = (l: PartLine) => ({ part_num: l.row.part_num, color_name: l.row.color_name, part_name: l.row.part_name, quantity: l.real + l.spare });
+  // by color: color groups in the chosen direction, parts of each group by number; any other key: one flat list
+  const orderedGroups = useMemo(() => {
+    const ordered = sort.dir === 'asc' ? groups : [...groups].reverse();
+    return ordered.map((g) => ({ ...g, parts: sortParts(g.parts, partKey, { key: 'number', dir: 'asc' }) }));
+  }, [groups, sort.dir]);
+  const flat = useMemo(
+    () => (sort.key === 'color' ? [] : sortParts(groups.flatMap((g) => g.parts), partKey, sort)), [groups, sort]);
 
   const back = () => navigate(RoutePaths.LegoSets);
 
@@ -115,37 +162,29 @@ export function LegoSetDetailPage() {
           )}
           {partsQuery.data && partsQuery.data.length === 0 && <p className="text-sm text-white/50">{t.lego.noParts}</p>}
 
-          <div className="space-y-4">
-            {groups.map((g) => (
-              <div key={g.colorId}>
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="w-4 h-4 rounded-full border border-white/20 shrink-0"
-                    style={{ background: g.rgb ? `#${g.rgb}` : 'transparent', opacity: g.isTrans ? 0.6 : 1 }} />
-                  <h3 className="text-xs font-bold flex-1 truncate">{g.name ?? t.lego.unknownColor}</h3>
-                  <span className="text-[11px] text-white/40">×{g.total}</span>
+          {partsQuery.data && partsQuery.data.length > 0 && (
+            <div className="mb-3"><LegoPartSort keys={SORT_KEYS} value={sort} onChange={setSort} /></div>)}
+
+          {sort.key === 'color' ? (
+            <div className="space-y-4">
+              {orderedGroups.map((g) => (
+                <div key={g.colorId}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Swatch rgb={g.rgb} trans={g.isTrans} />
+                    <h3 className="text-xs font-bold flex-1 truncate">{g.name ?? t.lego.unknownColor}</h3>
+                    <span className="text-[11px] text-white/40">×{g.total}</span>
+                  </div>
+                  <ul className="grid grid-cols-3 gap-2">
+                    {g.parts.map((line) => <PartTile key={line.row.part_num} line={line} />)}
+                  </ul>
                 </div>
-                <ul className="grid grid-cols-3 gap-2">
-                  {g.parts.map(({ row: p, real, spare }) => (
-                    <li key={p.part_num} className="bg-white/[0.04] border border-white/8 rounded-xl overflow-hidden">
-                      <LegoImage src={p.img_url} alt={p.part_name} className="w-full aspect-square" />
-                      <div className="p-2">
-                        <p className="text-[10px] text-red-300 font-semibold flex items-center justify-between">
-                          <span className="truncate">{p.part_num}</span>
-                          <span className="text-white text-xs font-bold shrink-0">×{real + spare}</span>
-                        </p>
-                        <p className="text-[10px] text-white/50 leading-tight line-clamp-2">{p.part_name}</p>
-                        {spare > 0 && (
-                          <p className="text-[9px] uppercase text-yellow-400/80 mt-0.5">
-                            {real > 0 ? tr('lego.partSplit', { real, spare }) : tr('lego.partSpareOnly', { spare })}
-                          </p>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <ul className="grid grid-cols-3 gap-2">
+              {flat.map((line) => <PartTile key={`${line.row.part_num}|${line.row.color_id}`} line={line} showColor />)}
+            </ul>
+          )}
         </section>}
 
         <p className="text-[11px] text-white/30 pt-4">

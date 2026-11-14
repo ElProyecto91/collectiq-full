@@ -76,6 +76,7 @@ export interface LegoPartItem extends LegoPartKey {
 
 /** A row of user_lego_parts. */
 export interface UserLegoPart extends LegoPartItem {
+  created_at: string;
   updated_at: string;
 }
 
