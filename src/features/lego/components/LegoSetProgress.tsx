@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Plus } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { useUserStore } from '@/store';
 import { copyLabels } from '../copy-label';
@@ -8,7 +8,7 @@ import { inventorySig } from '../inventory-sig';
 import { fetchCanonMap, fetchWeights } from '../services/lego-catalog';
 import { freeInventory, planAllocation } from '../services/lego-allocation';
 import { computeProgress } from '../services/lego-progress';
-import { addUserSet, assignSetParts, listAllocations, listUserParts, listUserSets, releaseSetParts } from '../services/lego-user';
+import { addUserParts, addUserSet, assignSetParts, listAllocations, listUserParts, listUserSets, releaseSetParts, removeUserParts } from '../services/lego-user';
 import type { LegoSetPart } from '../types';
 import { LegoImage } from './LegoImage';
 import { LegoPctBar } from './LegoPctBar';
@@ -96,6 +96,21 @@ export function LegoSetProgress({ setNum, parts }: { setNum: string; parts: Lego
     onError: (e) => setErr2(e instanceof Error ? e.message : String(e)),
   });
 
+  // Found a part you had not registered? Add it to the inventory from here; the progress recalculates at once.
+  const [added, setAdded] = useState<{ part: LegoSetPart; qty: number } | null>(null);
+  const refreshInventory = () => qc.invalidateQueries({ queryKey: ['user-lego-parts', tid] });
+  const addPart = useMutation({
+    mutationFn: (v: { part: LegoSetPart; qty: number }) => addUserParts(tid!, [{ part_num: v.part.part_num, color_id: v.part.color_id, quantity: v.qty }]),
+    onSuccess: (_n, v) => { setErr2(null); setMsg(null); setAdded(v); refreshInventory(); },
+    onError: (e) => setErr2(e instanceof Error ? e.message : String(e)),
+  });
+  const undoAdd = useMutation({
+    mutationFn: (v: { part: LegoSetPart; qty: number }) => removeUserParts(tid!, [{ part_num: v.part.part_num, color_id: v.part.color_id, quantity: v.qty }]),
+    onSuccess: () => { setErr2(null); setAdded(null); refreshInventory(); },
+    onError: (e) => setErr2(e instanceof Error ? e.message : String(e)),
+  });
+  const adding = addPart.isPending || undoAdd.isPending;
+
   const chip = (active: boolean) => `rounded-full px-3 py-1 text-xs border ${active ? 'border-red-400 bg-red-500/20' : 'border-white/10 bg-white/5'}`;
 
   if (tid == null) return <p className="text-sm text-white/60">{t.lego.needLogin}</p>;
@@ -105,7 +120,6 @@ export function LegoSetProgress({ setNum, parts }: { setNum: string; parts: Lego
     const needsImport = /no such table/i.test(err.message);
     return <div className="space-y-1"><p className="text-sm text-white/60">{needsImport ? t.lego.rankingNeedsImport : t.lego.loadError}</p><p className="text-[11px] text-white/30 break-words">{err.message}</p></div>;
   }
-  if (rawInventory.length === 0) return <p className="text-sm text-white/60">{t.lego.progressNeedsInventory}</p>;
   if (!progress) return null;
 
   return (
@@ -144,6 +158,12 @@ export function LegoSetProgress({ setNum, parts }: { setNum: string; parts: Lego
           <button key={f} aria-pressed={filter === f} className={chip(filter === f)} onClick={() => { setFilter(f); setLimit(60); }}>{label}</button>))}
       </div>
 
+      {added && (
+        <div role="status" className="flex items-center gap-2 rounded-xl bg-green-500/10 border border-green-500/20 px-3 py-2 text-xs text-green-200">
+          <span className="flex-1">{tr('lego.addedFromSet', { part: added.part.part_num, count: added.qty })}</span>
+          <button disabled={adding} onClick={() => undoAdd.mutate(added)} className="font-bold underline disabled:opacity-50">{t.lego.undo}</button>
+        </div>)}
+
       <LegoPartSort keys={SORT_KEYS} value={sort} onChange={(s) => { setSort(s); setLimit(60); }} />
 
       <ul className="space-y-2">
@@ -161,6 +181,13 @@ export function LegoSetProgress({ setNum, parts }: { setNum: string; parts: Lego
             <div className="text-right shrink-0">
               <p className="text-xs text-white/70">{r.covered}/{r.need}</p>
               <p className={`text-[11px] font-bold ${r.missing > 0 ? 'text-red-300' : 'text-green-300'}`}>{r.missing > 0 ? tr('lego.missing', { count: r.missing }) : t.lego.complete}</p>
+              <div className="flex justify-end gap-1 mt-1.5">
+                <button disabled={adding} onClick={() => addPart.mutate({ part: r.part, qty: 1 })} aria-label={tr('lego.haveOne', { part: r.part.part_num })}
+                  className="h-7 min-w-7 px-1.5 rounded-lg bg-white/10 flex items-center justify-center disabled:opacity-40"><Plus className="w-3.5 h-3.5" /></button>
+                {r.missing > 1 && (
+                  <button disabled={adding} onClick={() => addPart.mutate({ part: r.part, qty: r.missing })} aria-label={tr('lego.haveAll', { part: r.part.part_num, count: r.missing })}
+                    className="h-7 px-2 rounded-lg bg-red-600/80 text-[11px] font-bold disabled:opacity-40">{tr('lego.haveAllShort', { count: r.missing })}</button>)}
+              </div>
             </div>
           </li>))}
       </ul>
