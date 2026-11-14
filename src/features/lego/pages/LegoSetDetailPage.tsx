@@ -6,25 +6,16 @@ import { useI18n } from '@/i18n';
 import { RoutePaths } from '@/config';
 import { LegoImage } from '../components/LegoImage';
 import { LegoInstructions } from '../components/LegoInstructions';
+import { buildPartLines } from '../part-lines';
 import { LegoSetOwnership } from '../components/LegoSetOwnership';
 import { LegoSetProgress } from '../components/LegoSetProgress';
 import { fetchSet, fetchSetParts, fetchThemes } from '../services/lego-catalog';
 import type { LegoSetPart } from '../types';
 
-interface ColorGroup {
-  colorId: number;
-  name: string | null;
-  rgb: string | null;
-  isTrans: boolean;
-  parts: LegoSetPart[];
-  total: number;
-}
-
 export function LegoSetDetailPage() {
   const navigate = useNavigate();
   const { t, tr } = useI18n();
   const { setNum = '' } = useParams<{ setNum: string }>();
-  const [showSpares, setShowSpares] = useState(false);
   const [search, setSearch] = useSearchParams();
   const view = search.get('tab') === 'progress' ? 'progress' : 'list';
   const setView = (v: 'list' | 'progress') => setSearch(v === 'progress' ? { tab: 'progress' } : {}, { replace: true });
@@ -36,32 +27,9 @@ export function LegoSetDetailPage() {
   const set = setQuery.data;
   const themeName = set?.theme_id != null ? themesQuery.data?.find((x) => x.id === set.theme_id)?.name : null;
 
-  // Spares are never counted as part of the set.
-  const { groups, realTotal, realUnique, hasSpares } = useMemo(() => {
-    const rows = partsQuery.data ?? [];
-    const spares = rows.some((r) => r.is_spare);
-    const visible = rows.filter((r) => showSpares || !r.is_spare);
-    const byColor = new Map<number, ColorGroup>();
-    for (const r of visible) {
-      let g = byColor.get(r.color_id);
-      if (!g) {
-        g = {
-          colorId: r.color_id, name: r.color_name, rgb: r.color_rgb,
-          isTrans: r.color_is_trans, parts: [], total: 0,
-        };
-        byColor.set(r.color_id, g);
-      }
-      g.parts.push(r);
-      g.total += r.quantity;
-    }
-    const real = rows.filter((r) => !r.is_spare);
-    return {
-      groups: [...byColor.values()].sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '')),
-      realTotal: real.reduce((s, r) => s + r.quantity, 0),
-      realUnique: new Set(real.map((r) => `${r.part_num}|${r.color_id}`)).size,
-      hasSpares: spares,
-    };
-  }, [partsQuery.data, showSpares]);
+  // Every part shows what is in the box: the set's own quantity plus its spares, both visible. The set's
+  // completeness (progress, ownership) still ignores spares; only this list counts them.
+  const { groups, realTotal, realUnique, spareTotal } = useMemo(() => buildPartLines(partsQuery.data ?? []), [partsQuery.data]);
 
   const back = () => navigate(RoutePaths.LegoSets);
 
@@ -129,16 +97,14 @@ export function LegoSetDetailPage() {
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-sm font-bold">{t.lego.partsList}</h2>
             {partsQuery.data && partsQuery.data.length > 0 && (
-              <span className="text-[11px] text-white/40">{tr('lego.partsTotal', { count: realTotal, unique: realUnique })}</span>
+              <span className="text-[11px] text-white/40 text-right">
+                {tr('lego.partsTotal', { count: realTotal, unique: realUnique })}
+                {spareTotal > 0 && <><br />{tr('lego.partsInBox', { total: realTotal + spareTotal, spare: spareTotal })}</>}
+              </span>
             )}
           </div>
 
-          {hasSpares && (
-            <label className="flex items-center gap-2 text-xs text-white/60 mb-3">
-              <input type="checkbox" checked={showSpares} onChange={(e) => setShowSpares(e.target.checked)} />
-              {t.lego.showSpares}
-            </label>
-          )}
+          {spareTotal > 0 && <p className="text-[11px] text-white/45 mb-3">{t.lego.sparesHelp}</p>}
 
           {partsQuery.isLoading && <div className="flex justify-center py-10"><Loader2 className="w-5 h-5 animate-spin text-white/40" /></div>}
           {partsQuery.isError && (
@@ -159,16 +125,20 @@ export function LegoSetDetailPage() {
                   <span className="text-[11px] text-white/40">×{g.total}</span>
                 </div>
                 <ul className="grid grid-cols-3 gap-2">
-                  {g.parts.map((p) => (
-                    <li key={`${p.part_num}|${p.is_spare}`} className="bg-white/[0.04] border border-white/8 rounded-xl overflow-hidden">
+                  {g.parts.map(({ row: p, real, spare }) => (
+                    <li key={p.part_num} className="bg-white/[0.04] border border-white/8 rounded-xl overflow-hidden">
                       <LegoImage src={p.img_url} alt={p.part_name} className="w-full aspect-square" />
                       <div className="p-2">
                         <p className="text-[10px] text-red-300 font-semibold flex items-center justify-between">
                           <span className="truncate">{p.part_num}</span>
-                          <span className="text-white text-xs font-bold shrink-0">×{p.quantity}</span>
+                          <span className="text-white text-xs font-bold shrink-0">×{real + spare}</span>
                         </p>
                         <p className="text-[10px] text-white/50 leading-tight line-clamp-2">{p.part_name}</p>
-                        {p.is_spare && <p className="text-[9px] uppercase text-yellow-400/80 mt-0.5">{t.lego.spare}</p>}
+                        {spare > 0 && (
+                          <p className="text-[9px] uppercase text-yellow-400/80 mt-0.5">
+                            {real > 0 ? tr('lego.partSplit', { real, spare }) : tr('lego.partSpareOnly', { spare })}
+                          </p>
+                        )}
                       </div>
                     </li>
                   ))}
