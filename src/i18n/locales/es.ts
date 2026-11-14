@@ -493,6 +493,13 @@ export const es = {
     showAllColorsList: 'Ver todos los colores',
     hideAllColorsList: 'Ocultar la lista completa',
 
+    // instrucciones de montaje
+    instructions: 'Instrucciones de montaje',
+    instructionsRebrickable: 'Ver los manuales (PDF oficiales)',
+    instructionsLego: 'Buscar en LEGO.com',
+    instructionsNote: 'Los PDF los aloja LEGO. Los sets muy antiguos o retirados pueden no tenerlos.',
+    instructionsNone: 'Este set no lleva piezas, así que no tiene manual de montaje.',
+
     // fase 5: escáner de piezas
     scanner: 'Escáner de piezas',
     scannerDesc: 'Haz una foto a una pieza, confirma cuál es y añádela con su color y cantidad.',
