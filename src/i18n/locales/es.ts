@@ -500,6 +500,17 @@ export const es = {
     instructionsNote: 'Los PDF los aloja LEGO. Los sets muy antiguos o retirados pueden no tenerlos.',
     instructionsNone: 'Este set no lleva piezas, así que no tiene manual de montaje.',
 
+    manualsOne: '{count} manual',
+    manualsMany: '{count} manuales',
+    manualsLoading: 'Buscando los manuales…',
+    manualsPick: 'Elige el que corresponda a tu caja. Un set grande trae varios libros, y puede haber varias versiones del mismo.',
+    manualN: 'Manual {n}',
+    manualOpen: 'Abrir',
+    manualsHelp: 'Se abren en una pestaña nueva (son PDF de LEGO y pueden pesar decenas de MB). El código "BI" de cada manual está impreso en su contraportada.',
+    manualsNone: 'No hay manuales publicados para este set (los sets muy antiguos o retirados suelen no tenerlos).',
+    manualsNotConfigured: 'El listado de manuales dentro de la app aún no está activado. Mientras, usa estos enlaces:',
+    manualsError: 'No se pudo cargar el listado de manuales. Usa estos enlaces:',
+
     // fase 5: escáner de piezas
     scanner: 'Escáner de piezas',
     scannerDesc: 'Haz una foto a una pieza, confirma cuál es y añádela con su color y cantidad.',
