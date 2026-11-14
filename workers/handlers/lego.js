@@ -122,3 +122,78 @@ export async function handleLegoScan(request) {
 
   return jsonResponse({ candidates: candidates, scans_today: usedToday + 1, limit: limit });
 }
+
+// ── LEGO building instructions ────────────────────────────────
+// GET /lego-instructions?set=70317-1   Authorization: Bearer <app session token>
+// The list of official manuals of a set (title + PDF address) from Brickset's API (getInstructions2).
+// Needs the secret BRICKSET_API_KEY (free key from Brickset); without it the route answers 503
+// "not_configured" and the app falls back to plain links. The response shape could not be checked
+// against Brickset when this was written, so it is read defensively and the real shape is reported.
+import { sessionUserId } from '../lib/session.js';
+
+var BRICKSET_INSTRUCTIONS = 'https://brickset.com/api/v3.asmx/getInstructions2';
+var INSTRUCTIONS_TIMEOUT_MS = 15000;
+
+function cachedJson(data, status) {
+  var res = jsonResponse(data, status);
+  if (status === 200) res.headers.set('Cache-Control', 'private, max-age=86400'); // manuals rarely change
+  return res;
+}
+
+// "Book 2" before "Book 10": numbers inside the text compare as numbers
+function naturalCompare(a, b) {
+  return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+}
+
+export function normalizeManuals(body) {
+  var list = body && (body.instructions || body.results || body.data);
+  if (!Array.isArray(list)) return null;
+  var out = [];
+  var seen = {};
+  for (var i = 0; i < list.length; i++) {
+    var it = list[i] || {};
+    var url = it.URL || it.url || it.link || '';
+    if (typeof url !== 'string' || !/^https:\/\//i.test(url) || seen[url]) continue; // only https PDFs, once each
+    seen[url] = true;
+    var title = it.description || it.name || it.title || '';
+    out.push({ url: url, title: typeof title === 'string' ? title.trim() : '' });
+  }
+  out.sort(function(a, b) { return naturalCompare(a.title || a.url, b.title || b.url); });
+  return out;
+}
+
+export async function handleLegoInstructions(request) {
+  if (request.method !== 'GET') return jsonResponse({ error: 'method_not_allowed' }, 405);
+  if (!(await sessionUserId(request))) return jsonResponse({ error: 'unauthorized' }, 401);
+
+  var setNum = (new URL(request.url).searchParams.get('set') || '').trim();
+  if (!/^[A-Za-z0-9.\-]{1,30}$/.test(setNum)) return jsonResponse({ error: 'bad_set' }, 400);
+  var key = getEnv('BRICKSET_API_KEY');
+  if (!key) return jsonResponse({ error: 'not_configured' }, 503);
+
+  var res;
+  var ctrl = new AbortController();
+  var timer = setTimeout(function() { ctrl.abort(); }, INSTRUCTIONS_TIMEOUT_MS);
+  try {
+    res = await fetch(BRICKSET_INSTRUCTIONS + '?apiKey=' + encodeURIComponent(key) + '&setNumber=' + encodeURIComponent(setNum),
+      { headers: { 'accept': 'application/json' }, signal: ctrl.signal });
+  } catch (e) { return jsonResponse({ error: 'brickset_unreachable' }, 502); }
+  finally { clearTimeout(timer); }
+  if (!res.ok) return jsonResponse({ error: 'brickset_http', status: res.status }, 502);
+
+  var body;
+  try { body = await res.json(); } catch (e) { return jsonResponse({ error: 'unexpected_response', detail: 'not json' }, 502); }
+
+  // Brickset reports failures inside a 200 ({ status: "error", message: "..." })
+  if (body && typeof body.status === 'string' && body.status.toLowerCase() !== 'success') {
+    var msg = String(body.message || '');
+    if (/key/i.test(msg)) return jsonResponse({ error: 'brickset_key' }, 502);
+    if (/limit|exceed/i.test(msg)) return jsonResponse({ error: 'brickset_limit' }, 429);
+    return jsonResponse({ error: 'brickset_error', detail: msg.slice(0, 120) }, 502);
+  }
+  var manuals = normalizeManuals(body);
+  if (manuals === null) {
+    return jsonResponse({ error: 'unexpected_response', keys: body && typeof body === 'object' ? Object.keys(body).slice(0, 20) : typeof body }, 502);
+  }
+  return cachedJson({ set: setNum, manuals: manuals, count: manuals.length }, 200);
+}
