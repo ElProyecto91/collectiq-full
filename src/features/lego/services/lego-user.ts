@@ -32,7 +32,7 @@ export async function listUserParts(telegramId: number): Promise<UserLegoPart[]>
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await getSupabase()
       .from('user_lego_parts')
-      .select('part_num,color_id,quantity,updated_at')
+      .select('part_num,color_id,quantity,created_at,updated_at')
       .eq('telegram_user_id', telegramId)
       .order('part_num')
       .order('color_id')
@@ -47,7 +47,7 @@ export async function listUserParts(telegramId: number): Promise<UserLegoPart[]>
   for (const r of all) {
     const k = `${r.part_num}|${r.color_id}`;
     const cur = sum.get(k);
-    if (cur) { cur.quantity += r.quantity; if (r.updated_at > cur.updated_at) cur.updated_at = r.updated_at; }
+    if (cur) { cur.quantity += r.quantity; if (r.updated_at > cur.updated_at) cur.updated_at = r.updated_at; if (r.created_at < cur.created_at) cur.created_at = r.created_at; }
     else sum.set(k, { ...r });
   }
   return [...sum.values()];

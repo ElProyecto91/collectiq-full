@@ -12,8 +12,12 @@ import { addUserSet, assignSetParts, listAllocations, listUserParts, listUserSet
 import type { LegoSetPart } from '../types';
 import { LegoImage } from './LegoImage';
 import { LegoPctBar } from './LegoPctBar';
+import { LegoPartSort } from './LegoPartSort';
+import { sortParts, type PartSortKey } from '../part-sort';
+import { usePartSort } from '../use-part-sort';
 
 type Filter = 'all' | 'have' | 'missing';
+const SORT_KEYS: readonly PartSortKey[] = ['missing', 'color', 'number', 'quantity', 'name'];
 
 /** What you have and what you lack of one set, from your inventory, with images. */
 export function LegoSetProgress({ setNum, parts }: { setNum: string; parts: LegoSetPart[] }) {
@@ -21,6 +25,7 @@ export function LegoSetProgress({ setNum, parts }: { setNum: string; parts: Lego
   const qc = useQueryClient();
   const tid = useUserStore((s) => s.telegramUser?.id);
   const [filter, setFilter] = useState<Filter>('missing');
+  const [sort, setSort] = usePartSort('lego-sort-progress', SORT_KEYS, 'missing');
 
   const invQuery = useQuery({ queryKey: ['user-lego-parts', tid], queryFn: () => listUserParts(tid!), enabled: tid != null });
   const allocsQuery = useQuery({ queryKey: ['user-lego-allocs', tid], queryFn: () => listAllocations(tid!), enabled: tid != null });
@@ -62,8 +67,10 @@ export function LegoSetProgress({ setNum, parts }: { setNum: string; parts: Lego
   const rows = useMemo(() => {
     if (!progress) return [];
     const list = progress.rows.filter((r) => filter === 'all' || (filter === 'missing' ? r.missing > 0 : r.missing === 0));
-    return [...list].sort((a, b) => b.missing - a.missing || a.part.color_name.localeCompare(b.part.color_name) || a.part.part_num.localeCompare(b.part.part_num));
-  }, [progress, filter]);
+    return sortParts(list, (r) => ({
+      part_num: r.part.part_num, color_name: r.part.color_name, part_name: r.part.part_name, quantity: r.need, missing: r.missing,
+    }), sort);
+  }, [progress, filter, sort]);
   const [limit, setLimit] = useState(60);
 
   const labels = useMemo(() => copyLabels(setsQuery.data ?? []), [setsQuery.data]);
@@ -136,6 +143,8 @@ export function LegoSetProgress({ setNum, parts }: { setNum: string; parts: Lego
         {([['missing', t.lego.progressMissing], ['have', t.lego.progressHave], ['all', t.lego.progressAll]] as const).map(([f, label]) => (
           <button key={f} aria-pressed={filter === f} className={chip(filter === f)} onClick={() => { setFilter(f); setLimit(60); }}>{label}</button>))}
       </div>
+
+      <LegoPartSort keys={SORT_KEYS} value={sort} onChange={(s) => { setSort(s); setLimit(60); }} />
 
       <ul className="space-y-2">
         {rows.slice(0, limit).map((r) => (

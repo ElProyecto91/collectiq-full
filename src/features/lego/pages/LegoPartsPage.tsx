@@ -8,6 +8,9 @@ import { useUserStore } from '@/store';
 import { LegoAddPart } from '../components/LegoAddPart';
 import { LegoImage } from '../components/LegoImage';
 import { LegoPartSets } from '../components/LegoPartSets';
+import { LegoPartSort } from '../components/LegoPartSort';
+import { sortParts, type PartSortKey } from '../part-sort';
+import { usePartSort } from '../use-part-sort';
 import { fetchPartDetailsCached } from '../services/lego-catalog';
 import { copyLabels } from '../copy-label';
 import { availability } from '../services/lego-allocation';
@@ -15,6 +18,7 @@ import { listAllocations, listUserParts, listUserSets, setUserPartQuantity } fro
 import type { UserLegoPart } from '../types';
 
 const SHOWN = 60;
+const SORT_KEYS: readonly PartSortKey[] = ['number', 'color', 'quantity', 'name', 'added'];
 
 const Swatch = ({ rgb, trans }: { rgb: string | null; trans: boolean }) => (
   <span className="w-4 h-4 rounded-full border border-white/20 shrink-0 inline-block"
@@ -47,17 +51,21 @@ export function LegoPartsPage() {
   const details = detailsQuery.data;
 
   const [filter, setFilter] = useState('');
+  const [sort, setSort] = usePartSort('lego-sort-inventory', SORT_KEYS, 'number');
   const [openSets, setOpenSets] = useState<string | null>(null);
   const [limit, setLimit] = useState(SHOWN);
-  useEffect(() => { setLimit(SHOWN); }, [filter]);
+  useEffect(() => { setLimit(SHOWN); }, [filter, sort]);
 
   const rows = useMemo(() => {
     const f = filter.trim().toLowerCase();
-    return parts
+    const shown = parts
       .map((p) => ({ p, d: details?.get(`${p.part_num}|${p.color_id}`) }))
       .filter(({ p, d }) => !f || p.part_num.toLowerCase().includes(f)
         || (d?.part_name ?? '').toLowerCase().includes(f) || (d?.color_name ?? '').toLowerCase().includes(f));
-  }, [parts, details, filter]);
+    return sortParts(shown, ({ p, d }) => ({
+      part_num: p.part_num, color_name: d?.color_name, part_name: d?.part_name, quantity: p.quantity, added: p.created_at,
+    }), sort);
+  }, [parts, details, filter, sort]);
 
   const totalPieces = parts.reduce((s, p) => s + p.quantity, 0);
   const freePieces = [...av.values()].reduce((s, a) => s + a.free, 0);
@@ -122,8 +130,11 @@ export function LegoPartsPage() {
             </div>)}
           {partsQuery.data && parts.length === 0 && <p className="text-sm text-white/50">{t.lego.emptyInventory}</p>}
           {parts.length > 0 && (
-            <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={t.lego.filterInventory}
-              className={`${field} w-full`} aria-label={t.lego.filterInventory} />)}
+            <div className="space-y-2">
+              <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={t.lego.filterInventory}
+                className={`${field} w-full`} aria-label={t.lego.filterInventory} />
+              <LegoPartSort keys={SORT_KEYS} value={sort} onChange={setSort} />
+            </div>)}
 
           <ul className="space-y-2">
             {rows.slice(0, limit).map(({ p, d }) => (
