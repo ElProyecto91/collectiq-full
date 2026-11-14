@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, BookOpen, ExternalLink, Loader2 } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { RoutePaths } from '@/config';
 import { LegoImage } from '../components/LegoImage';
+import { instructionLinks } from '../instructions';
 import { LegoSetOwnership } from '../components/LegoSetOwnership';
 import { LegoSetProgress } from '../components/LegoSetProgress';
 import { fetchSet, fetchSetParts, fetchThemes } from '../services/lego-catalog';
@@ -105,6 +106,25 @@ export function LegoSetDetailPage() {
             ))}
           </dl>
         </div>
+
+        {/* building instructions: books, gear and other sets without parts have none */}
+        <section className="bg-white/[0.04] border border-white/8 rounded-2xl p-4 space-y-2">
+          <h2 className="text-sm font-bold flex items-center gap-2"><BookOpen className="w-4 h-4 text-red-300" />{t.lego.instructions}</h2>
+          {set.num_parts === 0 ? (
+            <p className="text-xs text-white/50">{t.lego.instructionsNone}</p>
+          ) : (
+            <>
+              <div className="flex flex-col gap-2">
+                {instructionLinks(set.set_num).map((l) => (
+                  <a key={l.key} href={l.url} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center justify-between gap-2 rounded-xl bg-white/10 px-3 py-2.5 text-sm font-semibold active:scale-[0.99] transition-transform">
+                    <span>{l.key === 'rebrickable' ? t.lego.instructionsRebrickable : t.lego.instructionsLego}</span>
+                    <ExternalLink className="w-4 h-4 text-white/50 shrink-0" />
+                  </a>))}
+              </div>
+              <p className="text-[11px] text-white/40">{t.lego.instructionsNote}</p>
+            </>)}
+        </section>
 
         <LegoSetOwnership set={set} parts={partsQuery.data} />
 
