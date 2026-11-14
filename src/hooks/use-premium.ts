@@ -52,24 +52,6 @@ export function usePremium() {
     }
   };
 
-  const upgradeToGO = useCallback(async (stars: number) => {
-    if (!telegramUser?.id) return false;
-    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-    const { error } = await supabase.from('user_premium').upsert({
-      telegram_user_id: telegramUser.id,
-      plan: 'go',
-      expires_at: expiresAt,
-      stars_paid: (premium.starsPaid ?? 0) + stars,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'telegram_user_id' });
-
-    if (!error) {
-      setPremium({ plan: 'go', isGO: true, expiresAt, starsPaid: (premium.starsPaid ?? 0) + stars });
-      return true;
-    }
-    return false;
-  }, [telegramUser?.id, premium.starsPaid]);
-
   const getScanCount = useCallback(async (): Promise<number> => {
     if (!telegramUser?.id) return 0;
     const today = new Date().toISOString().split('T')[0];
@@ -97,5 +79,5 @@ export function usePremium() {
     });
   }, [telegramUser?.id]);
 
-  return { premium, isLoading, upgradeToGO, canScan, registerScan, getScanCount };
+  return { premium, isLoading, canScan, registerScan, getScanCount };
 }

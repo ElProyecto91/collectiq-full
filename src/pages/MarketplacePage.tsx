@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { authHeaders } from '@/lib/session-token';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   ArrowLeft, Search, Plus, X, Loader2,
@@ -106,11 +107,7 @@ export function MarketplacePage() {
     fetch(`${API}/marketplace-list?user_id=${telegramUser.id}&limit=1`)
       .catch(() => {});
     // Consultar premium via Worker (evita exponer claves en frontend)
-    fetch(`${API}/admin-verify`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ telegramUserId: telegramUser.id, checkPremium: true }),
-    })
+    fetch(`${API}/admin-verify`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ checkPremium: true }) })
       .then(r => r.json())
       .then(data => { if (data.isPremium) setIsPremium(true); })
       .catch(() => {});

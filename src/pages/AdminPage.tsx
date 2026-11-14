@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useUserStore } from '@/store';
 import { supabase } from '@/lib/supabase';
 import { userDirectoryTable } from '@/lib/user-directory';
+import { authHeaders } from '@/lib/session-token';
 import {
   Users, Zap, BarChart2, Gift, Search, ArrowLeft,
   TrendingUp, ShoppingBag, AlertTriangle, Package,
@@ -88,11 +89,7 @@ export function AdminPage() {
   useEffect(() => {
     if (!telegramUser?.id) return;
     if (telegramUser.id !== ADMIN_ID) { navigate('/'); return; }
-    fetch(`${API}/admin-verify`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ telegramUserId: telegramUser.id }),
-    })
+    fetch(`${API}/admin-verify`, { method: 'POST', headers: authHeaders(), body: '{}' })
       .then(r => r.json())
       .then(data => {
         if (!data.ok) navigate('/');
@@ -261,10 +258,10 @@ export function AdminPage() {
     if (!telegramUser?.id) return;
     const res = await fetch(`${API}/admin-give-go`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ telegramUserId: telegramUser.id, targetUserId: userId, months, days }),
+      headers: authHeaders(),
+      body: JSON.stringify({ targetUserId: userId, months, days }),
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (data.ok) {
       setStatusMsg('✅ GO activado para ' + userId + ' hasta ' + new Date(data.expiresAt).toLocaleDateString('es-ES'));
       setUsers(prev => prev.map(u => u.telegram_user_id === userId ? { ...u, isPremium: true, premiumExpires: data.expiresAt } : u));
@@ -283,7 +280,9 @@ export function AdminPage() {
   };
 
   const revokeGO = async (userId: number) => {
-    await supabase.from('user_premium').update({ plan: 'free', expires_at: null }).eq('telegram_user_id', userId);
+    const res = await fetch(`${API}/admin-give-go`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ targetUserId: userId, revoke: true }) });
+    const data = await res.json().catch(() => ({}));
+    if (!data.ok) { setStatusMsg('❌ No se pudo revocar GO'); setTimeout(() => setStatusMsg(''), 3000); return; }
     setUsers(prev => prev.map(u => u.telegram_user_id === userId ? { ...u, isPremium: false, premiumExpires: null } : u));
     setStatusMsg('✅ GO revocado para ' + userId);
     setTimeout(() => setStatusMsg(''), 3000);
