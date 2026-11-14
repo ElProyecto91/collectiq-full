@@ -1,4 +1,5 @@
 import { getSupabase } from '@/lib/supabase';
+import { otherMemberIds } from '@/lib/household-scope';
 import type { LegoPartItem, UserLegoAllocation, UserLegoPart, UserLegoSet, UserLegoSetInput } from '../types';
 
 /**
@@ -41,7 +42,15 @@ export async function listUserParts(telegramId: number): Promise<UserLegoPart[]>
     all.push(...rows);
     if (rows.length < PAGE) break;
   }
-  return all;
+  // one row per member and part: the household's stock is their sum
+  const sum = new Map<string, UserLegoPart>();
+  for (const r of all) {
+    const k = `${r.part_num}|${r.color_id}`;
+    const cur = sum.get(k);
+    if (cur) { cur.quantity += r.quantity; if (r.updated_at > cur.updated_at) cur.updated_at = r.updated_at; }
+    else sum.set(k, { ...r });
+  }
+  return [...sum.values()];
 }
 
 async function callInChunks(fn: 'add_lego_parts' | 'remove_lego_parts', telegramId: number, items: LegoPartItem[]): Promise<number> {
@@ -66,9 +75,17 @@ export const addUserParts = (telegramId: number, items: LegoPartItem[]) =>
 export const removeUserParts = (telegramId: number, items: LegoPartItem[]) =>
   callInChunks('remove_lego_parts', telegramId, items);
 
-/** Sets an exact quantity (0 removes the row). */
-export async function setUserPartQuantity(telegramId: number, part: string, color: number, quantity: number): Promise<void> {
+/** Sets an exact quantity (0 removes the row). Shared stock: my row takes what the others don't already hold. */
+export async function setUserPartQuantity(telegramId: number, part: string, color: number, wanted: number): Promise<void> {
   const db = getSupabase();
+  let quantity = wanted;
+  const others = otherMemberIds();
+  if (others.length) {
+    const { data, error: e } = await db.from('user_lego_parts').select('quantity')
+      .in('telegram_user_id', others).eq('part_num', part).eq('color_id', color);
+    fail(e);
+    quantity = wanted - ((data ?? []) as { quantity: number }[]).reduce((s, r) => s + r.quantity, 0);
+  }
   if (quantity <= 0) {
     const { error } = await db.from('user_lego_parts').delete()
       .eq('telegram_user_id', telegramId).eq('part_num', part).eq('color_id', color);

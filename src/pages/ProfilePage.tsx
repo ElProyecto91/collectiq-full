@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, Star, BarChart2, Package, Heart, ChevronRight, Zap, Settings, Eye, EyeOff } from 'lucide-react';
+import { LogOut, Star, BarChart2, Package, Heart, ChevronRight, Zap, Settings, Eye, EyeOff, Users } from 'lucide-react';
 import { useUserStore } from '@/store';
 import { useDisplayName } from '@/hooks';
 import { getSupabase } from '@/lib/supabase';
@@ -268,6 +268,7 @@ export function ProfilePage() {
             { icon: <Heart size={18} className="text-pink-400" />, label: 'Wishlist', route: RoutePaths.Wishlist },
             { icon: <Star size={18} className="text-yellow-400" />, label: 'Logros', route: RoutePaths.Achievements },
             { icon: <Package size={18} className="text-purple-400" />, label: 'Decks', route: RoutePaths.Decks },
+            { icon: <Users size={18} className="text-green-400" />, label: 'Compartir', route: RoutePaths.Share },
           ].map(({ icon, label, route }) => (
             <button key={label} onClick={() => navigate(route)}
               className="bg-[#111118] border border-white/8 rounded-2xl py-3 flex flex-col items-center gap-2 active:scale-95 transition-transform">

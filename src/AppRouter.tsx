@@ -9,6 +9,7 @@ import {
 } from '@/pages';
 import { LoginPage } from '@/pages/LoginPage';
 import { PublicProfilePage } from '@/pages/PublicProfilePage';
+import { HouseholdPage } from '@/features/household/HouseholdPage';
 import { OnboardingPage } from '@/pages/OnboardingPage';
 import { CreateDeckPage } from '@/pages/CreateDeckPage';
 import { MarketplacePage } from '@/pages/MarketplacePage';
@@ -58,6 +59,7 @@ const router = createBrowserRouter([
       { path: RoutePaths.CardDetails,   element: <CardDetailsPage /> },
       { path: RoutePaths.Wishlist,      element: <WishlistPage /> },
       { path: RoutePaths.Profile,       element: <ProfilePage /> },
+      { path: RoutePaths.Share,         element: <HouseholdPage /> },
       { path: RoutePaths.Community,     element: <CommunityPage /> },
       { path: RoutePaths.Marketplace,   element: <MarketplacePage /> },
       { path: RoutePaths.Decks,         element: <DecksPage /> },

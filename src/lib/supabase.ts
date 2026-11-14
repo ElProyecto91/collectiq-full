@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { makeScopedFetch } from '@/lib/household-scope';
 
 import { AppConfig } from '@/config';
 
@@ -29,6 +30,8 @@ export function getSupabase(): SupabaseClient {
       autoRefreshToken: true,
       detectSessionInUrl: true,
     },
+    // household widening + DB token (see household-scope.ts)
+    global: { fetch: makeScopedFetch(url) },
   });
 
   return client;

@@ -5,6 +5,7 @@ import { mapCollectionItem } from '@/utils/mappers';
 import type { CollectionItem } from '@/types';
 import { Heart, ShoppingBag, MessageCircle, Tag } from 'lucide-react';
 import { valueEur } from '@/lib/card-value';
+import { userDirectoryTable } from '@/lib/user-directory';
 
 interface PublicUser {
   username: string | null;
@@ -64,6 +65,7 @@ export function PublicProfilePage() {
     setIsLoading(true);
     try {
       const userId = parseInt(telegramId!);
+      const dirTable = await userDirectoryTable();
 
       const [
         { data: sessionData },
@@ -74,7 +76,7 @@ export function PublicProfilePage() {
         { data: wishlistData },
         { data: marketData },
       ] = await Promise.all([
-        supabase.from('user_sessions').select('user_data')
+        supabase.from(dirTable).select('user_data')
           .eq('telegram_user_id', userId)
           .order('created_at', { ascending: false })
           .limit(1).maybeSingle(),

@@ -5,6 +5,7 @@ export const RoutePaths = {
   CardDetails: '/explorer/card/:cardId',
   Wishlist: '/wishlist',
   Profile: '/profile',
+  Share: '/share',
   Scanner: '/scanner',
   Community: '/community',
   Marketplace: '/market',

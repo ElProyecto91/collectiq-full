@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { userDirectoryTable } from '@/lib/user-directory';
 import { supabase } from '@/lib/supabase';
 import { useUserStore } from '@/store';
 
@@ -75,7 +76,7 @@ export function useFollows() {
 export async function searchUsers(query: string): Promise<PublicUser[]> {
   if (!query.trim()) return [];
   const { data } = await supabase
-    .from('user_sessions')
+    .from(await userDirectoryTable())
     .select('telegram_user_id, username, first_name')
     .or('username.ilike.%' + query + '%,first_name.ilike.%' + query + '%')
     .limit(10);
