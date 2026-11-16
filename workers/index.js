@@ -14,6 +14,7 @@ import { handleLegoScan, handleLegoInstructions } from './handlers/lego.js';
 import { handleHousehold } from './handlers/household.js';
 import { handleAuthToken } from './handlers/db-token.js';
 import { handleLegoPrices, handleLegoPricesCheck } from './handlers/lego-prices.js';
+import { handleBrickOwlProbe } from './handlers/brickowl.js';
 import { handleMarketplaceList, handleMarketplaceCreate, handleMarketplaceUpdate, handleMarketplaceDelete, handleMarketplaceOffer, handleMarketplaceStats } from './handlers/marketplace.js';
 
 async function handleRequest(request) {
@@ -52,6 +53,7 @@ async function handleRequest(request) {
   if (route === 'auth-token')         return handleAuthToken(request);
   if (route === 'lego-prices')        return handleLegoPrices(request);
   if (route === 'lego-prices-check')  return handleLegoPricesCheck(request);
+  if (route === 'brickowl-probe')     return handleBrickOwlProbe(request);
   if (route === 'marketplace-list')   return handleMarketplaceList(request);
   if (route === 'marketplace-create') return handleMarketplaceCreate(request);
   if (route === 'marketplace-update') return handleMarketplaceUpdate(request);
@@ -78,7 +80,7 @@ async function handleRequest(request) {
       'onepiece-cards','onepiece-sets','onepiece-price','onepiece-scanner',
       'magic-cards','magic-sets','yugioh-cards','yugioh-sets',
       'lorcana-cards','lorcana-sets',
-      'lego-scan','lego-instructions','household','auth-token','lego-prices','lego-prices-check',
+      'lego-scan','lego-instructions','household','auth-token','lego-prices','lego-prices-check','brickowl-probe',
       'marketplace-list','marketplace-create','marketplace-update',
       'marketplace-delete','marketplace-offer','marketplace-stats',
       'cron-prices',

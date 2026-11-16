@@ -98,6 +98,27 @@ export function AdminPage() {
   const [giftDuration, setGiftDuration] = useState<string>('1m');
   const [blCheck, setBlCheck] = useState<{ ok: boolean; text: string } | null>(null);
   const [blChecking, setBlChecking] = useState(false);
+  const [boEndpoint, setBoEndpoint] = useState('catalog/id_lookup');
+  const [boParams, setBoParams] = useState('id=3001&type=Part&id_type=design_id');
+  const [boOut, setBoOut] = useState<string | null>(null);
+  const [boBusy, setBoBusy] = useState(false);
+
+  // raw answer of a read-only Brick Owl catalog call (the Worker adds the key), to learn the real response format
+  const probeBrickOwl = async () => {
+    setBoBusy(true); setBoOut(null);
+    try {
+      const extra = new URLSearchParams(boParams.trim());
+      const q = new URLSearchParams({ endpoint: boEndpoint });
+      extra.forEach((v, k) => q.set(k, v));
+      const res = await fetch(`${API}/brickowl-probe?${q.toString()}`, { headers: authHeaders() });
+      const d = await res.json().catch(() => ({}));
+      if (res.status === 401) setBoOut('Tu sesión no es de administrador o ha caducado.');
+      else if (d.error === 'not_configured') setBoOut('Falta el secret BRICKOWL_API_KEY en el Worker.');
+      else if (d.error) setBoOut(`Error: ${d.error}`);
+      else setBoOut(`HTTP ${d.status} · ${d.ms} ms${d.truncated ? ' · recortado' : ''}\n\n${d.body}`);
+    } catch { setBoOut('No se pudo contactar con el Worker.'); }
+    setBoBusy(false);
+  };
 
   // proves the BrickLink credentials stored in the Worker work (prices of LEGO parts depend on them)
   const checkBrickLink = async () => {
@@ -434,6 +455,22 @@ export function AdminPage() {
                 {blChecking ? 'Probando…' : 'Probar conexión'}
               </button>
               {blCheck && <p role="status" className={`text-xs break-words ${blCheck.ok ? 'text-green-300' : 'text-red-300'}`}>{blCheck.text}</p>}
+            </div>
+
+            <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
+              <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Sonda Brick Owl (solo lectura)</p>
+              <select value={boEndpoint} onChange={e => setBoEndpoint(e.target.value)} aria-label="Endpoint"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white">
+                {['catalog/id_lookup', 'catalog/price_history', 'catalog/availability', 'catalog/lookup'].map(x => <option key={x} value={x}>{x}</option>)}
+              </select>
+              <input value={boParams} onChange={e => setBoParams(e.target.value)} aria-label="Parámetros" autoCapitalize="none" autoCorrect="off"
+                placeholder="id=3001&type=Part&id_type=design_id"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white font-mono placeholder-gray-600 focus:outline-none" />
+              <button onClick={probeBrickOwl} disabled={boBusy}
+                className="w-full py-2.5 rounded-xl bg-white/10 text-sm font-semibold active:scale-95 disabled:opacity-50">
+                {boBusy ? 'Consultando…' : 'Consultar'}
+              </button>
+              {boOut && <pre role="status" className="text-[10px] leading-snug text-green-200/90 bg-black/40 rounded-xl p-3 max-h-80 overflow-auto whitespace-pre-wrap break-all">{boOut}</pre>}
             </div>
 
             <FunkoImporter adminId={telegramUser?.id ?? 0} />
