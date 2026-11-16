@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Check, Copy, Crown, Loader2, LogOut, Trash2, UserMinus, UserPlus, Users } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { useUserStore } from '@/store';
-import { setHouseholdScope } from '@/lib/household-scope';
+import { reloadForNewScope, setHouseholdScope } from '@/lib/household-scope';
 import {
   HouseholdError, createInvite, fetchHousehold, joinHousehold, leaveHousehold, removeMember, revokeInvite,
   type HouseholdState,
@@ -33,7 +33,7 @@ export function HouseholdPage() {
     setError(null);
     qc.setQueryData(KEY, s);
     // the group changed: remember who shares the collection and reload so every page reads the new scope
-    if (me && setHouseholdScope(me, (s.members ?? []).map((m) => m.telegram_user_id))) window.location.reload();
+    if (me && setHouseholdScope(me, (s.members ?? []).map((m) => m.telegram_user_id))) reloadForNewScope();
   };
 
   const invite = useMutation({ mutationFn: createInvite, onSuccess: () => { setError(null); qc.invalidateQueries({ queryKey: KEY }); }, onError: fail });

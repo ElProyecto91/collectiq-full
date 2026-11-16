@@ -25,6 +25,7 @@ const STORE_KEY = 'collectiq-household';
 interface Scope { me: number; ids: number[] }
 
 function readScope(): Scope | null {
+  if (mem) return mem;
   try {
     const raw = localStorage.getItem(STORE_KEY);
     if (!raw) return null;
@@ -33,18 +34,47 @@ function readScope(): Scope | null {
   } catch { return null; }
 }
 
-/** Remember who shares my collection (called after login and after any change to the group). */
+/** What this page load already knows, so the scope works even when storage is unavailable. */
+let mem: Scope | null = null;
+
+/**
+ * Remember who shares my collection (called after login and after any change to the group).
+ * Returns true only when the members CHANGED and the new value was really saved: that is the one case
+ * where reloading helps. If it could not be saved, a reload would find the old value again and loop.
+ */
 export function setHouseholdScope(me: number, memberIds: number[]): boolean {
   const ids = Array.from(new Set([me, ...memberIds])).sort((a, b) => a - b);
   const prev = readScope();
   const before = prev && prev.me === me ? prev.ids : [me]; // nothing stored == just me
-  try { localStorage.setItem(STORE_KEY, JSON.stringify({ me, ids } satisfies Scope)); } catch { /* private mode: no widening */ }
-  return before.join(',') !== ids.join(',');
+  const next: Scope = { me, ids };
+  mem = next;
+  let saved = false;
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(next));
+    saved = localStorage.getItem(STORE_KEY) === JSON.stringify(next);
+  } catch { /* private mode: works for this page load only */ }
+  return saved && before.join(',') !== ids.join(',');
 }
 
+/** Only on an explicit sign-out. NEVER at startup: before the session loads there is no user yet. */
 export function clearHouseholdScope(): void {
+  mem = null;
   try { localStorage.removeItem(STORE_KEY); } catch { /* ignore */ }
   tokenCache = null;
+}
+
+/**
+ * Reload so every page re-reads with the new scope, at most once a minute: whatever else goes wrong, the app
+ * can never end up reloading in a loop. Without sessionStorage we cannot guard, so we do not reload.
+ */
+export function reloadForNewScope(): void {
+  const KEY = 'collectiq-household-reload';
+  try {
+    const last = Number(sessionStorage.getItem(KEY) ?? 0);
+    if (Date.now() - last < 60_000) return;
+    sessionStorage.setItem(KEY, String(Date.now()));
+  } catch { return; }
+  window.location.reload();
 }
 
 /** Pure: rewrite one PostgREST URL for the household. Returns the same string when nothing applies. */

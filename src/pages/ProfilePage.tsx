@@ -6,6 +6,7 @@ import { useDisplayName } from '@/hooks';
 import { getSupabase } from '@/lib/supabase';
 import { RoutePaths } from '@/config';
 import { useCurrency } from '@/hooks/use-currency';
+import { clearHouseholdScope } from '@/lib/household-scope';
 
 interface TCGStats {
   key: string;
@@ -279,7 +280,7 @@ export function ProfilePage() {
         </div>
 
         {/* Cerrar sesión */}
-        <button onClick={() => { setTelegramUser(null); navigate('/login'); }}
+        <button onClick={() => { clearHouseholdScope(); setTelegramUser(null); navigate('/login'); }}
           className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-white/5 border border-white/8 text-gray-500 text-sm active:scale-95 transition-transform">
           <LogOut size={15} /> Cerrar sesión
         </button>
