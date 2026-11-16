@@ -145,6 +145,14 @@ export function partsByBricklinkStmt(ids: string[]): Stmt {
   };
 }
 
+/** Rebrickable part -> BrickLink number (lego_part_ext), to ask BrickLink for the right item. */
+export function blNumbersStmt(partNums: string[]): Stmt {
+  return {
+    sql: `SELECT part_num, ext_id FROM lego_part_ext WHERE ext_system = 'BrickLink' AND part_num IN (${partNums.map(() => '?').join(', ')}) ORDER BY part_num, ext_id`,
+    args: partNums,
+  };
+}
+
 /** One image per part, for parts that no set inventory has an image of (lego_part_images). */
 export function partImagesStmt(nums: string[]): Stmt {
   return {

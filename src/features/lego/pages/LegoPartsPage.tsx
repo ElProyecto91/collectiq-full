@@ -12,14 +12,18 @@ import { LegoPartSets } from '../components/LegoPartSets';
 import { LegoPartSort } from '../components/LegoPartSort';
 import { sortParts, type PartSortKey } from '../part-sort';
 import { usePartSort } from '../use-part-sort';
-import { fetchPartDetailsCached } from '../services/lego-catalog';
+import { fetchBlNumbers, fetchPartDetailsCached } from '../services/lego-catalog';
+import { LegoValueCard } from '../components/LegoValueCard';
+import { priceKey, type PriceRequest } from '../services/lego-prices';
+import { totals, unitPrices, formatEuro } from '../value';
+import { useLegoPrices } from '../use-lego-prices';
 import { copyLabels } from '../copy-label';
 import { availability } from '../services/lego-allocation';
 import { listAllocations, listUserParts, listUserSets, setUserPartQuantity } from '../services/lego-user';
 import type { UserLegoPart } from '../types';
 
 const SHOWN = 60;
-const SORT_KEYS: readonly PartSortKey[] = ['number', 'color', 'quantity', 'name', 'added'];
+const SORT_KEYS: readonly PartSortKey[] = ['number', 'color', 'quantity', 'name', 'value', 'added'];
 
 const Swatch = ({ rgb, trans }: { rgb: string | null; trans: boolean }) => (
   <span className="w-4 h-4 rounded-full border border-white/20 shrink-0 inline-block"
@@ -28,7 +32,7 @@ const Swatch = ({ rgb, trans }: { rgb: string | null; trans: boolean }) => (
 
 export function LegoPartsPage() {
   const navigate = useNavigate();
-  const { t, tr } = useI18n();
+  const { t, tr, locale } = useI18n();
   const cn = useColorName();
   const qc = useQueryClient();
   const tid = useUserStore((s) => s.telegramUser?.id);
@@ -52,6 +56,25 @@ export function LegoPartsPage() {
   });
   const details = detailsQuery.data;
 
+  // value in euros (BrickLink): BrickLink numbers for parts whose number differs, then the prices themselves
+  const blQuery = useQuery({
+    queryKey: ['lego-bl-numbers', [...new Set(parts.map((p) => p.part_num))].sort().join(',')],
+    queryFn: () => fetchBlNumbers(parts.map((p) => p.part_num)),
+    enabled: parts.length > 0, staleTime: Infinity,
+  });
+  const requests = useMemo<PriceRequest[]>(() => {
+    if (!details || !blQuery.isFetched) return [];
+    return parts.flatMap((p) => {
+      const d = details.get(`${p.part_num}|${p.color_id}`);
+      return d ? [{ kind: 'part' as const, num: p.part_num, color_id: p.color_id, color_name: d.color_name, color_rgb: d.color_rgb, bl_num: blQuery.data?.get(p.part_num) ?? null }] : [];
+    });
+  }, [parts, details, blQuery.isFetched, blQuery.data]);
+  const pricing = useLegoPrices(requests, true);
+  const valueTotals = useMemo(
+    () => totals(parts.map((p) => ({ qty: p.quantity, price: pricing.prices.get(priceKey('part', p.part_num, p.color_id)) }))),
+    [parts, pricing.prices]);
+  const hasStock = useMemo(() => [...pricing.prices.values()].some((x) => x.used_basis === 'stock' || x.new_basis === 'stock'), [pricing.prices]);
+
   const [filter, setFilter] = useState('');
   const [sort, setSort] = usePartSort('lego-sort-inventory', SORT_KEYS, 'number');
   const [openSets, setOpenSets] = useState<string | null>(null);
@@ -67,8 +90,9 @@ export function LegoPartsPage() {
         || cn(d?.color_name).toLowerCase().includes(f));
     return sortParts(shown, ({ p, d }) => ({
       part_num: p.part_num, color_name: cn(d?.color_name), part_name: d?.part_name, quantity: p.quantity, added: p.created_at,
+      value: (() => { const u = unitPrices(pricing.prices.get(priceKey('part', p.part_num, p.color_id))).usedP; return u == null ? null : u * p.quantity; })(),
     }), sort);
-  }, [parts, details, filter, sort, cn]);
+  }, [parts, details, filter, sort, cn, pricing.prices]);
 
   const totalPieces = parts.reduce((s, p) => s + p.quantity, 0);
   const freePieces = [...av.values()].reduce((s, a) => s + a.free, 0);
@@ -120,6 +144,9 @@ export function LegoPartsPage() {
           <LegoAddPart tid={tid} />
           {error && <p className="text-xs text-red-300" role="alert">{t.lego.saveError} {tr('lego.saveErrorDetail', { message: error })}</p>}
         </section>
+
+        {parts.length > 0 && (
+          <LegoValueCard title={t.lego.valuePartsTitle} tot={valueTotals} progress={pricing.progress} error={pricing.error} onRetry={pricing.retry} hasStockBasis={hasStock} />)}
 
         {/* inventory */}
         <section className="space-y-3">
@@ -174,6 +201,18 @@ export function LegoPartsPage() {
                     className="w-7 h-7 rounded-lg bg-red-500/15 text-red-300 flex items-center justify-center ml-1"><Trash2 className="w-3 h-3" /></button>
                 </div>
                 </div>
+                  {(() => {
+                    const pr = pricing.prices.get(priceKey('part', p.part_num, p.color_id));
+                    if (!pr) return null;
+                    const { newP, usedP } = unitPrices(pr);
+                    if (newP == null && usedP == null) return <p className="text-[11px] text-white/30">{t.lego.valueNoPrice}</p>;
+                    const star = (b: string | null) => (b === 'stock' ? '*' : '');
+                    return (
+                      <p className="text-[11px] text-white/60 leading-snug">
+                        {usedP != null && <span className="block">{tr('lego.valueRowUsed', { unit: formatEuro(usedP, locale) + star(pr.used_basis), total: formatEuro(usedP * p.quantity, locale) })}</span>}
+                        {newP != null && <span className="block">{tr('lego.valueRowNew', { unit: formatEuro(newP, locale) + star(pr.new_basis), total: formatEuro(newP * p.quantity, locale) })}</span>}
+                      </p>);
+                  })()}
                 <button onClick={() => setOpenSets(openSets === `${p.part_num}|${p.color_id}` ? null : `${p.part_num}|${p.color_id}`)}
                   aria-expanded={openSets === `${p.part_num}|${p.color_id}`} className="text-[11px] text-red-300 underline">
                   {openSets === `${p.part_num}|${p.color_id}` ? t.lego.partSetsHide : t.lego.partSetsToggle}

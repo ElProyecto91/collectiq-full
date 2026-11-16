@@ -4,7 +4,7 @@ import type {
   LegoSearchParams, LegoSearchResult, PartSetsResult, LegoSet, LegoSetPart, LegoTheme, PossibleSet, PossibleSetsParams,
 } from '../types';
 import {
-  LEGO_PAGE_SIZE, PART_SETS_PAGE, allColorsStmt, canonStmt, partImagesStmt, partsByBricklinkStmt, setsWithPartStmt, partColorsStmt, partsByNumsStmt, partDetailsStmt, possibleSetsStmt, searchPartsStmt,
+  LEGO_PAGE_SIZE, PART_SETS_PAGE, allColorsStmt, blNumbersStmt, canonStmt, partImagesStmt, partsByBricklinkStmt, setsWithPartStmt, partColorsStmt, partsByNumsStmt, partDetailsStmt, possibleSetsStmt, searchPartsStmt,
   searchSetsStmt, setPartsStmt, setStmt, setsByNumsStmt, themesStmt, weightsStmt,
   toColorOption, toPartDetail, toPartSet, toPartSummary, toPossibleSet, toSet, toSetPart, toTheme, type DbRow,
 } from './lego-queries';
@@ -145,6 +145,18 @@ export async function fetchPartsByBricklink(ids: string[]): Promise<Map<string, 
     const rows = await inChunks(unique, async (chunk) => await run(partsByBricklinkStmt(chunk)));
     const out = new Map<string, LegoPartSummary>();
     for (const r of rows) if (!out.has(String(r.ext_id))) out.set(String(r.ext_id), { part_num: String(r.part_num), name: String(r.name) });
+    return out;
+  } catch { return new Map(); }
+}
+
+/** Rebrickable part -> BrickLink number, only for parts whose numbers differ (empty if the table is not filled). */
+export async function fetchBlNumbers(partNums: string[]): Promise<Map<string, string>> {
+  const unique = [...new Set(partNums.filter(Boolean))];
+  if (!unique.length) return new Map();
+  try {
+    const rows = await inChunks(unique, async (chunk) => await run(blNumbersStmt(chunk)));
+    const out = new Map<string, string>();
+    for (const r of rows) if (!out.has(String(r.part_num))) out.set(String(r.part_num), String(r.ext_id));
     return out;
   } catch { return new Map(); }
 }
