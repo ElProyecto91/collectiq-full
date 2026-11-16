@@ -6,7 +6,7 @@ import {
 } from './services/lego-prices';
 
 /** Errors after which asking again right now is pointless. */
-const FATAL = new Set(['not_configured', 'bricklink_auth', 'rate_limited', 'unauthorized', 'network']);
+const FATAL = new Set(['not_configured', 'brickowl_auth', 'fx_unavailable', 'rate_limited', 'unauthorized', 'network']);
 
 /**
  * Prices (BrickLink, euros) for a list of parts/sets: what is already saved shows at once, and with `auto` the

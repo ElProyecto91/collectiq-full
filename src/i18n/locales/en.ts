@@ -603,6 +603,8 @@ export const en = {
     valueErr_network: 'No connection to the price server.',
     valueErr_unauthorized: 'Your session expired. Sign in again.',
     valueErr_unknown: 'Some prices could not be fetched.',
+    valueErr_fx_unavailable: 'Could not get the exchange rate: it will be retried later.',
+    valueSource: 'Prices from',
     addedFromSet: 'Added to your inventory: {part} ×{count}',
     haveOne: 'I have one {part}',
     haveAll: 'I have all {count} {part}',

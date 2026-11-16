@@ -120,16 +120,16 @@ export function AdminPage() {
     setBoBusy(false);
   };
 
-  // proves the BrickLink credentials stored in the Worker work (prices of LEGO parts depend on them)
-  const checkBrickLink = async () => {
+  // proves the Brick Owl key stored in the Worker works end to end (colour match, price, GBP -> EUR)
+  const checkPrices = async () => {
     setBlChecking(true); setBlCheck(null);
     try {
       const res = await fetch(`${API}/lego-prices-check`, { headers: authHeaders() });
       const d = await res.json().catch(() => ({}));
       if (res.status === 401) setBlCheck({ ok: false, text: 'Tu sesión no es de administrador o ha caducado.' });
-      else if (d.ok) setBlCheck({ ok: true, text: `Conectado. Precio de prueba (pieza 3001 negra, usada): ${d.sample?.avg_price_eur ?? '?'} €.` });
+      else if (d.ok) setBlCheck({ ok: true, text: `Conectado. Pieza 3001 negra (${d.boid}): usada ${d.sample?.used_eur ?? '–'} € · nueva ${d.sample?.new_eur ?? '–'} €. Cambio: 1 £ = ${Number(d.rate_eur_per_gbp).toFixed(4)} €.` });
       else if (d.error === 'not_configured') setBlCheck({ ok: false, text: `Faltan secretos en el Worker: ${(d.missing ?? []).join(', ')}.` });
-      else setBlCheck({ ok: false, text: `BrickLink respondió ${d.code ?? '?'}${d.message ? ` (${d.message})` : ''}. ${d.hint ?? ''}` });
+      else setBlCheck({ ok: false, text: `Falló en el paso ${d.step ?? '?'}${d.code ? ` (HTTP ${d.code})` : ''}${d.message ? `: ${d.message}` : ''}. ${d.hint ?? ''}` });
     } catch { setBlCheck({ ok: false, text: 'No se pudo contactar con el Worker.' }); }
     setBlChecking(false);
   };
@@ -449,8 +449,8 @@ export function AdminPage() {
             </div>
 
             <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
-              <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Precios LEGO · BrickLink</p>
-              <button onClick={checkBrickLink} disabled={blChecking}
+              <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Precios LEGO · Brick Owl</p>
+              <button onClick={checkPrices} disabled={blChecking}
                 className="w-full py-2.5 rounded-xl bg-white/10 text-sm font-semibold active:scale-95 disabled:opacity-50">
                 {blChecking ? 'Probando…' : 'Probar conexión'}
               </button>

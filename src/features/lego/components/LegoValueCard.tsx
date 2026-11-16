@@ -16,7 +16,9 @@ interface Props {
 /** Total value in euros (used and new) of a collection, with how much of it is priced and what is still loading. */
 export function LegoValueCard({ title, tot, progress, error, onRetry, compact, hasStockBasis }: Props) {
   const { t, tr, locale } = useI18n();
-  const errKey = error ? (`valueErr_${['not_configured', 'bricklink_auth', 'rate_limited', 'network', 'unauthorized'].includes(error) ? error : 'unknown'}` as keyof typeof t.lego) : null;
+  // Brick Owl rejecting the key and the old BrickLink code share one message
+  const code = error === 'brickowl_auth' ? 'bricklink_auth' : error;
+  const errKey = code ? (`valueErr_${['not_configured', 'bricklink_auth', 'fx_unavailable', 'rate_limited', 'network', 'unauthorized'].includes(code) ? code : 'unknown'}` as keyof typeof t.lego) : null;
   return (
     <section className="bg-white/[0.04] border border-white/8 rounded-2xl p-4 space-y-3">
       <h2 className="text-sm font-bold">{title}</h2>
@@ -33,6 +35,18 @@ export function LegoValueCard({ title, tot, progress, error, onRetry, compact, h
           {onRetry && error !== 'not_configured' && <button onClick={onRetry} className="underline font-semibold">{t.lego.valueRetry}</button>}
         </p>)}
       {!compact && <p className="text-[10px] text-white/30">{t.lego.valueNote}{hasStockBasis ? ` ${t.lego.valueStockNote}` : ''}</p>}
+      <PriceSource />
     </section>
+  );
+}
+
+/** Brick Owl's terms require every place that shows their pricing to link back to them. */
+export function PriceSource() {
+  const { t } = useI18n();
+  return (
+    <p className="text-[10px] text-white/30">
+      {t.lego.valueSource}{' '}
+      <a href="https://www.brickowl.com" target="_blank" rel="noopener noreferrer" className="underline">Brick Owl</a>
+    </p>
   );
 }
