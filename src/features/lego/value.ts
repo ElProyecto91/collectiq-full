@@ -1,15 +1,19 @@
 import type { LegoPrice } from './price-core';
 
-/** Unit prices in euros of one row, or nulls when BrickLink has no price for it. */
-export function unitPrices(p: LegoPrice | undefined): { newP: number | null; usedP: number | null } {
-  if (!p || p.status !== 'ok') return { newP: null, usedP: null };
-  return { newP: p.new_avg, usedP: p.used_avg };
+/**
+ * The one orientative unit price of a row, in euros: the used price when there is one (what loose pieces really
+ * sell for), otherwise the new price. `basis` is 'stock' when it comes from current offers instead of recent sales.
+ */
+export function unitPrice(p: LegoPrice | undefined): { price: number | null; basis: 'sold' | 'stock' | null } {
+  if (!p || p.status !== 'ok') return { price: null, basis: null };
+  if (p.used_avg != null) return { price: p.used_avg, basis: p.used_basis };
+  if (p.new_avg != null) return { price: p.new_avg, basis: p.new_basis };
+  return { price: null, basis: null };
 }
 
 export interface ValueTotals {
-  newTotal: number;
-  usedTotal: number;
-  /** How many rows have at least one price / how many rows there are. */
+  total: number;
+  /** How many rows have a price / how many rows there are. */
   priced: number;
   count: number;
 }
@@ -19,15 +23,14 @@ export interface ValueTotals {
  * reported in `priced` / `count`, so the total is always shown as "based on N of M".
  */
 export function totals(entries: { qty: number; price: LegoPrice | undefined }[]): ValueTotals {
-  let newTotal = 0, usedTotal = 0, priced = 0;
+  let total = 0, priced = 0;
   for (const e of entries) {
-    const { newP, usedP } = unitPrices(e.price);
-    if (newP == null && usedP == null) continue;
+    const { price } = unitPrice(e.price);
+    if (price == null) continue;
     priced++;
-    if (newP != null) newTotal += e.qty * newP;
-    if (usedP != null) usedTotal += e.qty * usedP;
+    total += e.qty * price;
   }
-  return { newTotal, usedTotal, priced, count: entries.length };
+  return { total, priced, count: entries.length };
 }
 
 /** "12,34 €" / "€12.34": always euros, up to 3 decimals for cents-sized pieces. */

@@ -5,7 +5,7 @@ import { ArrowDownAZ, ArrowLeft, ArrowUpAZ, Loader2 } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { LegoValueCard } from '../components/LegoValueCard';
 import { priceKey, type PriceRequest } from '../services/lego-prices';
-import { totals, unitPrices, formatEuro } from '../value';
+import { totals, unitPrice, formatEuro } from '../value';
 import { useLegoPrices } from '../use-lego-prices';
 import { RoutePaths } from '@/config';
 import { useCurrency } from '@/hooks/use-currency';
@@ -155,10 +155,8 @@ export function LegoMySetsPage() {
                     {s && <p className="text-[11px] text-white/40">{[s.year, s.num_parts != null ? tr('lego.piecesShort', { count: s.num_parts }) : null].filter(Boolean).join(' · ')}</p>}
                     {m.price_paid !== null && <p className="text-[11px] text-white/40">{symbol}{m.price_paid.toFixed(2)}</p>}
                     {(() => {
-                      const { newP, usedP } = unitPrices(pricing.prices.get(priceKey('set', m.set_num, -1)));
-                      return newP != null || usedP != null
-                        ? <p className="text-[11px] text-white/55">{tr('lego.valueSetRow', { used: usedP != null ? formatEuro(usedP, locale) : '–', new: newP != null ? formatEuro(newP, locale) : '–' })}</p>
-                        : null;
+                      const { price } = unitPrice(pricing.prices.get(priceKey('set', m.set_num, -1)));
+                      return price != null ? <p className="text-[11px] text-white/55">≈ {formatEuro(price, locale)}</p> : null;
                     })()}
                   </div>
                 </button>

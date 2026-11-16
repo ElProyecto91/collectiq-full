@@ -11,7 +11,7 @@ import { buildPartLines, type PartLine } from '../part-lines';
 import { sortParts, type PartSortKey } from '../part-sort';
 import { usePartSort } from '../use-part-sort';
 import { priceKey, type PriceRequest } from '../services/lego-prices';
-import { unitPrices, formatEuro } from '../value';
+import { unitPrice, formatEuro } from '../value';
 import { useLegoPrices } from '../use-lego-prices';
 import { useColorName } from '../use-color-name';
 import { LegoSetOwnership } from '../components/LegoSetOwnership';
@@ -71,7 +71,7 @@ export function LegoSetDetailPage() {
   const set = setQuery.data;
   const priceReq = useMemo<PriceRequest[]>(() => (setNum ? [{ kind: 'set' as const, num: setNum }] : []), [setNum]);
   const setPricing = useLegoPrices(priceReq, true);
-  const setPrice = unitPrices(setPricing.prices.get(priceKey('set', setNum, -1)));
+  const setPrice = unitPrice(setPricing.prices.get(priceKey('set', setNum, -1)));
   const themeName = set?.theme_id != null ? themesQuery.data?.find((x) => x.id === set.theme_id)?.name : null;
 
   // Every part shows what is in the box: the set's own quantity plus its spares, both visible. The set's
@@ -133,12 +133,10 @@ export function LegoSetDetailPage() {
           </dl>
         </div>
 
-        {(setPrice.newP != null || setPrice.usedP != null) && (
+        {setPrice.price != null && (
           <section className="bg-white/[0.04] border border-white/8 rounded-2xl p-4 space-y-1">
             <h2 className="text-sm font-bold">{t.lego.valueSetTitle}</h2>
-            <p className="text-lg font-black tabular-nums">
-              {tr('lego.valueSetRow', { used: setPrice.usedP != null ? formatEuro(setPrice.usedP, locale) : '–', new: setPrice.newP != null ? formatEuro(setPrice.newP, locale) : '–' })}
-            </p>
+            <p className="text-lg font-black tabular-nums">≈ {formatEuro(setPrice.price, locale)}</p>
             <p className="text-[10px] text-white/30">{t.lego.valueNote}</p>
           </section>)}
 

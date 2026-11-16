@@ -15,7 +15,7 @@ import { usePartSort } from '../use-part-sort';
 import { fetchBlNumbers, fetchPartDetailsCached } from '../services/lego-catalog';
 import { LegoValueCard } from '../components/LegoValueCard';
 import { priceKey, type PriceRequest } from '../services/lego-prices';
-import { totals, unitPrices, formatEuro } from '../value';
+import { totals, unitPrice, formatEuro } from '../value';
 import { useLegoPrices } from '../use-lego-prices';
 import { copyLabels } from '../copy-label';
 import { availability } from '../services/lego-allocation';
@@ -90,7 +90,7 @@ export function LegoPartsPage() {
         || cn(d?.color_name).toLowerCase().includes(f));
     return sortParts(shown, ({ p, d }) => ({
       part_num: p.part_num, color_name: cn(d?.color_name), part_name: d?.part_name, quantity: p.quantity, added: p.created_at,
-      value: (() => { const u = unitPrices(pricing.prices.get(priceKey('part', p.part_num, p.color_id))).usedP; return u == null ? null : u * p.quantity; })(),
+      value: (() => { const u = unitPrice(pricing.prices.get(priceKey('part', p.part_num, p.color_id))).price; return u == null ? null : u * p.quantity; })(),
     }), sort);
   }, [parts, details, filter, sort, cn, pricing.prices]);
 
@@ -204,13 +204,11 @@ export function LegoPartsPage() {
                   {(() => {
                     const pr = pricing.prices.get(priceKey('part', p.part_num, p.color_id));
                     if (!pr) return null;
-                    const { newP, usedP } = unitPrices(pr);
-                    if (newP == null && usedP == null) return <p className="text-[11px] text-white/30">{t.lego.valueNoPrice}</p>;
-                    const star = (b: string | null) => (b === 'stock' ? '*' : '');
+                    const { price, basis } = unitPrice(pr);
+                    if (price == null) return <p className="text-[11px] text-white/30">{t.lego.valueNoPrice}</p>;
                     return (
                       <p className="text-[11px] text-white/60 leading-snug">
-                        {usedP != null && <span className="block">{tr('lego.valueRowUsed', { unit: formatEuro(usedP, locale) + star(pr.used_basis), total: formatEuro(usedP * p.quantity, locale) })}</span>}
-                        {newP != null && <span className="block">{tr('lego.valueRowNew', { unit: formatEuro(newP, locale) + star(pr.new_basis), total: formatEuro(newP * p.quantity, locale) })}</span>}
+                        {tr('lego.valueRow', { unit: formatEuro(price, locale) + (basis === 'stock' ? '*' : ''), total: formatEuro(price * p.quantity, locale) })}
                       </p>);
                   })()}
                 <button onClick={() => setOpenSets(openSets === `${p.part_num}|${p.color_id}` ? null : `${p.part_num}|${p.color_id}`)}
