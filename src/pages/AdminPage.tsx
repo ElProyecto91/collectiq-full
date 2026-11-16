@@ -10,7 +10,18 @@ import {
   Star, RefreshCw,
 } from 'lucide-react';
 
-const ADMIN_ID = 1299079722;
+import { ADMIN_ID } from '@/config/admin';
+
+// how long a GO lasts when the admin gives it
+const GO_DURATIONS = [
+  { label: '1d', months: 0, days: 1 },
+  { label: '3d', months: 0, days: 3 },
+  { label: '7d', months: 0, days: 7 },
+  { label: '1m', months: 1, days: 0 },
+  { label: '3m', months: 3, days: 0 },
+  { label: '6m', months: 6, days: 0 },
+  { label: '12m', months: 12, days: 0 },
+] as const;
 const API = 'https://collectiq-api.esxdinero.workers.dev';
 
 interface UserStats {
@@ -84,6 +95,7 @@ export function AdminPage() {
   const [search, setSearch] = useState('');
   const [giftingId, setGiftingId] = useState<number | null>(null);
   const [giftInput, setGiftInput] = useState('');
+  const [giftDuration, setGiftDuration] = useState<string>('1m');
   const [statusMsg, setStatusMsg] = useState('');
 
   useEffect(() => {
@@ -266,7 +278,7 @@ export function AdminPage() {
       setStatusMsg('✅ GO activado para ' + userId + ' hasta ' + new Date(data.expiresAt).toLocaleDateString('es-ES'));
       setUsers(prev => prev.map(u => u.telegram_user_id === userId ? { ...u, isPremium: true, premiumExpires: data.expiresAt } : u));
     } else {
-      setStatusMsg('❌ Error al activar GO');
+      setStatusMsg(res.status === 401 ? '❌ Tu sesión no es de administrador o ha caducado: vuelve a iniciar sesión.' : '❌ Error al activar GO');
     }
     setTimeout(() => setStatusMsg(''), 4000);
     setGiftingId(null);
@@ -275,7 +287,8 @@ export function AdminPage() {
   const giveGOByInput = async () => {
     const userId = parseInt(giftInput.trim());
     if (isNaN(userId)) { setStatusMsg('❌ ID inválido'); return; }
-    await giveGO(userId);
+    const d = GO_DURATIONS.find(o => o.label === giftDuration) ?? GO_DURATIONS[3];
+    await giveGO(userId, d.months, d.days);
     setGiftInput('');
   };
 
@@ -384,9 +397,13 @@ export function AdminPage() {
                 <Gift size={14} className="text-yellow-400" /> Dar GO por Telegram ID
               </p>
               <div className="flex gap-2">
-                <input value={giftInput} onChange={e => setGiftInput(e.target.value)}
+                <input value={giftInput} onChange={e => setGiftInput(e.target.value)} inputMode="numeric"
                   placeholder="Telegram ID..."
-                  className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none" />
+                  className="flex-1 min-w-0 bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none" />
+                <select value={giftDuration} onChange={e => setGiftDuration(e.target.value)} aria-label="Duración"
+                  className="bg-white/5 border border-white/10 rounded-xl px-2 text-sm text-white">
+                  {GO_DURATIONS.map(o => <option key={o.label} value={o.label}>{o.label}</option>)}
+                </select>
                 <button onClick={giveGOByInput}
                   className="px-4 py-2.5 rounded-xl bg-yellow-500 text-black text-sm font-bold active:scale-95">
                   Dar GO
@@ -459,15 +476,7 @@ export function AdminPage() {
                       <div className="flex gap-2 flex-wrap">
                         {giftingId === user.telegram_user_id ? (
                           <>
-                            {[
-                              { label: '1d', months: 0, days: 1 },
-                              { label: '3d', months: 0, days: 3 },
-                              { label: '7d', months: 0, days: 7 },
-                              { label: '1m', months: 1, days: 0 },
-                              { label: '3m', months: 3, days: 0 },
-                              { label: '6m', months: 6, days: 0 },
-                              { label: '12m', months: 12, days: 0 },
-                            ].map(opt => (
+                            {GO_DURATIONS.map(opt => (
                               <button key={opt.label} onClick={() => giveGO(user.telegram_user_id, opt.months, opt.days)}
                                 className="flex-1 py-2 rounded-xl bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-xs font-bold active:scale-95">
                                 {opt.label}

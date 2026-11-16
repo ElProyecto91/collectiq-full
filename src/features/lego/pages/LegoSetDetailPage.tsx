@@ -10,6 +10,7 @@ import { LegoPartSort } from '../components/LegoPartSort';
 import { buildPartLines, type PartLine } from '../part-lines';
 import { sortParts, type PartSortKey } from '../part-sort';
 import { usePartSort } from '../use-part-sort';
+import { useColorName } from '../use-color-name';
 import { LegoSetOwnership } from '../components/LegoSetOwnership';
 import { LegoSetProgress } from '../components/LegoSetProgress';
 import { fetchSet, fetchSetParts, fetchThemes } from '../services/lego-catalog';
@@ -25,6 +26,7 @@ const Swatch = ({ rgb, trans }: { rgb: string | null; trans: boolean }) => (
 
 function PartTile({ line, showColor = false }: { line: PartLine; showColor?: boolean }) {
   const { t, tr } = useI18n();
+  const cn = useColorName();
   const { row: p, real, spare } = line;
   return (
     <li className="bg-white/[0.04] border border-white/8 rounded-xl overflow-hidden">
@@ -36,8 +38,8 @@ function PartTile({ line, showColor = false }: { line: PartLine; showColor?: boo
         </p>
         <p className="text-[10px] text-white/50 leading-tight line-clamp-2">{p.part_name}</p>
         {showColor && (
-          <p className="text-[10px] text-white/60 flex items-center gap-1 mt-0.5">
-            <Swatch rgb={p.color_rgb} trans={p.color_is_trans} /><span className="truncate">{p.color_name ?? t.lego.unknownColor}</span>
+          <p className="text-[10px] text-white/60 flex items-start gap-1 mt-0.5">
+            <Swatch rgb={p.color_rgb} trans={p.color_is_trans} /><span className="leading-tight line-clamp-2">{p.color_name ? cn(p.color_name) : t.lego.unknownColor}</span>
           </p>
         )}
         {spare > 0 && (
@@ -53,6 +55,7 @@ function PartTile({ line, showColor = false }: { line: PartLine; showColor?: boo
 export function LegoSetDetailPage() {
   const navigate = useNavigate();
   const { t, tr } = useI18n();
+  const cn = useColorName();
   const { setNum = '' } = useParams<{ setNum: string }>();
   const [search, setSearch] = useSearchParams();
   const view = search.get('tab') === 'progress' ? 'progress' : 'list';
@@ -69,14 +72,16 @@ export function LegoSetDetailPage() {
   // completeness (progress, ownership) still ignores spares; only this list counts them.
   const { groups, realTotal, realUnique, spareTotal } = useMemo(() => buildPartLines(partsQuery.data ?? []), [partsQuery.data]);
   const [sort, setSort] = usePartSort('lego-sort-set-parts', SORT_KEYS, 'color');
-  const partKey = (l: PartLine) => ({ part_num: l.row.part_num, color_name: l.row.color_name, part_name: l.row.part_name, quantity: l.real + l.spare });
+  const partKey = (l: PartLine) => ({ part_num: l.row.part_num, color_name: cn(l.row.color_name), part_name: l.row.part_name, quantity: l.real + l.spare });
   // by color: color groups in the chosen direction, parts of each group by number; any other key: one flat list
   const orderedGroups = useMemo(() => {
-    const ordered = sort.dir === 'asc' ? groups : [...groups].reverse();
+    // alphabetical by the name as shown (Spanish names sort differently from the catalog's English)
+    const byName = [...groups].sort((a, b) => cn(a.name).localeCompare(cn(b.name), undefined, { sensitivity: 'base' }));
+    const ordered = sort.dir === 'asc' ? byName : byName.reverse();
     return ordered.map((g) => ({ ...g, parts: sortParts(g.parts, partKey, { key: 'number', dir: 'asc' }) }));
-  }, [groups, sort.dir]);
+  }, [groups, sort.dir, cn]);
   const flat = useMemo(
-    () => (sort.key === 'color' ? [] : sortParts(groups.flatMap((g) => g.parts), partKey, sort)), [groups, sort]);
+    () => (sort.key === 'color' ? [] : sortParts(groups.flatMap((g) => g.parts), partKey, sort)), [groups, sort, cn]);
 
   const back = () => navigate(RoutePaths.LegoSets);
 
@@ -171,7 +176,7 @@ export function LegoSetDetailPage() {
                 <div key={g.colorId}>
                   <div className="flex items-center gap-2 mb-2">
                     <Swatch rgb={g.rgb} trans={g.isTrans} />
-                    <h3 className="text-xs font-bold flex-1 truncate">{g.name ?? t.lego.unknownColor}</h3>
+                    <h3 className="text-xs font-bold flex-1 truncate">{g.name ? cn(g.name) : t.lego.unknownColor}</h3>
                     <span className="text-[11px] text-white/40">×{g.total}</span>
                   </div>
                   <ul className="grid grid-cols-3 gap-2">

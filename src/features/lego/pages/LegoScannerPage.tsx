@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Camera, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { useI18n } from '@/i18n';
+import { useColorName } from '../use-color-name';
 import { RoutePaths } from '@/config';
 import { useUserStore } from '@/store';
 import { LegoAddPart } from '../components/LegoAddPart';
@@ -21,6 +22,7 @@ type Chosen = { candidate: ScanCandidate; part: LegoPartSummary | null } | 'manu
 export function LegoScannerPage() {
   const navigate = useNavigate();
   const { t, tr } = useI18n();
+  const cn = useColorName();
   const qc = useQueryClient();
   const tid = useUserStore((s) => s.telegramUser?.id);
   const token = getSessionToken();
@@ -174,7 +176,7 @@ export function LegoScannerPage() {
             <LegoAddPart key={chosen === 'manual' ? 'manual' : chosen.candidate.id} tid={tid} photo={photo}
               initialPart={chosen === 'manual' ? null : chosen.part}
               initialQuery={chosen === 'manual' ? '' : (chosen.part ? '' : (chosen.candidate.name || chosen.candidate.id))}
-              onAdded={(info) => { setAdded(tr('lego.partAdded', { qty: info.qty, name: info.part.name, color: info.color.name })); setDone(true); }} />
+              onAdded={(info) => { setAdded(tr('lego.partAdded', { qty: info.qty, name: info.part.name, color: cn(info.color.name) })); setDone(true); }} />
           </section>)}
 
         {done && (
