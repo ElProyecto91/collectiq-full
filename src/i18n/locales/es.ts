@@ -536,6 +536,8 @@ export const es = {
     valueErr_network: 'Sin conexión con el servidor de precios.',
     valueErr_unauthorized: 'Tu sesión ha caducado. Vuelve a entrar.',
     valueErr_unknown: 'No se pudieron obtener algunos precios.',
+    valueErr_fx_unavailable: 'No se pudo obtener el tipo de cambio: se reintentará más tarde.',
+    valueSource: 'Precios de',
     addedFromSet: 'Añadida al inventario: {part} ×{count}',
     haveOne: 'Tengo una {part}',
     haveAll: 'Tengo las {count} {part}',

@@ -11,6 +11,7 @@ import { buildPartLines, type PartLine } from '../part-lines';
 import { sortParts, type PartSortKey } from '../part-sort';
 import { usePartSort } from '../use-part-sort';
 import { priceKey, type PriceRequest } from '../services/lego-prices';
+import { PriceSource } from '../components/LegoValueCard';
 import { unitPrice, formatEuro } from '../value';
 import { useLegoPrices } from '../use-lego-prices';
 import { useColorName } from '../use-color-name';
@@ -138,6 +139,7 @@ export function LegoSetDetailPage() {
             <h2 className="text-sm font-bold">{t.lego.valueSetTitle}</h2>
             <p className="text-lg font-black tabular-nums">≈ {formatEuro(setPrice.price, locale)}</p>
             <p className="text-[10px] text-white/30">{t.lego.valueNote}</p>
+            <PriceSource />
           </section>)}
 
         {/* books, gear and other sets without parts have no manual */}
