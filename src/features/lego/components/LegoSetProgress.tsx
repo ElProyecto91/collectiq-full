@@ -15,6 +15,7 @@ import { LegoPctBar } from './LegoPctBar';
 import { LegoPartSort } from './LegoPartSort';
 import { sortParts, type PartSortKey } from '../part-sort';
 import { usePartSort } from '../use-part-sort';
+import { useColorName } from '../use-color-name';
 
 type Filter = 'all' | 'have' | 'missing';
 const SORT_KEYS: readonly PartSortKey[] = ['missing', 'color', 'number', 'quantity', 'name'];
@@ -22,6 +23,7 @@ const SORT_KEYS: readonly PartSortKey[] = ['missing', 'color', 'number', 'quanti
 /** What you have and what you lack of one set, from your inventory, with images. */
 export function LegoSetProgress({ setNum, parts }: { setNum: string; parts: LegoSetPart[] }) {
   const { t, tr } = useI18n();
+  const cn = useColorName();
   const qc = useQueryClient();
   const tid = useUserStore((s) => s.telegramUser?.id);
   const [filter, setFilter] = useState<Filter>('missing');
@@ -68,9 +70,9 @@ export function LegoSetProgress({ setNum, parts }: { setNum: string; parts: Lego
     if (!progress) return [];
     const list = progress.rows.filter((r) => filter === 'all' || (filter === 'missing' ? r.missing > 0 : r.missing === 0));
     return sortParts(list, (r) => ({
-      part_num: r.part.part_num, color_name: r.part.color_name, part_name: r.part.part_name, quantity: r.need, missing: r.missing,
+      part_num: r.part.part_num, color_name: cn(r.part.color_name), part_name: r.part.part_name, quantity: r.need, missing: r.missing,
     }), sort);
-  }, [progress, filter, sort]);
+  }, [progress, filter, sort, cn]);
   const [limit, setLimit] = useState(60);
 
   const labels = useMemo(() => copyLabels(setsQuery.data ?? []), [setsQuery.data]);
@@ -175,7 +177,7 @@ export function LegoSetProgress({ setNum, parts }: { setNum: string; parts: Lego
               <p className="text-xs leading-tight line-clamp-2">{r.part.part_name}</p>
               <p className="text-[11px] text-white/50 flex items-center gap-1 mt-0.5">
                 <span className="w-3 h-3 rounded-full border border-white/20 inline-block" style={{ background: r.part.color_rgb ? `#${r.part.color_rgb}` : 'transparent', opacity: r.part.color_is_trans ? 0.6 : 1 }} />
-                {r.part.color_name}
+                {cn(r.part.color_name)}
               </p>
             </div>
             <div className="text-right shrink-0">

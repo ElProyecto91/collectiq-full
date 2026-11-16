@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import { useI18n } from '@/i18n';
+import { useColorName } from '../use-color-name';
 import { useUserStore } from '@/store';
 import { copyLabels } from '../copy-label';
 import { fetchCanonMap, fetchSetParts } from '../services/lego-catalog';
@@ -20,6 +21,7 @@ const ROWS = 30;
  */
 export function LegoPendingParts({ catalog }: { catalog: Map<string, LegoSet> }) {
   const { t, tr } = useI18n();
+  const cn = useColorName();
   const navigate = useNavigate();
   const tid = useUserStore((s) => s.telegramUser?.id);
 
@@ -103,7 +105,7 @@ export function LegoPendingParts({ catalog }: { catalog: Map<string, LegoSet> })
                           <p className="text-[11px] text-white/50 flex items-center gap-1 mt-0.5">
                             <span className="w-3 h-3 rounded-full border border-white/20 inline-block"
                               style={{ background: r.part.color_rgb ? `#${r.part.color_rgb}` : 'transparent', opacity: r.part.color_is_trans ? 0.6 : 1 }} />
-                            {r.part.color_name}
+                            {cn(r.part.color_name)}
                           </p>
                         </div>
                         <div className="text-right shrink-0">

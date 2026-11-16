@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, Star, BarChart2, Package, Heart, ChevronRight, Zap, Settings, Eye, EyeOff, Users } from 'lucide-react';
+import { LogOut, Star, BarChart2, Package, Heart, ChevronRight, Zap, Settings, Eye, EyeOff, Users, ShieldCheck } from 'lucide-react';
 import { useUserStore } from '@/store';
 import { useDisplayName } from '@/hooks';
 import { getSupabase } from '@/lib/supabase';
 import { RoutePaths } from '@/config';
 import { useCurrency } from '@/hooks/use-currency';
 import { clearHouseholdScope } from '@/lib/household-scope';
+import { ADMIN_ID } from '@/config/admin';
 
 interface TCGStats {
   key: string;
@@ -278,6 +279,14 @@ export function ProfilePage() {
             </button>
           ))}
         </div>
+
+        {/* Panel de administración: solo se muestra al admin (el Worker lo comprueba con la sesión) */}
+        {telegramUser?.id === ADMIN_ID && (
+          <button onClick={() => navigate(RoutePaths.Admin)}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-yellow-500/10 border border-yellow-500/20 text-yellow-300 text-sm font-semibold active:scale-95 transition-transform">
+            <ShieldCheck size={16} /> Panel de administración
+          </button>
+        )}
 
         {/* Cerrar sesión */}
         <button onClick={() => { clearHouseholdScope(); setTelegramUser(null); navigate('/login'); }}

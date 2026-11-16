@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Loader2, Minus, Plus, Trash2 } from 'lucide-react';
 import { useI18n } from '@/i18n';
+import { useColorName } from '../use-color-name';
 import { RoutePaths } from '@/config';
 import { useUserStore } from '@/store';
 import { LegoAddPart } from '../components/LegoAddPart';
@@ -28,6 +29,7 @@ const Swatch = ({ rgb, trans }: { rgb: string | null; trans: boolean }) => (
 export function LegoPartsPage() {
   const navigate = useNavigate();
   const { t, tr } = useI18n();
+  const cn = useColorName();
   const qc = useQueryClient();
   const tid = useUserStore((s) => s.telegramUser?.id);
 
@@ -61,11 +63,12 @@ export function LegoPartsPage() {
     const shown = parts
       .map((p) => ({ p, d: details?.get(`${p.part_num}|${p.color_id}`) }))
       .filter(({ p, d }) => !f || p.part_num.toLowerCase().includes(f)
-        || (d?.part_name ?? '').toLowerCase().includes(f) || (d?.color_name ?? '').toLowerCase().includes(f));
+        || (d?.part_name ?? '').toLowerCase().includes(f) || (d?.color_name ?? '').toLowerCase().includes(f)
+        || cn(d?.color_name).toLowerCase().includes(f));
     return sortParts(shown, ({ p, d }) => ({
-      part_num: p.part_num, color_name: d?.color_name, part_name: d?.part_name, quantity: p.quantity, added: p.created_at,
+      part_num: p.part_num, color_name: cn(d?.color_name), part_name: d?.part_name, quantity: p.quantity, added: p.created_at,
     }), sort);
-  }, [parts, details, filter, sort]);
+  }, [parts, details, filter, sort, cn]);
 
   const totalPieces = parts.reduce((s, p) => s + p.quantity, 0);
   const freePieces = [...av.values()].reduce((s, a) => s + a.free, 0);
@@ -145,7 +148,7 @@ export function LegoPartsPage() {
                   <p className="text-[11px] text-red-300 font-semibold">{p.part_num}</p>
                   <p className="text-xs leading-tight line-clamp-2">{d?.part_name ?? p.part_num}</p>
                   <p className="text-[11px] text-white/50 flex items-center gap-1 mt-0.5">
-                    <Swatch rgb={d?.color_rgb ?? null} trans={d?.color_is_trans ?? false} />{d?.color_name ?? `#${p.color_id}`}
+                    <Swatch rgb={d?.color_rgb ?? null} trans={d?.color_is_trans ?? false} />{d?.color_name ? cn(d.color_name) : `#${p.color_id}`}
                   </p>
                   {(() => {
                     const a = av.get(`${p.part_num}|${p.color_id}`);
@@ -176,7 +179,7 @@ export function LegoPartsPage() {
                   {openSets === `${p.part_num}|${p.color_id}` ? t.lego.partSetsHide : t.lego.partSetsToggle}
                 </button>
                 {openSets === `${p.part_num}|${p.color_id}` && (
-                  <LegoPartSets partNum={p.part_num} colorId={p.color_id} colorName={d?.color_name ?? `#${p.color_id}`}
+                  <LegoPartSets partNum={p.part_num} colorId={p.color_id} colorName={d?.color_name ? cn(d.color_name) : `#${p.color_id}`}
                     colorRgb={d?.color_rgb ?? null} colorIsTrans={d?.color_is_trans ?? false} />)}
               </li>))}
           </ul>

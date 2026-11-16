@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, Search } from 'lucide-react';
 import { useI18n } from '@/i18n';
+import { useColorName } from '../use-color-name';
 import { decodeToPixels } from '../image';
 import { pieceColors, suggestColors, type Cluster } from '../color-suggest';
 import { fetchAllColors, fetchPartColors, searchParts } from '../services/lego-catalog';
@@ -38,6 +39,7 @@ interface Props {
 /** Search a part, choose its color and quantity, and add it to the inventory (quantities add up). */
 export function LegoAddPart({ tid, initialPart = null, initialQuery = '', photo = null, onAdded }: Props) {
   const { t, tr } = useI18n();
+  const cn = useColorName();
   const qc = useQueryClient();
 
   const [q, setQ] = useState(initialQuery);
@@ -91,7 +93,7 @@ export function LegoAddPart({ tid, initialPart = null, initialQuery = '', photo 
     onSuccess: () => {
       const info = { part: picked!, color: chosenColor!, qty: quantity };
       setError(null);
-      setMessage(tr('lego.partAdded', { qty: quantity, name: picked!.name, color: chosenColor!.name }));
+      setMessage(tr('lego.partAdded', { qty: quantity, name: picked!.name, color: cn(chosenColor!.name) }));
       setPicked(null); setColorId(null); setQ(''); setQty('1'); setShowAll(false); setShowSets(false); setListOpen(false);
       qc.invalidateQueries({ queryKey: ['user-lego-parts', tid] });
       onAdded?.(info);
@@ -136,7 +138,7 @@ export function LegoAddPart({ tid, initialPart = null, initialQuery = '', photo 
                   <button key={c.color_id} role="radio" aria-checked={colorId === c.color_id} onClick={() => { setColorId(c.color_id); setShowSets(false); }}
                     title={known ? undefined : t.lego.colorSuggestedHelp}
                     className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs border ${known ? '' : 'border-dashed'} ${colorId === c.color_id ? 'border-red-400 bg-red-500/20' : 'border-white/20 bg-white/5'}`}>
-                    <Swatch rgb={c.rgb} trans={c.is_trans} />{c.name}
+                    <Swatch rgb={c.rgb} trans={c.is_trans} />{cn(c.name)}
                   </button>))}
               </div>
               {suggestions.some((s) => !s.known) && <p className="text-[10px] text-white/35">{t.lego.colorSuggestedHelp}</p>}
@@ -149,10 +151,10 @@ export function LegoAddPart({ tid, initialPart = null, initialQuery = '', photo 
               <p className="text-xs text-white/50">{useAll ? t.lego.allColors : t.lego.onlyKnownColors}</p>
               {(partColorsQuery.isLoading || (useAll && allColorsQuery.isLoading)) && <Loader2 className="w-4 h-4 animate-spin text-white/40" />}
               <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={t.lego.chooseColor}>
-                {colors.map((c) => (
+                {[...colors].sort((a, b) => cn(a.name).localeCompare(cn(b.name), 'es')).map((c) => (
                   <button key={c.color_id} role="radio" aria-checked={colorId === c.color_id} onClick={() => { setColorId(c.color_id); setShowSets(false); }}
                     className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs border ${colorId === c.color_id ? 'border-red-400 bg-red-500/20' : 'border-white/10 bg-white/5'}`}>
-                    <Swatch rgb={c.rgb} trans={c.is_trans} />{c.name}
+                    <Swatch rgb={c.rgb} trans={c.is_trans} />{cn(c.name)}
                   </button>))}
               </div>
               {!useAll && <button onClick={() => setShowAll(true)} className="text-xs text-red-300 underline">{t.lego.showAllColors}</button>}
@@ -176,7 +178,7 @@ export function LegoAddPart({ tid, initialPart = null, initialQuery = '', photo 
                 {showSets ? t.lego.partSetsHide : t.lego.partSetsToggle}
               </button>
               {showSets && <LegoPartSets partNum={picked.part_num} colorId={chosenColor.color_id}
-                colorName={chosenColor.name} colorRgb={chosenColor.rgb} colorIsTrans={chosenColor.is_trans} />}
+                colorName={cn(chosenColor.name)} colorRgb={chosenColor.rgb} colorIsTrans={chosenColor.is_trans} />}
             </div>)}
           <button disabled={!chosenColor || !(quantity > 0) || addMutation.isPending} onClick={() => addMutation.mutate()}
             className="w-full rounded-xl bg-red-600 py-2.5 text-sm font-bold disabled:opacity-30 flex items-center justify-center gap-2">
