@@ -20,16 +20,7 @@ export function LegoValueCard({ title, tot, progress, error, onRetry, compact, h
   return (
     <section className="bg-white/[0.04] border border-white/8 rounded-2xl p-4 space-y-3">
       <h2 className="text-sm font-bold">{title}</h2>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <p className="text-[10px] uppercase tracking-wide text-white/40">{t.lego.valueUsed}</p>
-          <p className="text-xl font-black tabular-nums">{formatEuro(tot.usedTotal, locale)}</p>
-        </div>
-        <div>
-          <p className="text-[10px] uppercase tracking-wide text-white/40">{t.lego.valueNew}</p>
-          <p className="text-xl font-black tabular-nums">{formatEuro(tot.newTotal, locale)}</p>
-        </div>
-      </div>
+      <p className="text-3xl font-black tabular-nums">≈ {formatEuro(tot.total, locale)}</p>
       {tot.count > 0 && <p className="text-[11px] text-white/45">{tr('lego.valueCoverage', { priced: tot.priced, count: tot.count })}</p>}
       {progress && (
         <div className="space-y-1" role="status">
