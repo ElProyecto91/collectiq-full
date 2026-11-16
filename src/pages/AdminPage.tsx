@@ -461,7 +461,7 @@ export function AdminPage() {
               <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Sonda Brick Owl (solo lectura)</p>
               <select value={boEndpoint} onChange={e => setBoEndpoint(e.target.value)} aria-label="Endpoint"
                 className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white">
-                {['catalog/id_lookup', 'catalog/price_history', 'catalog/availability', 'catalog/lookup'].map(x => <option key={x} value={x}>{x}</option>)}
+                {['catalog/id_lookup', 'catalog/price_history', 'catalog/availability', 'catalog/lookup', 'catalog/color_list'].map(x => <option key={x} value={x}>{x}</option>)}
               </select>
               <input value={boParams} onChange={e => setBoParams(e.target.value)} aria-label="Parámetros" autoCapitalize="none" autoCorrect="off"
                 placeholder="id=3001&type=Part&id_type=design_id"

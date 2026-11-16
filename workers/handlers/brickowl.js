@@ -8,7 +8,7 @@ import { ADMIN_ID } from '../lib/telegram.js';
 
 var BASE = 'https://api.brickowl.com/v1/';
 var USER_AGENT = 'CollectIQ-personal-collection-tool/1.0';
-var ENDPOINTS = ['catalog/id_lookup', 'catalog/price_history', 'catalog/availability', 'catalog/lookup'];
+var ENDPOINTS = ['catalog/id_lookup', 'catalog/price_history', 'catalog/availability', 'catalog/lookup', 'catalog/color_list'];
 var PARAMS = ['id', 'type', 'id_type', 'boid', 'country', 'condition'];
 var MAX_BODY = 6000;
 
