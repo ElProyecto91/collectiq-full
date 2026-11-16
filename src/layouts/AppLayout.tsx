@@ -5,7 +5,7 @@ import { useAnalytics } from '@/hooks/use-analytics';
 import { useUserStore } from '@/store';
 import { isInsideTelegram } from '@/lib/telegram';
 import { ROOT_PATHS } from '@/config';
-import { clearHouseholdScope, syncHouseholdScope } from '@/lib/household-scope';
+import { reloadForNewScope, syncHouseholdScope } from '@/lib/household-scope';
 
 export function AppLayout() {
   const navigate = useNavigate();
@@ -16,9 +16,9 @@ export function AppLayout() {
 
   // Who shares my collection: refresh at start; if it changed since last time, reload once so every page re-reads.
   useEffect(() => {
-    if (!telegramUser?.id) { clearHouseholdScope(); return; }
+    if (!telegramUser?.id) return; // not loaded yet is NOT signed out: keep the saved scope
     let cancelled = false;
-    syncHouseholdScope(telegramUser.id).then((changed) => { if (changed && !cancelled) window.location.reload(); });
+    syncHouseholdScope(telegramUser.id).then((changed) => { if (changed && !cancelled) reloadForNewScope(); });
     return () => { cancelled = true; };
   }, [telegramUser?.id]);
 
