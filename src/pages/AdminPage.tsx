@@ -96,6 +96,22 @@ export function AdminPage() {
   const [giftingId, setGiftingId] = useState<number | null>(null);
   const [giftInput, setGiftInput] = useState('');
   const [giftDuration, setGiftDuration] = useState<string>('1m');
+  const [blCheck, setBlCheck] = useState<{ ok: boolean; text: string } | null>(null);
+  const [blChecking, setBlChecking] = useState(false);
+
+  // proves the BrickLink credentials stored in the Worker work (prices of LEGO parts depend on them)
+  const checkBrickLink = async () => {
+    setBlChecking(true); setBlCheck(null);
+    try {
+      const res = await fetch(`${API}/lego-prices-check`, { headers: authHeaders() });
+      const d = await res.json().catch(() => ({}));
+      if (res.status === 401) setBlCheck({ ok: false, text: 'Tu sesión no es de administrador o ha caducado.' });
+      else if (d.ok) setBlCheck({ ok: true, text: `Conectado. Precio de prueba (pieza 3001 negra, usada): ${d.sample?.avg_price_eur ?? '?'} €.` });
+      else if (d.error === 'not_configured') setBlCheck({ ok: false, text: `Faltan secretos en el Worker: ${(d.missing ?? []).join(', ')}.` });
+      else setBlCheck({ ok: false, text: `BrickLink respondió ${d.code ?? '?'}${d.message ? ` (${d.message})` : ''}. ${d.hint ?? ''}` });
+    } catch { setBlCheck({ ok: false, text: 'No se pudo contactar con el Worker.' }); }
+    setBlChecking(false);
+  };
   const [statusMsg, setStatusMsg] = useState('');
 
   useEffect(() => {
@@ -409,6 +425,15 @@ export function AdminPage() {
                   Dar GO
                 </button>
               </div>
+            </div>
+
+            <div className="bg-[#111118] border border-white/8 rounded-2xl p-4 space-y-3">
+              <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Precios LEGO · BrickLink</p>
+              <button onClick={checkBrickLink} disabled={blChecking}
+                className="w-full py-2.5 rounded-xl bg-white/10 text-sm font-semibold active:scale-95 disabled:opacity-50">
+                {blChecking ? 'Probando…' : 'Probar conexión'}
+              </button>
+              {blCheck && <p role="status" className={`text-xs break-words ${blCheck.ok ? 'text-green-300' : 'text-red-300'}`}>{blCheck.text}</p>}
             </div>
 
             <FunkoImporter adminId={telegramUser?.id ?? 0} />

@@ -5,7 +5,7 @@
  * it: a set's own part list has no "added" date, the collection has no "missing". Ties always fall back to
  * color name then part number, so the order is stable and predictable whatever the key.
  */
-export type PartSortKey = 'color' | 'number' | 'quantity' | 'name' | 'missing' | 'added';
+export type PartSortKey = 'color' | 'number' | 'quantity' | 'name' | 'missing' | 'added' | 'value';
 export type SortDir = 'asc' | 'desc';
 export interface PartSort { key: PartSortKey; dir: SortDir }
 
@@ -17,11 +17,13 @@ export interface SortablePart {
   missing?: number;
   /** ISO date the part entered the collection; rows without one go last. */
   added?: string | null;
+  /** Total value in euros (quantity x unit price); rows without a price go last. */
+  value?: number | null;
 }
 
 /** Biggest / newest / most-missing first feels natural; the rest start ascending. */
 export const defaultDir = (key: PartSortKey): SortDir =>
-  key === 'quantity' || key === 'missing' || key === 'added' ? 'desc' : 'asc';
+  key === 'quantity' || key === 'missing' || key === 'added' || key === 'value' ? 'desc' : 'asc';
 
 const text = (a: string | null | undefined, b: string | null | undefined) =>
   (a ?? '').localeCompare(b ?? '', undefined, { numeric: true, sensitivity: 'base' });
@@ -37,6 +39,7 @@ function primary(a: SortablePart, b: SortablePart, key: PartSortKey): number {
     case 'name': return text(a.part_name, b.part_name);
     case 'missing': return (a.missing ?? 0) - (b.missing ?? 0);
     case 'added': return Date.parse(a.added ?? '') - Date.parse(b.added ?? '');
+    case 'value': return (a.value ?? 0) - (b.value ?? 0);
   }
 }
 
@@ -49,6 +52,11 @@ export function sortParts<T>(items: T[], get: (item: T) => SortablePart, sort: P
       const da = Number.isNaN(Date.parse(a.added ?? '')), db = Number.isNaN(Date.parse(b.added ?? ''));
       if (da !== db) return da ? 1 : -1;
       if (da && db) return text(a.color_name, b.color_name) || comparePartNum(a.part_num, b.part_num);
+    }
+    if (sort.key === 'value') {
+      // rows without a price last in both directions
+      const na = a.value == null, nb = b.value == null;
+      if (na !== nb) return na ? 1 : -1;
     }
     const p = primary(a, b, sort.key);
     if (p !== 0) return p * sign;

@@ -7,6 +7,10 @@ import { RoutePaths } from '@/config';
 import { useUserStore } from '@/store';
 import { availability } from '../services/lego-allocation';
 import { listAllocations, listUserParts, listUserSets } from '../services/lego-user';
+import { LegoValueCard } from '../components/LegoValueCard';
+import { priceKey, type PriceRequest } from '../services/lego-prices';
+import { totals } from '../value';
+import { useLegoPrices } from '../use-lego-prices';
 
 const PENDING_PATH = `${RoutePaths.LegoMySets}?tab=pending`;
 
@@ -54,6 +58,17 @@ export function LegoHomePage() {
     };
   }, [partsQuery.data, allocsQuery.data, setsQuery.data]);
 
+  // total value: only what is already priced (opening My parts / My sets is what fetches missing prices)
+  const priceRequests = useMemo<PriceRequest[]>(() => [
+    ...(partsQuery.data ?? []).map((p) => ({ kind: 'part' as const, num: p.part_num, color_id: p.color_id })),
+    ...[...new Set((setsQuery.data ?? []).map((s) => s.set_num))].map((n) => ({ kind: 'set' as const, num: n })),
+  ], [partsQuery.data, setsQuery.data]);
+  const pricing = useLegoPrices(priceRequests, false);
+  const value = useMemo(() => totals([
+    ...(partsQuery.data ?? []).map((p) => ({ qty: p.quantity, price: pricing.prices.get(priceKey('part', p.part_num, p.color_id)) })),
+    ...(setsQuery.data ?? []).map((s) => ({ qty: 1, price: pricing.prices.get(priceKey('set', s.set_num, -1)) })),
+  ]), [partsQuery.data, setsQuery.data, pricing.prices]);
+
   const empty = partsQuery.isSuccess && (partsQuery.data?.length ?? 0) === 0;
   const assignedPct = stats.total ? Math.round(((stats.assigned ?? 0) / stats.total) * 100) : 0;
 
@@ -100,6 +115,8 @@ export function LegoHomePage() {
                 </div>
               </div>) : null}
           </section>)}
+        {tid != null && value.priced > 0 && (
+          <LegoValueCard title={t.lego.valueTotalTitle} tot={value} progress={null} error={null} compact />)}
         {tid == null && <p className="text-sm text-white/60">{t.lego.needLogin}</p>}
 
         {/* primary actions */}

@@ -3,6 +3,10 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowDownAZ, ArrowLeft, ArrowUpAZ, Loader2 } from 'lucide-react';
 import { useI18n } from '@/i18n';
+import { LegoValueCard } from '../components/LegoValueCard';
+import { priceKey, type PriceRequest } from '../services/lego-prices';
+import { totals, unitPrices, formatEuro } from '../value';
+import { useLegoPrices } from '../use-lego-prices';
 import { RoutePaths } from '@/config';
 import { useCurrency } from '@/hooks/use-currency';
 import { useUserStore } from '@/store';
@@ -17,7 +21,7 @@ import { LEGO_SET_STATUSES, type LegoSetStatus } from '../types';
 
 export function LegoMySetsPage() {
   const navigate = useNavigate();
-  const { t, tr } = useI18n();
+  const { t, tr, locale } = useI18n();
   const { symbol } = useCurrency();
   const tid = useUserStore((s) => s.telegramUser?.id);
   const [filter, setFilter] = useState<LegoSetStatus | null>(null);
@@ -36,6 +40,9 @@ export function LegoMySetsPage() {
     placeholderData: (prev) => prev,
   });
   const catalog = useMemo(() => new Map((setsQuery.data ?? []).map((s) => [s.set_num, s])), [setsQuery.data]);
+  // market value of each set (BrickLink, euros); the same set owned twice counts twice
+  const priceRequests = useMemo<PriceRequest[]>(() => nums.map((n) => ({ kind: 'set' as const, num: n })), [nums]);
+  const pricing = useLegoPrices(priceRequests, true);
 
   const themesQuery = useQuery({ queryKey: ['lego-themes'], queryFn: fetchThemes, staleTime: Infinity });
   const themeMap = useMemo(() => new Map((themesQuery.data ?? []).map((th) => [th.id, th])), [themesQuery.data]);
@@ -54,6 +61,7 @@ export function LegoMySetsPage() {
   const shown = useMemo(() => groups.flatMap((g) => g.items), [groups]);
   const groupLabel = (g: { key: string; label: string | null }) =>
     g.label ?? (view.group === 'status' ? statusLabel(t, g.key as LegoSetStatus) : view.group === 'year' ? t.lego.noYear : t.lego.noTheme);
+  const setValue = useMemo(() => totals(shown.map((m) => ({ qty: 1, price: pricing.prices.get(priceKey('set', m.set_num, -1)) }))), [shown, pricing.prices]);
   const paid = shown.reduce((s, m) => s + (m.price_paid ?? 0), 0);
   const rrp = shown.reduce((s, m) => s + (m.rrp ?? 0), 0);
   const chip = (active: boolean) => `rounded-full px-3 py-1 text-xs border ${active ? 'border-red-400 bg-red-500/20' : 'border-white/10 bg-white/5'}`;
@@ -88,6 +96,9 @@ export function LegoMySetsPage() {
           </div>)}
 
         {tab === 'pending' && mine.length > 0 && <LegoPendingParts catalog={catalog} />}
+
+        {tab === 'sets' && mine.length > 0 && (
+          <LegoValueCard title={t.lego.valueSetsTitle} tot={setValue} progress={pricing.progress} error={pricing.error} onRetry={pricing.retry} />)}
 
         {tab === 'sets' && mine.length > 0 && (
           <div className="flex flex-wrap gap-2">
@@ -143,6 +154,12 @@ export function LegoMySetsPage() {
                     <p className="text-[11px] text-white/50">{statusLabel(t, m.status)}</p>
                     {s && <p className="text-[11px] text-white/40">{[s.year, s.num_parts != null ? tr('lego.piecesShort', { count: s.num_parts }) : null].filter(Boolean).join(' · ')}</p>}
                     {m.price_paid !== null && <p className="text-[11px] text-white/40">{symbol}{m.price_paid.toFixed(2)}</p>}
+                    {(() => {
+                      const { newP, usedP } = unitPrices(pricing.prices.get(priceKey('set', m.set_num, -1)));
+                      return newP != null || usedP != null
+                        ? <p className="text-[11px] text-white/55">{tr('lego.valueSetRow', { used: usedP != null ? formatEuro(usedP, locale) : '–', new: newP != null ? formatEuro(newP, locale) : '–' })}</p>
+                        : null;
+                    })()}
                   </div>
                 </button>
               </li>);
